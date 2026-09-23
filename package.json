@@ -1,0 +1,24 @@
+{
+  "name": "biance-vision",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "币安大盘监控终端：实时行情、K线、价格突破与涨跌幅预警推送",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "dev:server": "pnpm --filter biance-vision-server run dev",
+    "dev:web": "pnpm --filter biance-vision-web run dev",
+    "build": "pnpm --filter biance-vision-server run build && pnpm --filter biance-vision-web run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "start": "pnpm --filter biance-vision-server run start"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
