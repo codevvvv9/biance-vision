@@ -37,3 +37,4 @@ coverage/
 
 # ===== 本地敏感说明（不入库）=====
 LOCAL_NOTES.md
+GITHUB_ACTIONS_PLAN.md

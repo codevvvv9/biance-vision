@@ -1,0 +1,40 @@
+name: Release
+
+# 只在推送 v 开头的 tag 时触发（如 v0.1.0），普通 push 不跑，省时间
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # 允许用内置 GITHUB_TOKEN 创建 Release（默认只读）
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+
+      # 把部署需要的东西打进一个 tar 包：
+      # 两个构建产物 + 各 package.json + lockfile + docker 编排文件 + 文档
+      - name: Pack release assets
+        run: |
+          mkdir -p release
+          tar -czf release/biance-vision-${{ github.ref_name }}.tar.gz \
+            server/dist web/dist \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml \
+            server/package.json web/package.json \
+            docker-compose.yml docker README.md
+
+      - uses: softprops/action-gh-release@v2 # 创建 GitHub Release 并附上压缩包
+        with:
+          files: release/*.tar.gz
+          generate_release_notes: true # 自动按 commit 历史生成更新日志
