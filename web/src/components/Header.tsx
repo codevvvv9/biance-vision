@@ -100,6 +100,17 @@ function RobotIcon(): JSX.Element {
   )
 }
 
+function LogIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="13" x2="15" y2="13" />
+      <line x1="9" y1="17" x2="15" y2="17" />
+    </svg>
+  )
+}
+
 function QuickQuote({ symbol }: { symbol: string }): JSX.Element {
   const { tickers } = useMarket()
   const t = tickers[symbol]
@@ -182,11 +193,6 @@ export default function Header(): JSX.Element {
             {t.label}
           </NavLink>
         ))}
-        {user?.role === 'superadmin' && (
-          <NavLink to="/admin" className={({ isActive }) => (isActive ? 'on' : '')}>
-            操作日志
-          </NavLink>
-        )}
       </nav>
 
       <div className="header-right">
@@ -245,18 +251,32 @@ export default function Header(): JSX.Element {
             {menuOpen && (
               <div className="user-menu-panel" role="menu">
                 {user.role === 'superadmin' && (
-                  <button
-                    className="menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setAiOpen(true)
-                    }}
-                  >
-                    <GearIcon />
-                    <span>AI 设置</span>
-                    <em className="menu-hint">{ai.status.configured ? ai.status.model || '已配置' : '未配置'}</em>
-                  </button>
+                  <>
+                    <button
+                      className="menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        navigate('/admin')
+                      }}
+                    >
+                      <LogIcon />
+                      <span>管理面板</span>
+                      <em className="menu-hint">用户 / 日志</em>
+                    </button>
+                    <button
+                      className="menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setAiOpen(true)
+                      }}
+                    >
+                      <GearIcon />
+                      <span>AI 设置</span>
+                      <em className="menu-hint">{ai.status.configured ? ai.status.model || '已配置' : '未配置'}</em>
+                    </button>
+                  </>
                 )}
                 {ai.status.configured && (
                   <button
