@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@9.15.9",
   "description": "币安大盘监控终端：实时行情、K线、价格突破与涨跌幅预警推送",
   "workspaces": [
     "server",

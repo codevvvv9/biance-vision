@@ -1,0 +1,33 @@
+name: CI
+
+# 触发时机：push 到 main，或任何人提 PR
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # 向 GitHub 租一台全新 Ubuntu 虚拟机
+    steps:
+      - uses: actions/checkout@v4 # 把仓库代码拉到虚拟机里
+
+      - uses: pnpm/action-setup@v4 # 安装 pnpm（版本读 package.json 的 packageManager 字段）
+
+      - uses: actions/setup-node@v4 # 安装 Node.js
+        with:
+          node-version: 22
+          cache: pnpm # 缓存下载过的依赖包，下次跑快很多
+
+      - run: pnpm install --frozen-lockfile
+        # 严格按 pnpm-lock.yaml 装，lockfile 和 package.json 对不上就直接报错，
+        # 防止"我机器上能跑"的问题混进来
+
+      - run: pnpm typecheck # 三个包的 TypeScript 类型检查
+      - run: pnpm build # server tsc 编译 + web vite 生产构建
+
+      - uses: actions/upload-artifact@v4 # 把前端构建产物存为"工件"
+        with:
+          name: web-dist
+          path: web/dist/
+          retention-days: 7 # 在 Actions 页面可下载，保留 7 天
