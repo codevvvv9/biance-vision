@@ -32,6 +32,7 @@ jobs:
             server/dist web/dist \
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             server/package.json web/package.json \
+            Dockerfile .dockerignore \
             docker-compose.yml docker README.md
 
       - uses: softprops/action-gh-release@v2 # 创建 GitHub Release 并附上压缩包

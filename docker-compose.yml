@@ -18,5 +18,22 @@ services:
       timeout: 3s
       retries: 5
 
+  # 完整线上服务：一个进程同源托管 前端页面 / API / WebSocket
+  app:
+    build: .
+    image: biance-vision:latest
+    container_name: biance-vision-app
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    environment:
+      DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
+    # JSON 镜像 + seed-users.json 放宿主机这份目录，容器重建数据不丢
+    volumes:
+      - ./server/data:/app/server/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pgdata:

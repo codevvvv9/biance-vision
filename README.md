@@ -15,9 +15,9 @@
 ## 快速开始
 
 ```bash
-pnpm install          # 安装依赖（npm workspaces 也兼容，但建议统一 pnpm）
-docker compose up -d  # 启动 PostgreSQL（可选；不启动则自动降级为 JSON 文件存储）
-pnpm dev              # 启动器自动探测端口，被占用则自动换端口
+pnpm install            # 安装依赖（npm workspaces 也兼容，但建议统一 pnpm）
+docker compose up -d postgres  # 只启动数据库（可选；不启动则自动降级为 JSON 文件存储）
+pnpm dev                # 启动器自动探测端口，被占用则自动换端口
 ```
 
 打开启动日志里给出的地址（默认 http://localhost:17834）。
@@ -39,6 +39,19 @@ npm run typecheck    # 服务端 + 前端 TypeScript 类型检查
 npm run build        # 服务端 tsc 编译 + 前端生产构建
 npm run start        # 只启动后端（生产模式，运行 dist/ 编译产物）
 ```
+
+### 生产部署（前后端同源，一个进程全包）
+
+```bash
+# 方式一：本机直接跑
+pnpm build && pnpm start                     # Fastify 托管 web/dist，页面 / API / WS 同端口
+HOST=0.0.0.0 PORT=3200 pnpm start           # 需要外部访问时监听所有网卡
+
+# 方式二：Docker 一键完整服务（app + PostgreSQL）
+docker compose up -d --build                 # app 映射在宿主 3200 端口，server/data 挂载持久化
+```
+
+生产模式下 `web/dist` 由后端直接托管（未构建时自动跳过）；非 `/api` 的 GET 未命中文件会回退到 `index.html`，前端路由（`/login`、`/movers` 等）可直开。容器/集群内访问数据库用 `DATABASE_URL` 覆盖（如 `postgresql://biance_app:biance_app@postgres:5432/biance_vision`）。
 
 ## 功能
 
@@ -103,7 +116,8 @@ pnpm user:passwd <用户名> [新密码]        # 改密码；省略则生成随
 
 ```text
 biance-vision/
-├── docker-compose.yml      # PostgreSQL 17（5434，避让本机 5432/5433）
+├── docker-compose.yml      # PostgreSQL 17（5434，避让本机 5432/5433）+ app 完整服务
+├── Dockerfile              # 应用镜像：多阶段构建（编译前后端 → 只带产物与生产依赖）
 ├── docker/postgres-init.sql# 初始化非超管角色 biance_app
 ├── pnpm-workspace.yaml
 ├── scripts/dev.ts          # 开发启动器：端口探测/自动切换/进程管理/数据库提示

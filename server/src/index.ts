@@ -1,6 +1,10 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import fastifyStatic from '@fastify/static'
 import fastifyWs from '@fastify/websocket'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { SocketStream } from '@fastify/websocket'
 import type WebSocket from 'ws'
 import {
@@ -43,6 +47,10 @@ import type { SessionRecord } from './users.js'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 const PORT = Number(process.env.PORT || 3200)
+// 监听地址：默认只绑本机；Docker / 容器部署时用 HOST=0.0.0.0 覆盖
+const HOST = process.env.HOST || '127.0.0.1'
+// 前端构建产物目录：生产模式下由本服务直接托管（前后端同源）
+const WEB_DIST = process.env.BV_WEB_DIST || fileURLToPath(new URL('../../web/dist', import.meta.url))
 const MARKET_LIMIT = 150 // 推送给前端的交易对数量（按成交额）
 const INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d']
 
@@ -149,6 +157,22 @@ setInterval(() => {
 const app = Fastify({ logger: false, trustProxy: true })
 await app.register(cors, { origin: true })
 await app.register(fastifyWs)
+
+// ---------------------------------------------------------------------------
+// 生产模式：托管 web/dist 静态资源，一个端口同时服务页面 / API / WebSocket；
+// 未构建（开发模式目录不存在）时跳过，前端仍由 Vite dev server 提供。
+// SPA 回退：非 /api 的 GET 未命中文件时返回 index.html，支持 /login 等前端路由直开
+// ---------------------------------------------------------------------------
+if (fs.existsSync(WEB_DIST)) {
+  await app.register(fastifyStatic, { root: path.resolve(WEB_DIST) })
+  app.setNotFoundHandler((req, reply) => {
+    if (req.method === 'GET' && !req.url.split('?')[0].startsWith('/api/')) {
+      return reply.sendFile('index.html')
+    }
+    reply.code(404).send({ message: 'Not Found' })
+  })
+  console.log(`[server] 托管前端静态资源：${WEB_DIST}`)
+}
 
 // ---------------------------------------------------------------------------
 // 登录鉴权：Cookie 会话；除白名单外的 /api/* 与 /ws 均要求已登录
@@ -448,9 +472,9 @@ setInterval(() => {
 }, 30000)
 
 app
-  .listen({ port: PORT, host: '127.0.0.1' })
+  .listen({ port: PORT, host: HOST })
   .then(() => {
-    console.log(`[server] biance-vision api listening on http://127.0.0.1:${PORT}`)
+    console.log(`[server] biance-vision api listening on http://${HOST}:${PORT}`)
   })
   .catch((err: Error) => {
     console.error('[server] listen failed:', err)
