@@ -42,6 +42,21 @@ npm run start        # 只启动后端（生产模式，运行 dist/ 编译产�
 
 ## 功能
 
+### 0. 登录（全站鉴权）
+- 打开任意页面未登录时自动跳转 `/login`；所有 `/api/*`（除 `/api/health`、`/api/auth/*`）与 `/ws` 均要求有效会话
+- 会话基于 HttpOnly Cookie（7 天有效），服务重启不掉线（`server/data/sessions.json` 镜像）
+- **不开放自助注册**：`/register` 页面仅提示联系超级管理员；新账号由管理员在服务端执行脚本创建（见下）
+- 密码使用 scrypt + 随机盐哈希存储，不存明文
+- 内置账号（首次启动自动写入）：`xxx`（普通用户）、`xxx`（超级管理员，密码 `xxx`）
+- 添加用户 / 修改密码脚本：
+
+```bash
+pnpm user:add <用户名> [密码] [--super]  # --super 创建超级管理员；密码省略则生成 12 位随机密码
+pnpm user:passwd <用户名> [新密码]        # 改密码；省略则生成随机密码；改后该用户所有会话立即失效
+# 例：pnpm user:add zhangsan pass1234
+# 写入 users.json + PostgreSQL，正在运行的服务自动热加载，无需重启
+```
+
 ### 1. 大盘总览（/）
 - 顶部 BTC/ETH/BNB 快价 + 连接状态 + 系统通知/提示音开关
 - 实时行情滚动条（成交额前 22，悬停暂停）
@@ -70,7 +85,7 @@ npm run start        # 只启动后端（生产模式，运行 dist/ 编译产�
 
 ## 存储架构（PostgreSQL 主 + JSON 镜像）
 
-预警规则、触发历史、Webhook 设置采用双写存储：
+预警规则、触发历史、Webhook 设置、登录用户均采用双写存储：
 
 | 场景 | 行为 |
 |---|---|
@@ -79,31 +94,34 @@ npm run start        # 只启动后端（生产模式，运行 dist/ 编译产�
 | 数据库恢复重启 | 按规则 id 合并：宕机期间新增/修改的规则保留（JSON 必更新），期间删除的移除；历史按 id 并集合并 |
 
 - 数据库连接：`DATABASE_URL`（默认 `postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision`，与 docker-compose 一致；可在 `server/.env` 覆盖，参考 `server/.env.example`）
-- 表结构：`server/src/models.ts`（alert_rules / alert_history / app_settings），迁移文件在 `server/drizzle/`
+- 表结构：`server/src/models.ts`（alert_rules / alert_history / app_settings / users），迁移文件在 `server/drizzle/`
 - 数据库脚本（server workspace）：`db:generate`（改表生成迁移）/ `db:migrate` / `db:push` / `db:studio`（可视化查库）
 - `/api/health` 的 `storage` 字段显示当前存储模式（`postgres` / `json`）
 - 前端偏好（异动榜阈值、提示音等）仍在浏览器 localStorage
 
 ## 目录结构
 
-```
+```text
 biance-vision/
 ├── docker-compose.yml      # PostgreSQL 17（5434，避让本机 5432/5433）
 ├── docker/postgres-init.sql# 初始化非超管角色 biance_app
 ├── pnpm-workspace.yaml
 ├── scripts/dev.ts          # 开发启动器：端口探测/自动切换/进程管理/数据库提示
+├── scripts/add-user.ts     # 添加登录用户（pnpm user:add <用户名> [密码] [--super]）
+├── scripts/passwd.ts       # 修改登录密码（pnpm user:passwd <用户名> [新密码]）
 ├── server/                 # Fastify 后端（TypeScript, NodeNext）
 │   ├── drizzle/            # drizzle-kit 生成的 SQL 迁移（启动时自动执行）
 │   ├── drizzle.config.ts
 │   ├── src/
-│   │   ├── index.ts        # REST 路由 / 前端 WS / 行情广播
+│   │   ├── index.ts        # REST 路由 / 登录鉴权 / 前端 WS / 行情广播
 │   │   ├── binance.ts      # 币安 REST 客户端 + 行情流管理（动态订阅/断线重连）
 │   │   ├── alerts.ts       # 预警规则、边缘触发评估、历史、Webhook、存储初始化
+│   │   ├── users.ts        # 登录用户（scrypt 哈希）+ Cookie 会话，JSON 热加载
 │   │   ├── db.ts           # Drizzle 连接 + PostgreSQL/JSON 双写数据访问层
-│   │   ├── models.ts       # drizzle 表定义（alert_rules / alert_history / app_settings）
+│   │   ├── models.ts       # drizzle 表定义（alert_rules / alert_history / app_settings / users）
 │   │   ├── store.ts        # JSON 文件持久化
 │   │   └── types.ts        # 服务端数据结构定义
-│   └── data/               # JSON 镜像：rules.json / history.json / settings.json
+│   └── data/               # JSON 镜像：rules.json / history.json / settings.json / users.json / sessions.json
 └── web/                     # React 前端（TypeScript + Vite）
     └── src/
         ├── types.ts                     # 前端数据结构定义（与服务端对应）
@@ -116,14 +134,17 @@ biance-vision/
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/health` | 健康检查（币安流连接状态、缓存交易对数） |
-| GET | `/api/tickers?limit=100` | 24h 行情快照（按成交额降序） |
+| POST | `/api/auth/login` | 登录（用户名 + 密码，成功后下发会话 Cookie） |
+| POST | `/api/auth/logout` | 退出登录（销毁会话） |
+| GET | `/api/auth/me` | 当前登录用户信息 |
+| GET | `/api/health` | 健康检查（币安流连接状态、缓存交易对数、存储模式） |
+| GET | `/api/tickers?limit=100` | 24h 行情快照（按成交额降序，**需登录**，下同） |
 | GET | `/api/klines?symbol=&interval=&limit=` | 历史 K 线 |
 | GET/POST/PUT/DELETE | `/api/alerts` | 预警规则 CRUD |
 | GET | `/api/alerts/history?limit=50` | 触发历史 |
 | GET/PUT | `/api/settings` | Webhook 设置 |
 | POST | `/api/settings/test` | 发送测试推送 |
-| WS | `/ws` | 前端实时通道：`market` 行情每秒推、`kline` 按需订阅、`alert` 预警推送 |
+| WS | `/ws` | 前端实时通道：`market` 行情每秒推、`kline` 按需订阅、`alert` 预警推送（需登录，未登录以 4001 关闭） |
 
 ## 说明
 

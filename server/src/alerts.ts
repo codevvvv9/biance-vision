@@ -289,12 +289,42 @@ export function updateSettings(patch: { webhookUrl?: unknown }): Settings {
   return settings
 }
 
+/**
+ * 按目标平台适配消息体，三类机器人开箱即用；其余地址保留原始事件格式
+ * （Server酱要求 title/desp，企业微信要求 msgtype，飞书要求 msg_type）
+ */
+function buildWebhookBody(url: string, entry: AlertEntry): Record<string, unknown> {
+  const time = new Date(entry.triggeredAt).toLocaleString('zh-CN', { hour12: false })
+  const detail = entry.test
+    ? ''
+    : `现价 ${fmtNum(entry.price)} · 24h ${entry.changePct >= 0 ? '+' : ''}${entry.changePct.toFixed(2)}% · ${time}`
+  if (url.includes('sctapi.ftqq.com')) {
+    return {
+      title: `【币安预警】${entry.message}`.slice(0, 32),
+      desp: detail ? `${entry.message}\n\n${detail}` : entry.message,
+    }
+  }
+  if (url.includes('qyapi.weixin.qq.com')) {
+    return {
+      msgtype: 'text',
+      text: { content: `【币安预警】${entry.message}${detail ? `\n${detail}` : ''}` },
+    }
+  }
+  if (url.includes('open.feishu.cn')) {
+    return {
+      msg_type: 'text',
+      content: { text: `【币安预警】${entry.message}${detail ? `\n${detail}` : ''}` },
+    }
+  }
+  return { event: 'alert.fired', data: entry }
+}
+
 export function callWebhook(entry: AlertEntry): void {
   if (!settings.webhookUrl) return
   fetch(settings.webhookUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ event: 'alert.fired', data: entry }),
+    body: JSON.stringify(buildWebhookBody(settings.webhookUrl, entry)),
     signal: AbortSignal.timeout(5000),
   })
     .then((res) => console.log(`[webhook] ${res.status} ${settings.webhookUrl}`))

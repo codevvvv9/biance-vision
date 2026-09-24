@@ -14,6 +14,7 @@ import {
 } from './binance.js'
 import {
   callWebhook,
+  conditionText,
   createRule,
   evaluateRules,
   getHistory,
@@ -25,7 +26,21 @@ import {
   updateRule,
   updateSettings,
 } from './alerts.js'
-import type { AlertEntry, ClientMessage, RawKlineRow, ServerMessage } from './types.js'
+import { endSessionAudit, initAudit, queryAudit, recordAudit, recordFailedLogin, startSessionAudit } from './audit.js'
+import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage } from './types.js'
+import {
+  clearSessionCookie,
+  createSession,
+  destroySession,
+  findSession,
+  initUsers,
+  readSessionToken,
+  sessionCookie,
+  toPublic,
+  verifyLogin,
+} from './users.js'
+import type { SessionRecord } from './users.js'
+import type { FastifyReply, FastifyRequest } from 'fastify'
 
 const PORT = Number(process.env.PORT || 3200)
 const MARKET_LIMIT = 150 // 推送给前端的交易对数量（按成交额）
@@ -33,6 +48,8 @@ const INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h',
 
 // 存储初始化（PostgreSQL 优先，不可用降级 JSON），完成后再连行情流
 await initStorage()
+await initUsers()
+await initAudit()
 
 interface BadRequestError extends Error {
   statusCode: number
@@ -129,9 +146,92 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 // Fastify
 // ---------------------------------------------------------------------------
-const app = Fastify({ logger: false })
+const app = Fastify({ logger: false, trustProxy: true })
 await app.register(cors, { origin: true })
 await app.register(fastifyWs)
+
+// ---------------------------------------------------------------------------
+// 登录鉴权：Cookie 会话；除白名单外的 /api/* 与 /ws 均要求已登录
+// ---------------------------------------------------------------------------
+const unauthorized = (): Error => Object.assign(new Error('未登录或会话已过期'), { statusCode: 401 })
+
+function requireSession(req: FastifyRequest): SessionRecord {
+  const session = findSession(readSessionToken(req.headers.cookie))
+  if (!session) throw unauthorized()
+  return session
+}
+
+// 登录 / 会话查询走白名单，其余 /api/* 一律拦截
+app.addHook('preHandler', async (req, reply) => {
+  const url = req.url.split('?')[0]
+  if (!url.startsWith('/api/')) return
+  if (url === '/api/health' || url.startsWith('/api/auth/')) return
+  try {
+    requireSession(req)
+  } catch (err) {
+    const e = err as { statusCode?: number }
+    reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
+  }
+})
+
+/**
+ * 客户端真实 IP：反向代理 / 隧道场景取 x-forwarded-for 最原始一跳，
+ * 其次 x-real-ip（nginx 惯例）；直连时就是连接地址。trustProxy 已开启，
+ * req.ip 本身也会按 XFF 解析，这里显式分级兜底。
+ */
+function clientIp(req: FastifyRequest): string {
+  const pick = (v: string | string[] | undefined): string =>
+    (Array.isArray(v) ? v[0] : v)?.split(',')[0]?.trim() ?? ''
+  const xf = pick(req.headers['x-forwarded-for'])
+  if (xf) return xf.slice(0, 64)
+  const real = pick(req.headers['x-real-ip'])
+  if (real) return real.slice(0, 64)
+  return String(req.ip ?? '')
+}
+
+/** 浏览器 / 客户端标识（截断，用于会话审计） */
+function userAgent(req: FastifyRequest): string {
+  return String(req.headers['user-agent'] ?? '').slice(0, 160)
+}
+
+/** 只记录 Webhook 的主机名，避免完整地址（含密钥）进审计日志 */
+function webhookHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return '无效地址'
+  }
+}
+
+app.post('/api/auth/login', async (req, reply) => {
+  const body = (req.body ?? {}) as { username?: unknown; password?: unknown }
+  const name = String(body.username ?? '').trim()
+  const user = verifyLogin(name, String(body.password ?? ''))
+  if (!user) {
+    recordFailedLogin({ username: name.slice(0, 64), ip: clientIp(req), userAgent: userAgent(req) })
+    throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
+  }
+  const session = createSession(user)
+  startSessionAudit(session, { ip: clientIp(req), userAgent: userAgent(req) })
+  reply.header('set-cookie', sessionCookie(session.token))
+  return { user: toPublic(user) }
+})
+
+app.post('/api/auth/logout', async (req, reply) => {
+  const token = readSessionToken(req.headers.cookie)
+  const session = findSession(token)
+  if (session) endSessionAudit(session)
+  destroySession(token)
+  reply.header('set-cookie', clearSessionCookie())
+  return { ok: true }
+})
+
+app.get('/api/auth/me', async (req) => {
+  const session = findSession(readSessionToken(req.headers.cookie))
+  if (!session) throw unauthorized()
+  const user = { username: session.username, role: session.role }
+  return { user }
+})
 
 app.get('/api/health', async () => ({
   ok: true,
@@ -174,20 +274,50 @@ app.get('/api/klines', async (req) => {
 app.get('/api/alerts', async () => ({ rules: getRules() }))
 
 app.post('/api/alerts', async (req) => {
+  const session = requireSession(req)
   const rule = createRule(req.body ?? {}, tickerOf)
+  recordAudit(session, {
+    action: 'rule_create',
+    target: rule.symbol,
+    detail: `新增规则：${conditionText(rule)}${rule.note ? `（${rule.note}）` : ''}`,
+  })
   return { rule }
 })
 
 app.put('/api/alerts/:id', async (req) => {
+  const session = requireSession(req)
   const { id } = req.params as { id: string }
-  const rule = updateRule(id, req.body ?? {}, tickerOf)
+  const patch = (req.body ?? {}) as RuleInput
+  const rule = updateRule(id, patch, tickerOf)
   if (!rule) throw badRequest('rule not found')
+  const toggleOnly =
+    patch.enabled !== undefined &&
+    patch.symbol === undefined &&
+    patch.type === undefined &&
+    patch.value === undefined &&
+    patch.note === undefined
+  recordAudit(session, {
+    action: 'rule_update',
+    target: rule.symbol,
+    detail: toggleOnly
+      ? rule.enabled
+        ? '启用规则'
+        : '停用规则'
+      : `修改规则：${conditionText(rule)}${rule.note ? `（${rule.note}）` : ''}`,
+  })
   return { rule }
 })
 
 app.delete('/api/alerts/:id', async (req) => {
+  const session = requireSession(req)
   const { id } = req.params as { id: string }
+  const rule = getRules().find((r) => r.id === id)
   if (!removeRule(id)) throw badRequest('rule not found')
+  recordAudit(session, {
+    action: 'rule_delete',
+    target: rule?.symbol ?? id,
+    detail: rule ? `删除规则：${conditionText(rule)}${rule.note ? `（${rule.note}）` : ''}` : `删除规则：${id}`,
+  })
   return { ok: true }
 })
 
@@ -199,9 +329,22 @@ app.get('/api/alerts/history', async (req) => {
 // ---- 推送设置 ----
 app.get('/api/settings', async () => ({ settings: getSettings() }))
 
-app.put('/api/settings', async (req) => ({ settings: updateSettings(req.body ?? {}) }))
+app.put('/api/settings', async (req) => {
+  const session = requireSession(req)
+  const settings = updateSettings(req.body ?? {})
+  recordAudit(session, {
+    action: 'settings_update',
+    target: 'webhook',
+    detail: settings.webhookUrl
+      ? `更新推送地址（${webhookHost(settings.webhookUrl)}）`
+      : '清空推送地址',
+  })
+  return { settings }
+})
 
-app.post('/api/settings/test', async () => {
+app.post('/api/settings/test', async (req) => {
+  const session = requireSession(req)
+  recordAudit(session, { action: 'settings_test', target: 'webhook', detail: '发送测试推送' })
   const entry: AlertEntry = {
     id: 'test-' + Date.now(),
     test: true,
@@ -216,8 +359,22 @@ app.post('/api/settings/test', async () => {
   return { ok: true }
 })
 
-// ---- 前端 WebSocket ----
-app.get('/ws', { websocket: true }, (connection: SocketStream) => {
+// ---- 管理端：操作审计日志（仅超级管理员） ----
+app.get('/api/admin/audit-logs', async (req) => {
+  const session = requireSession(req)
+  if (session.role !== 'superadmin') {
+    throw Object.assign(new Error('仅超级管理员可查看操作日志'), { statusCode: 403 })
+  }
+  const q = req.query as { username?: string; limit?: string }
+  return queryAudit({ username: q.username, limit: parseInt(q.limit ?? '', 10) || 200 })
+})
+
+// ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
+app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {
+  if (!findSession(readSessionToken(req.headers.cookie))) {
+    connection.socket.close(4001, 'unauthorized')
+    return
+  }
   const ws = connection.socket as AliveSocket
   ws.isAlive = true
   ws.on('pong', () => {

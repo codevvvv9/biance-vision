@@ -12,6 +12,8 @@
     "dev": "tsx scripts/dev.ts",
     "dev:server": "pnpm --filter biance-vision-server run dev",
     "dev:web": "pnpm --filter biance-vision-web run dev",
+    "user:add": "tsx scripts/add-user.ts",
+    "user:passwd": "tsx scripts/passwd.ts",
     "build": "pnpm --filter biance-vision-server run build && pnpm --filter biance-vision-web run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "start": "pnpm --filter biance-vision-server run start"
