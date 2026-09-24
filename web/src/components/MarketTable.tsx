@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import FullscreenButton from './FullscreenButton'
+import { useFullscreen } from '../hooks/useFullscreen'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice, fmtVol } from '../utils'
 import type { Ticker } from '../types'
@@ -41,6 +43,7 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
   const { tickers, order, status } = useMarket()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortState>({ key: 'quoteVolume', dir: -1 })
+  const fs = useFullscreen<HTMLElement>()
 
   const list = useMemo<Ticker[]>(() => {
     const q = query.trim().toUpperCase()
@@ -61,24 +64,27 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
   }
 
   return (
-    <section className="panel market-panel">
+    <section className="panel market-panel" ref={fs.ref}>
       <div className="panel-head">
         <h2 className="panel-title">
           <i className="title-glyph" />
           实时行情
           <span className="title-badge">{list.length}</span>
         </h2>
-        <div className="table-search">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-            <circle cx="11" cy="11" r="7" />
-            <line x1="21" y1="21" x2="16.5" y2="16.5" />
-          </svg>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索交易对，如 BTC"
-            spellCheck={false}
-          />
+        <div className="panel-head-tools">
+          <div className="table-search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.5" y2="16.5" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索交易对，如 BTC"
+              spellCheck={false}
+            />
+          </div>
+          <FullscreenButton on={fs.isFullscreen} onClick={fs.toggle} label="全屏显示行情" />
         </div>
       </div>
 

@@ -56,8 +56,51 @@ export interface AlertEntry {
 
 export type ConnStatus = 'connecting' | 'connected' | 'offline'
 
+/** 登录用户（与服务端 /api/auth/* 对应） */
+export interface AuthUser {
+  username: string
+  role: 'user' | 'superadmin'
+}
+
 export interface Settings {
   webhookUrl: string
+}
+
+/** 操作审计（与服务端 /api/admin/audit-logs 对应，会话聚合式） */
+export type AuditAction =
+  | 'login'
+  | 'login_failed'
+  | 'logout'
+  | 'rule_create'
+  | 'rule_update'
+  | 'rule_delete'
+  | 'settings_update'
+  | 'settings_test'
+
+/** 会话内单次操作 */
+export interface AuditEntry {
+  at: number
+  action: AuditAction
+  target: string
+  detail: string
+  ok: boolean
+}
+
+/** 一次登录 = 一条会话记录；登录失败为独立事件 */
+export interface AuditRecord {
+  id: string
+  kind: 'session' | 'login_failed'
+  username: string
+  ip: string
+  userAgent: string
+  /** 会话 = 登录时间；失败事件 = 发生时间 */
+  at: number
+  /** 会话结束时间（登出）；null = 未结束 */
+  endedAt: number | null
+  actions: AuditEntry[]
+  lastActiveAt: number
+  /** 会话状态（失败事件为 null）：active 进行中 / ended 已登出 / expired 已过期 */
+  status: 'active' | 'ended' | 'expired' | null
 }
 
 export interface ToastItem {

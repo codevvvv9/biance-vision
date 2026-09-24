@@ -11,6 +11,7 @@ export default defineConfig({
   server: {
     port: webPort,
     strictPort: true, // 端口被占时直接报错退出，由启动器负责换端口
+    allowedHosts: ['.tunnel.otun.dev'], // 前缀点号 = 允许该域名下所有子域（otun 隧道）
     proxy: {
       '/api': { target: `http://127.0.0.1:${apiPort}`, changeOrigin: true },
       '/ws': { target: `ws://127.0.0.1:${apiPort}`, ws: true },

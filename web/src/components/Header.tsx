@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice } from '../utils'
 import { notificationState, requestNotifications } from '../notify'
@@ -19,7 +20,7 @@ const TABS: Tab[] = [
 
 const QUICK = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 
-function Logo(): JSX.Element {
+export function Logo(): JSX.Element {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden>
       <defs>
@@ -86,8 +87,20 @@ const STATUS_LABEL: Record<string, string> = {
   offline: '已断线 · 重连中',
 }
 
+function LogoutIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
 export default function Header(): JSX.Element {
   const { status, soundOn, toggleSound } = useMarket()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [perm, setPerm] = useState<NotificationPermissionState>(notificationState())
   const [now, setNow] = useState<Date>(() => new Date())
 
@@ -115,6 +128,11 @@ export default function Header(): JSX.Element {
             {t.label}
           </NavLink>
         ))}
+        {user?.role === 'superadmin' && (
+          <NavLink to="/admin" className={({ isActive }) => (isActive ? 'on' : '')}>
+            操作日志
+          </NavLink>
+        )}
       </nav>
 
       <div className="header-right">
@@ -123,7 +141,7 @@ export default function Header(): JSX.Element {
             <QuickQuote key={s} symbol={s} />
           ))}
         </div>
-        <span className={`conn ${status}`}>
+        <span className={`conn ${status}`} title={STATUS_LABEL[status] ?? status}>
           <i className="conn-dot" />
           {STATUS_LABEL[status] ?? status}
         </span>
@@ -143,6 +161,24 @@ export default function Header(): JSX.Element {
         >
           <SoundIcon off={!soundOn} />
         </button>
+        {user && (
+          <>
+            <span className="user-chip" title={user.role === 'superadmin' ? '超级管理员' : '普通用户'}>
+              <i className={`user-role-dot ${user.role}`} />
+              <span className="user-name">{user.username}</span>
+              {user.role === 'superadmin' && <em className="user-role-tag">超管</em>}
+            </span>
+            <button
+              className="icon-btn"
+              title="退出登录"
+              onClick={() => {
+                void logout().then(() => navigate('/login', { replace: true }))
+              }}
+            >
+              <LogoutIcon />
+            </button>
+          </>
+        )}
         <span className="clock mono">{now.toLocaleTimeString('zh-CN', { hour12: false })}</span>
       </div>
     </header>

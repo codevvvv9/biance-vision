@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Chart } from 'klinecharts'
 import { dispose, init, registerStyles } from 'klinecharts'
+import FullscreenButton from './FullscreenButton'
 import { api } from '../api'
+import { useFullscreen } from '../hooks/useFullscreen'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice, precisionFor } from '../utils'
 import type { KlineBar } from '../types'
@@ -89,6 +91,7 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
   const boxRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<Chart | null>(null)
   const lastBarRef = useRef(0)
+  const fs = useFullscreen<HTMLElement>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
@@ -172,7 +175,7 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
   const up = (t?.changePct ?? 0) >= 0
 
   return (
-    <section className="panel chart-panel">
+    <section className="panel chart-panel" ref={fs.ref}>
       <div className="panel-head">
         <div className="chart-title">
           <h2>
@@ -189,16 +192,19 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
             ⚡ 设预警
           </Link>
         </div>
-        <div className="interval-group" role="tablist">
-          {INTERVALS.map((iv) => (
-            <button
-              key={iv.v}
-              className={iv.v === interval ? 'on' : ''}
-              onClick={() => onIntervalChange?.(iv.v)}
-            >
-              {iv.t}
-            </button>
-          ))}
+        <div className="panel-head-tools">
+          <div className="interval-group" role="tablist">
+            {INTERVALS.map((iv) => (
+              <button
+                key={iv.v}
+                className={iv.v === interval ? 'on' : ''}
+                onClick={() => onIntervalChange?.(iv.v)}
+              >
+                {iv.t}
+              </button>
+            ))}
+          </div>
+          <FullscreenButton on={fs.isFullscreen} onClick={fs.toggle} label="全屏显示 K 线" />
         </div>
       </div>
       <div className="chart-box" ref={boxRef}>

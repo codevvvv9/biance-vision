@@ -5,9 +5,11 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
-import { alertHistory, alertRules, appSettings } from './models.js'
-import type { NewAlertHistoryRow, NewAlertRuleRow } from './models.js'
+import { alertHistory, alertRules, appSettings, auditRecords, users } from './models.js'
+import type { NewAlertHistoryRow, NewAlertRuleRow, NewAuditRecordRow, NewUserRow } from './models.js'
 import type { AlertEntry, AlertRule, RuleType, Settings } from './types.js'
+import type { AuditSessionRecord } from './audit.js'
+import type { UserRecord, UserRole } from './users.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const MIGRATIONS_FOLDER = path.join(__dirname, '..', 'drizzle')
@@ -32,6 +34,7 @@ const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision'
 
 export const HISTORY_KEEP = 200
+export const AUDIT_KEEP = 1000
 
 type Db = ReturnType<typeof drizzle>
 let db: Db | null = null
@@ -207,4 +210,93 @@ export async function persistSettings(s: Settings): Promise<void> {
     .insert(appSettings)
     .values({ key: 'app', value: { webhookUrl: s.webhookUrl } })
     .onConflictDoUpdate({ target: appSettings.key, set: { value: { webhookUrl: s.webhookUrl } } })
+}
+
+// ---- 用户表读写（users.ts 使用；时间戳同样统一为毫秒语义） ----
+
+const rowToUser = (row: {
+  id: string
+  username: string
+  passwordHash: string
+  role: string
+  createdAt: Date
+  updatedAt: Date
+}): UserRecord => ({
+  id: row.id,
+  username: row.username,
+  passwordHash: row.passwordHash,
+  role: row.role as UserRole,
+  createdAt: row.createdAt.getTime(),
+  updatedAt: row.updatedAt.getTime(),
+})
+
+export async function loadUsersFromDb(): Promise<UserRecord[]> {
+  const conn = guard()
+  if (!conn) return []
+  const rows = await conn.select().from(users).orderBy(users.createdAt)
+  return rows.map(rowToUser)
+}
+
+/** 按 username upsert（不删除数据库独有用户，与 JSON 的合并逻辑配合） */
+export async function upsertUsersDb(list: UserRecord[]): Promise<void> {
+  const conn = guard()
+  if (!conn || list.length === 0) return
+  const rows: NewUserRow[] = list.map((u) => ({
+    id: u.id,
+    username: u.username,
+    passwordHash: u.passwordHash,
+    role: u.role,
+    createdAt: new Date(u.createdAt),
+    updatedAt: new Date(u.updatedAt),
+  }))
+  await conn.insert(users).values(rows).onConflictDoUpdate({
+    target: users.username,
+    set: {
+      passwordHash: sql`excluded.password_hash`,
+      role: sql`excluded.role`,
+      updatedAt: sql`excluded.updated_at`,
+    },
+  })
+}
+
+// ---- 审计记录表读写（audit.ts 使用；会话聚合式，按 id upsert） ----
+
+const recordToRow = (r: AuditSessionRecord): NewAuditRecordRow => ({
+  id: r.id,
+  kind: r.kind,
+  sessionKey: r.sessionKey,
+  username: r.username,
+  ip: r.ip,
+  userAgent: r.userAgent,
+  at: new Date(r.at),
+  endedAt: r.endedAt !== null ? new Date(r.endedAt) : null,
+  actions: r.actions,
+  lastActiveAt: new Date(r.lastActiveAt),
+})
+
+/** 会话的每次变更（新操作 / 登出封存）整体覆盖该行，并裁剪保留最近 AUDIT_KEEP 条 */
+export async function upsertAuditRecord(record: AuditSessionRecord): Promise<void> {
+  const conn = guard()
+  if (!conn) return
+  await conn.insert(auditRecords).values(recordToRow(record)).onConflictDoUpdate({
+    target: auditRecords.id,
+    set: {
+      username: sql`excluded.username`,
+      ip: sql`excluded.ip`,
+      userAgent: sql`excluded.user_agent`,
+      endedAt: sql`excluded.ended_at`,
+      actions: sql`excluded.actions`,
+      lastActiveAt: sql`excluded.last_active_at`,
+    },
+  })
+  await conn.execute(
+    sql`delete from audit_records where id not in (select id from audit_records order by last_active_at desc limit ${AUDIT_KEEP})`,
+  )
+}
+
+/** 把数据库缺失的审计记录补进去（数据库宕机期间写入 JSON 的部分） */
+export async function mergeMissingAuditRecords(list: AuditSessionRecord[]): Promise<void> {
+  const conn = guard()
+  if (!conn || list.length === 0) return
+  await conn.insert(auditRecords).values(list.map(recordToRow)).onConflictDoNothing()
 }
