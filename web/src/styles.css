@@ -2973,3 +2973,147 @@ body {
   line-height: 1.6;
   color: var(--amber);
 }
+
+/* ---------- AI 会话记录页（/admin/ai，仅超管） ---------- */
+.ai-stats-table tr {
+  cursor: pointer;
+}
+.ai-stats-table .col-profile {
+  font-size: 12px;
+}
+.ai-insight-conf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 6px 24px;
+  padding: 12px 16px;
+}
+.ai-insight-conf-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--line) 60%, transparent);
+}
+.ai-insight-conf-row > .dim {
+  flex-shrink: 0;
+}
+.ai-insight-conf-row > .mono {
+  text-align: right;
+  word-break: break-all;
+  color: var(--text);
+}
+.ai-insight-extra {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+}
+.ai-insight-extra pre {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-2);
+}
+.ai-memory-list {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-memory-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.ai-memory-item .role-tag {
+  flex-shrink: 0;
+}
+.mem-preference {
+  color: var(--cyan);
+  border-color: rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.07);
+}
+.mem-fact {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 8%, transparent);
+}
+.mem-interest {
+  color: var(--amber);
+  border-color: rgba(240, 185, 11, 0.4);
+  background: rgba(240, 185, 11, 0.08);
+}
+.mem-habit {
+  color: var(--purple);
+  border-color: rgba(167, 139, 250, 0.4);
+  background: rgba(167, 139, 250, 0.08);
+}
+.ai-memory-content {
+  flex: 1;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.ai-memory-time {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.ai-conv-table tr {
+  cursor: pointer;
+}
+.ai-conv-detail {
+  padding: 8px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+}
+.ai-msg.user {
+  border-color: color-mix(in srgb, var(--cyan) 30%, transparent);
+}
+.ai-msg.assistant {
+  border-color: color-mix(in srgb, var(--purple) 30%, transparent);
+}
+.ai-msg-role {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+.ai-msg.assistant .ai-msg-role {
+  color: var(--purple);
+}
+.ai-msg-time {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.ai-msg-content {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-insight-prompt {
+  margin: 10px 16px;
+  max-height: 420px;
+  overflow: auto;
+}

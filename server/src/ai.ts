@@ -69,6 +69,14 @@ export function resolveAiProfile(username: string): AiProfile | null {
   return isComplete(def) ? def : null
 }
 
+/** 按用户解析生效档案名（管理端展示用），与 resolveAiProfile 同规则 */
+export function resolveAiProfileName(username: string): string {
+  for (const [name, p] of Object.entries(store.profiles)) {
+    if (p.allowedUsers?.includes(username) && isComplete(p)) return name
+  }
+  return AI_DEFAULT_PROFILE
+}
+
 /** 按名取档案（未指定或不存在时回落 default） */
 export function aiProfileByName(name?: string): AiProfile | undefined {
   if (name && store.profiles[name]) return store.profiles[name]

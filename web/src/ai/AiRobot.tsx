@@ -13,7 +13,7 @@ const SIZE = 104
 const POS_KEY = 'bv.aiRobotPos'
 
 /**
- * 3D 悬浮机器人（three.js 程序化建模，无外部模型文件）：
+ * 3D 悬浮机器人（three.js 程序化建模的 WALL-E 造型，无外部模型文件）：
  * - 左键点按拖拽移动（位置记忆到 localStorage，限定在视口内）
  * - 单击（未拖动）→ 打开聊天窗口
  * - 右键 → 隐藏（顶栏菜单可再次唤起）
@@ -38,73 +38,111 @@ export default function AiRobot({ onOpen, onHide, hidden = false }: Props): JSX.
     renderer.setSize(SIZE, SIZE)
     host.appendChild(renderer.domElement)
 
-    scene.add(new THREE.AmbientLight(0x8fb4ff, 1.7))
-    const dir = new THREE.DirectionalLight(0xffffff, 1.8)
-    dir.position.set(3, 5, 4)
-    scene.add(dir)
-    const cyanLight = new THREE.PointLight(0x00e5ff, 20, 14)
+    // ---- WALL-E 造型：黄色方块身体 + 望远镜双眼 + 履带底盘 ----
+    scene.add(new THREE.AmbientLight(0xdfe6ff, 1.1))
+    const key = new THREE.DirectionalLight(0xfff1d6, 1.9)
+    key.position.set(3, 5, 4)
+    scene.add(key)
+    const fill = new THREE.DirectionalLight(0x8fb4ff, 0.5)
+    fill.position.set(-4, 2, 2)
+    scene.add(fill)
+    const cyanLight = new THREE.PointLight(0x00e5ff, 10, 14)
     cyanLight.position.set(-2.5, 1, 3)
     scene.add(cyanLight)
 
-    const shell = new THREE.MeshStandardMaterial({ color: 0x37568c, metalness: 0.65, roughness: 0.32 })
-    const face = new THREE.MeshStandardMaterial({ color: 0x0a1120, metalness: 0.4, roughness: 0.22 })
-    const glow = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.4 })
-    const white = new THREE.MeshStandardMaterial({ color: 0xdfe9ff, metalness: 0.3, roughness: 0.4 })
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xdca94b, metalness: 0.4, roughness: 0.5 })
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.6, roughness: 0.45 })
+    const silver = new THREE.MeshStandardMaterial({ color: 0xaab6c8, metalness: 0.85, roughness: 0.3 })
+    const lens = new THREE.MeshStandardMaterial({ color: 0x0b0f18, metalness: 0.2, roughness: 0.15 })
+    const glow = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.2 })
 
     const body = new THREE.Group()
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 24), shell)
-    head.scale.set(1, 0.82, 0.9)
-    head.position.y = 0.78
-    body.add(head)
+    // 履带底盘 + 两侧银色负重轮
+    const tread = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.15), dark)
+    tread.position.y = -1.0
+    body.add(tread)
+    const wheelGeo = new THREE.CylinderGeometry(0.27, 0.27, 0.14, 18)
+    const hubGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.16, 12)
+    for (const wx of [-0.84, 0.84]) {
+      for (const wz of [-0.32, 0.32]) {
+        const wheel = new THREE.Mesh(wheelGeo, silver)
+        wheel.rotation.z = Math.PI / 2
+        wheel.position.set(wx, -1.0, wz)
+        body.add(wheel)
+        const hub = new THREE.Mesh(hubGeo, dark)
+        hub.rotation.z = Math.PI / 2
+        hub.position.set(wx * 1.03, -1.0, wz)
+        body.add(hub)
+      }
+    }
 
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5), face)
-    visor.rotation.x = -Math.PI / 2
-    visor.position.set(0, 0.76, 0.14)
-    body.add(visor)
-
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), glow)
-    eyeL.scale.set(1.35, 0.75, 0.55)
-    eyeL.position.set(-0.19, 0.82, 0.55)
-    const eyeR = eyeL.clone()
-    eyeR.position.x = 0.19
-    body.add(eyeL, eyeR)
-
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 8), shell)
-    antenna.position.y = 1.4
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), glow)
-    tip.position.y = 1.6
-    body.add(antenna, tip)
-
-    const earGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.1, 16)
-    const earL = new THREE.Mesh(earGeo, white)
-    earL.rotation.z = Math.PI / 2
-    earL.position.set(-0.62, 0.78, 0)
-    const earR = earL.clone()
-    earR.position.x = 0.62
-    body.add(earL, earR)
-
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.5, 8, 20), shell)
-    torso.position.y = -0.2
+    // 躯干（垃圾压缩箱）+ 胸口盖板与指示灯
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.95, 1.0), yellow)
+    torso.position.y = -0.18
     body.add(torso)
+    const chestDoor = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.62, 0.06), dark)
+    chestDoor.position.set(0, -0.1, 0.51)
+    body.add(chestDoor)
+    const chestLight = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), glow)
+    chestLight.position.set(0, -0.1, 0.57)
+    body.add(chestLight)
+    const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.26, 12), silver)
+    waist.position.y = 0.42
+    body.add(waist)
 
-    const chest = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), glow)
-    chest.position.set(0, 0.02, 0.4)
-    body.add(chest)
+    // 头部：方块脑袋 + 侧耳盘 + 望远镜双眼（整组做眨眼动画）
+    const head = new THREE.Group()
+    head.position.y = 0.95
+    body.add(head)
+    head.add(new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.6, 0.72), yellow))
+    for (const ex of [-0.78, 0.78]) {
+      const ear = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 16), silver)
+      ear.rotation.z = Math.PI / 2
+      ear.position.set(ex, 0, 0)
+      head.add(ear)
+    }
+    const eyes = new THREE.Group()
+    eyes.position.set(0, 0.02, 0.18)
+    head.add(eyes)
+    for (const ex of [-0.36, 0.36]) {
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.21, 0.32, 20), silver)
+      tube.rotation.x = Math.PI / 2
+      tube.position.set(ex, 0, 0.3)
+      eyes.add(tube)
+      const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.05, 20), lens)
+      glass.rotation.x = Math.PI / 2
+      glass.position.set(ex, 0, 0.46)
+      eyes.add(glass)
+      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), glow)
+      iris.scale.set(1.3, 1, 0.6)
+      iris.position.set(ex, 0, 0.45)
+      eyes.add(iris)
+    }
 
-    const armGeo = new THREE.CapsuleGeometry(0.12, 0.34, 6, 12)
-    const armL = new THREE.Mesh(armGeo, shell)
-    armL.position.set(-0.58, -0.12, 0)
-    armL.rotation.z = 0.25
-    const armR = new THREE.Mesh(armGeo, shell)
-    armR.position.set(0.58, -0.12, 0)
-    armR.rotation.z = -0.25
+    // 手臂：肩部枢轴 + 黄色上臂 + 深色前臂与双指爪
+    const buildArm = (side: 1 | -1): THREE.Group => {
+      const shoulder = new THREE.Group()
+      shoulder.position.set(side * 0.74, 0.14, 0)
+      shoulder.rotation.z = side * 0.55
+      const upper = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.16), yellow)
+      upper.position.y = -0.27
+      shoulder.add(upper)
+      const fore = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.38, 0.13), dark)
+      fore.position.set(0, -0.68, 0)
+      fore.rotation.z = -side * 0.7
+      shoulder.add(fore)
+      for (const cs of [-1, 1]) {
+        const claw = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.08), dark)
+        claw.position.set(cs * 0.05, -0.9, 0)
+        claw.rotation.z = cs * 0.45
+        shoulder.add(claw)
+      }
+      return shoulder
+    }
+    const armL = buildArm(-1)
+    const armR = buildArm(1)
     body.add(armL, armR)
-
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.02, 8, 48), glow)
-    ring.rotation.x = Math.PI / 2
-    ring.position.y = -1.0
-    body.add(ring)
 
     scene.add(body)
 
@@ -114,14 +152,15 @@ export default function AiRobot({ onOpen, onHide, hidden = false }: Props): JSX.
     const animate = (): void => {
       raf = requestAnimationFrame(animate)
       const t = (performance.now() - t0) / 1000
-      body.position.y = Math.sin(t * 1.6) * 0.12
-      body.rotation.y = Math.sin(t * 0.5) * 0.35
-      armL.rotation.z = 0.25 + Math.sin(t * 1.6 + 1) * 0.12
-      armR.rotation.z = -0.25 - Math.sin(t * 1.6) * 0.12
-      // 周期性眨眼（eyeL/eyeR 的 y 缩放从 0.75 压到 0.1 再回来）
-      const blink = Math.abs(Math.sin(t * 0.9)) > 0.965 ? 0.1 : 0.75
-      eyeL.scale.y += (blink - eyeL.scale.y) * 0.35
-      eyeR.scale.y = eyeL.scale.y
+      body.position.y = Math.sin(t * 1.6) * 0.1
+      body.rotation.z = Math.sin(t * 0.8) * 0.03
+      head.rotation.y = Math.sin(t * 0.45) * 0.24
+      head.rotation.z = Math.sin(t * 0.7 + 1) * 0.05
+      armL.rotation.x = Math.sin(t * 1.6 + 1) * 0.12
+      armR.rotation.x = -Math.sin(t * 1.6 + 1) * 0.12
+      // 周期性眨眼（双眼组整体 y 压扁再回弹）
+      const blink = Math.abs(Math.sin(t * 0.9)) > 0.965 ? 0.12 : 1
+      eyes.scale.y += (blink - eyes.scale.y) * 0.3
       hoverScale += ((hoverRef.current ? 1.16 : 1) - hoverScale) * 0.12
       scene.scale.setScalar(hoverScale)
       renderer.render(scene, camera)
