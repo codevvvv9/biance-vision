@@ -33,3 +33,4 @@ coverage/
 
 # ===== macOS =====
 .DS_Store
+.v2c/
