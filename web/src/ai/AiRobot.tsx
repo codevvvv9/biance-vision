@@ -52,6 +52,7 @@ export default function AiRobot({ onOpen, onHide, hidden = false }: Props): JSX.
 
     const yellow = new THREE.MeshStandardMaterial({ color: 0xdca94b, metalness: 0.4, roughness: 0.5 })
     const dark = new THREE.MeshStandardMaterial({ color: 0x2b3038, metalness: 0.6, roughness: 0.45 })
+    const treadMat = new THREE.MeshStandardMaterial({ color: 0x3a4352, metalness: 0.55, roughness: 0.5 })
     const silver = new THREE.MeshStandardMaterial({ color: 0xaab6c8, metalness: 0.85, roughness: 0.3 })
     const lens = new THREE.MeshStandardMaterial({ color: 0x0b0f18, metalness: 0.2, roughness: 0.15 })
     const glow = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 2.2 })
@@ -59,7 +60,7 @@ export default function AiRobot({ onOpen, onHide, hidden = false }: Props): JSX.
     const body = new THREE.Group()
 
     // 履带底盘 + 两侧银色负重轮
-    const tread = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.15), dark)
+    const tread = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 1.15), treadMat)
     tread.position.y = -1.0
     body.add(tread)
     const wheelGeo = new THREE.CylinderGeometry(0.27, 0.27, 0.14, 18)
@@ -103,21 +104,26 @@ export default function AiRobot({ onOpen, onHide, hidden = false }: Props): JSX.
       head.add(ear)
     }
     const eyes = new THREE.Group()
-    eyes.position.set(0, 0.02, 0.18)
+    eyes.position.set(0, -0.02, 0.18)
     head.add(eyes)
-    for (const ex of [-0.36, 0.36]) {
+    for (const ex of [-0.42, 0.42]) {
+      // 单眼成组，像双筒望远镜一样略向外张
+      const eye = new THREE.Group()
+      eye.position.x = ex
+      eye.rotation.y = ex > 0 ? -0.12 : 0.12
       const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.21, 0.32, 20), silver)
       tube.rotation.x = Math.PI / 2
-      tube.position.set(ex, 0, 0.3)
-      eyes.add(tube)
+      tube.position.z = 0.3
+      eye.add(tube)
       const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.05, 20), lens)
       glass.rotation.x = Math.PI / 2
-      glass.position.set(ex, 0, 0.46)
-      eyes.add(glass)
+      glass.position.z = 0.46
+      eye.add(glass)
       const iris = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), glow)
       iris.scale.set(1.3, 1, 0.6)
-      iris.position.set(ex, 0, 0.45)
-      eyes.add(iris)
+      iris.position.z = 0.45
+      eye.add(iris)
+      eyes.add(eye)
     }
 
     // 手臂：肩部枢轴 + 黄色上臂 + 深色前臂与双指爪
@@ -155,7 +161,7 @@ export default function AiRobot({ onOpen, onHide, hidden = false }: Props): JSX.
       body.position.y = Math.sin(t * 1.6) * 0.1
       body.rotation.z = Math.sin(t * 0.8) * 0.03
       head.rotation.y = Math.sin(t * 0.45) * 0.24
-      head.rotation.z = Math.sin(t * 0.7 + 1) * 0.05
+      head.rotation.z = 0.06 + Math.sin(t * 0.7 + 1) * 0.05
       armL.rotation.x = Math.sin(t * 1.6 + 1) * 0.12
       armR.rotation.x = -Math.sin(t * 1.6 + 1) * 0.12
       // 周期性眨眼（双眼组整体 y 压扁再回弹）
