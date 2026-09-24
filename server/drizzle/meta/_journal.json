@@ -36,6 +36,13 @@
       "when": 1790154295021,
       "tag": "0004_elite_ego",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790249346253,
+      "tag": "0005_secret_black_cat",
+      "breakpoints": true
     }
   ]
 }

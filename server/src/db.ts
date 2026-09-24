@@ -5,11 +5,20 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
-import { alertHistory, alertRules, appSettings, auditRecords, users } from './models.js'
+import { aiConversations, aiMemories, aiMessages, alertHistory, alertRules, appSettings, auditRecords, users } from './models.js'
 import { log } from './logger.js'
-import type { NewAlertHistoryRow, NewAlertRuleRow, NewAuditRecordRow, NewUserRow } from './models.js'
+import type {
+  NewAiConversationRow,
+  NewAiMemoryRow,
+  NewAiMessageRow,
+  NewAlertHistoryRow,
+  NewAlertRuleRow,
+  NewAuditRecordRow,
+  NewUserRow,
+} from './models.js'
 import type { AlertEntry, AlertRule, RuleType, Settings } from './types.js'
 import type { AuditSessionRecord } from './audit.js'
+import type { StoredConversation, StoredMessage, AiMemoryItem, MemoryKind } from './aiMemory.js'
 import type { UserRecord, UserRole } from './users.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -299,4 +308,116 @@ export async function mergeMissingAuditRecords(list: AuditSessionRecord[]): Prom
   const conn = guard()
   if (!conn || list.length === 0) return
   await conn.insert(auditRecords).values(list.map(recordToRow)).onConflictDoNothing()
+}
+
+// ---- AI 会话与长期记忆（aiMemory.ts 使用；JSON 镜像为权威，数据库可用时双写） ----
+
+const convToRow = (c: StoredConversation): NewAiConversationRow => ({
+  id: c.id,
+  username: c.username,
+  title: c.title,
+  createdAt: new Date(c.createdAt),
+  updatedAt: new Date(c.updatedAt),
+})
+
+const msgToRow = (conversationId: string, m: StoredMessage): NewAiMessageRow => ({
+  id: m.id,
+  conversationId,
+  role: m.role,
+  content: m.content,
+  at: new Date(m.at),
+})
+
+const memToRow = (m: AiMemoryItem): NewAiMemoryRow => ({
+  id: m.id,
+  username: m.username,
+  kind: m.kind,
+  content: m.content,
+  createdAt: new Date(m.createdAt),
+  updatedAt: new Date(m.updatedAt),
+})
+
+/** 全量加载 AI 会话与记忆（启动时与 JSON 镜像合并用；不可用返回 null） */
+export async function loadAiDataFromDb(): Promise<{
+  conversations: StoredConversation[]
+  memories: AiMemoryItem[]
+} | null> {
+  const conn = guard()
+  if (!conn) return null
+  const [convRows, msgRows, memRows] = await Promise.all([
+    conn.select().from(aiConversations),
+    conn.select().from(aiMessages).orderBy(aiMessages.at),
+    conn.select().from(aiMemories),
+  ])
+  const byConv = new Map<string, StoredMessage[]>()
+  for (const row of msgRows) {
+    const list = byConv.get(row.conversationId) ?? []
+    list.push({ id: row.id, role: row.role as 'user' | 'assistant', content: row.content, at: row.at.getTime() })
+    byConv.set(row.conversationId, list)
+  }
+  return {
+    conversations: convRows.map((row) => ({
+      id: row.id,
+      username: row.username,
+      title: row.title,
+      createdAt: row.createdAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+      lastExtractedCount: byConv.get(row.id)?.length ?? 0,
+      messages: byConv.get(row.id) ?? [],
+    })),
+    memories: memRows.map((row) => ({
+      id: row.id,
+      username: row.username,
+      kind: row.kind as MemoryKind,
+      content: row.content,
+      createdAt: row.createdAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+    })),
+  }
+}
+
+/** 会话整体覆盖写：元信息 upsert + 消息全量替换（单会话量级小，简单可靠） */
+export async function upsertAiConversationDb(conv: StoredConversation): Promise<void> {
+  const conn = guard()
+  if (!conn) return
+  await conn.transaction(async (tx) => {
+    await tx
+      .insert(aiConversations)
+      .values(convToRow(conv))
+      .onConflictDoUpdate({
+        target: aiConversations.id,
+        set: { title: conv.title, updatedAt: new Date(conv.updatedAt) },
+      })
+    await tx.delete(aiMessages).where(sql`conversation_id = ${conv.id}`)
+    if (conv.messages.length) {
+      await tx.insert(aiMessages).values(conv.messages.map((m) => msgToRow(conv.id, m)))
+    }
+  })
+}
+
+export async function deleteAiConversationDb(id: string): Promise<void> {
+  const conn = guard()
+  if (!conn) return
+  await conn.transaction(async (tx) => {
+    await tx.delete(aiMessages).where(sql`conversation_id = ${id}`)
+    await tx.delete(aiConversations).where(sql`id = ${id}`)
+  })
+}
+
+export async function upsertAiMemoryDb(m: AiMemoryItem): Promise<void> {
+  const conn = guard()
+  if (!conn) return
+  await conn
+    .insert(aiMemories)
+    .values(memToRow(m))
+    .onConflictDoUpdate({
+      target: aiMemories.id,
+      set: { kind: m.kind, content: m.content, updatedAt: new Date(m.updatedAt) },
+    })
+}
+
+export async function deleteAiMemoryDb(id: string): Promise<void> {
+  const conn = guard()
+  if (!conn) return
+  await conn.delete(aiMemories).where(sql`id = ${id}`)
 }

@@ -91,3 +91,52 @@ export type UserRow = typeof users.$inferSelect
 export type NewUserRow = typeof users.$inferInsert
 export type AuditRecordRow = typeof auditRecords.$inferSelect
 export type NewAuditRecordRow = typeof auditRecords.$inferInsert
+
+/** AI 聊天会话（按用户隔离；消息体在 ai_messages，此处存元信息） */
+export const aiConversations = pgTable(
+  'ai_conversations',
+  {
+    id: text('id').primaryKey(),
+    username: text('username').notNull(),
+    title: text('title').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** 最近一条消息时间：排序与裁剪依据 */
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('ai_conversations_username_idx').on(table.username)],
+)
+
+/** AI 聊天消息（一条 user / assistant 消息一行，属某个会话） */
+export const aiMessages = pgTable(
+  'ai_messages',
+  {
+    id: text('id').primaryKey(),
+    conversationId: text('conversation_id').notNull(),
+    role: text('role').notNull(),
+    content: text('content').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+  },
+  (table) => [index('ai_messages_conversation_idx').on(table.conversationId)],
+)
+
+/** AI 长期记忆：一条记忆一个独立事实（用户偏好 / 背景 / 习惯），对话时注入提示词 */
+export const aiMemories = pgTable(
+  'ai_memories',
+  {
+    id: text('id').primaryKey(),
+    username: text('username').notNull(),
+    /** preference 偏好 / fact 背景 / interest 关注 / habit 习惯 */
+    kind: text('kind').notNull(),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('ai_memories_username_idx').on(table.username)],
+)
+
+export type AiConversationRow = typeof aiConversations.$inferSelect
+export type NewAiConversationRow = typeof aiConversations.$inferInsert
+export type AiMessageRow = typeof aiMessages.$inferSelect
+export type NewAiMessageRow = typeof aiMessages.$inferInsert
+export type AiMemoryRow = typeof aiMemories.$inferSelect
+export type NewAiMemoryRow = typeof aiMemories.$inferInsert
