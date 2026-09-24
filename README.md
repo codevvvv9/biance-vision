@@ -47,7 +47,7 @@ npm run start        # 只启动后端（生产模式，运行 dist/ 编译产�
 - 会话基于 HttpOnly Cookie（7 天有效），服务重启不掉线（`server/data/sessions.json` 镜像）
 - **不开放自助注册**：`/register` 页面仅提示联系超级管理员；新账号由管理员在服务端执行脚本创建（见下）
 - 密码使用 scrypt + 随机盐哈希存储，不存明文
-- 内置账号（首次启动自动写入）：`xxx`（普通用户）、`xxx`（超级管理员，密码 `xxx`）
+- 内置账号（首次启动自动写入）：从 `server/data/seed-users.json` 读取（该文件不入库），格式：`[{"username":"xxx","password":"xxx","role":"user|superadmin"}]`；真实账号密码记录在本地 `LOCAL_NOTES.md`（已 gitignore，不入库）
 - 添加用户 / 修改密码脚本：
 
 ```bash

@@ -63,11 +63,24 @@ function verifyPassword(password: string, stored: string): boolean {
 let usersCache: UserRecord[] | null = null
 let usersMtime = 0
 
-/** 内置账号：首次启动（users.json 为空）时写入 */
-const SEED_USERS: { username: string; password: string; role: UserRole }[] = [
-  { username: 'xxx', password: 'xxx', role: 'user' },
-  { username: 'xxx', password: 'xxx', role: 'superadmin' },
-]
+/** 内置账号清单：server/data/seed-users.json（不入库），首次启动（users.json 为空）时写入 */
+const SEED_FILE = path.join(DATA_DIR, 'seed-users.json')
+
+function loadSeedUsers(): { username: string; password: string; role: UserRole }[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(SEED_FILE, 'utf8')) as unknown
+    if (!Array.isArray(raw)) return []
+    return raw.filter(
+      (s): s is { username: string; password: string; role: UserRole } =>
+        !!s && typeof s === 'object' &&
+        typeof (s as Record<string, unknown>).username === 'string' &&
+        typeof (s as Record<string, unknown>).password === 'string' &&
+        ((s as Record<string, unknown>).role === 'user' || (s as Record<string, unknown>).role === 'superadmin'),
+    )
+  } catch {
+    return []
+  }
+}
 
 /** 读取用户列表；users.json 被外部修改（如 add-user 脚本）时自动重载 */
 export function getUsers(): UserRecord[] {
@@ -102,17 +115,22 @@ export async function initUsers(): Promise<void> {
   if (!isDbAvailable()) await initDb() // 独立脚本调用时尚未初始化数据库
 
   if (getUsers().length === 0) {
-    const now = Date.now()
-    const seeded = SEED_USERS.map((s) => ({
-      id: crypto.randomUUID(),
-      username: s.username,
-      passwordHash: hashPassword(s.password),
-      role: s.role,
-      createdAt: now,
-      updatedAt: now,
-    }))
-    persistUsers(seeded)
-    console.log('[users] 已写入内置账号：xxx（用户）、xxx（超级管理员）')
+    const seeds = loadSeedUsers()
+    if (seeds.length > 0) {
+      const now = Date.now()
+      const seeded = seeds.map((s) => ({
+        id: crypto.randomUUID(),
+        username: s.username,
+        passwordHash: hashPassword(s.password),
+        role: s.role,
+        createdAt: now,
+        updatedAt: now,
+      }))
+      persistUsers(seeded)
+      console.log(`[users] 已按 seed-users.json 写入内置账号 ${seeded.length} 个`)
+    } else {
+      console.log('[users] 未配置内置账号（server/data/seed-users.json），可用 pnpm user:add 创建')
+    }
   }
 
   if (isDbAvailable()) {
