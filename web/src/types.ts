@@ -62,6 +62,13 @@ export interface AuthUser {
   role: 'user' | 'superadmin'
 }
 
+/** 系统用户（与 /api/admin/users 对应，仅超管可见，不含密码） */
+export interface AdminUser {
+  username: string
+  role: AuthUser['role']
+  createdAt: number
+}
+
 export interface Settings {
   webhookUrl: string
 }

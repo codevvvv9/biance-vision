@@ -4,6 +4,8 @@ import TickerTape from './components/TickerTape'
 import Toasts from './components/Toasts'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { MarketProvider } from './market/MarketContext'
+import { AiProvider } from './ai/AiContext'
+import AiAssistant from './ai/AiAssistant'
 import AlertsPage from './pages/AlertsPage'
 import AdminPage from './pages/AdminPage'
 import Dashboard from './pages/Dashboard'
@@ -15,22 +17,25 @@ import RegisterPage from './pages/RegisterPage'
 function AuthedApp(): JSX.Element {
   return (
     <MarketProvider>
-      <Header />
-      <TickerTape />
-      <main className="main">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/movers" element={<MoversPage />} />
-          <Route path="/alerts" element={<AlertsPage />} />
-          {/* 页面内部再校验 superadmin，普通用户直接访问会被跳回首页 */}
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-      <footer className="footer">
-        数据来源：Binance 公开行情接口（REST + WebSocket，1s 推送） · 本工具仅供学习研究，不构成投资建议
-      </footer>
-      <Toasts />
+      <AiProvider>
+        <Header />
+        <TickerTape />
+        <main className="main">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/movers" element={<MoversPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
+            {/* 页面内部再校验 superadmin，普通用户直接访问会被跳回首页 */}
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+        <footer className="footer">
+          数据来源：Binance 公开行情接口（REST + WebSocket，1s 推送） · 本工具仅供学习研究，不构成投资建议
+        </footer>
+        <Toasts />
+        <AiAssistant />
+      </AiProvider>
     </MarketProvider>
   )
 }

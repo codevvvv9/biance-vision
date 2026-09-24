@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
+import { useAi } from '../ai/AiContext'
+import AiSettingsModal from '../ai/AiSettingsModal'
 import { fmtPct, fmtPrice } from '../utils'
 import { notificationState, requestNotifications } from '../notify'
 import type { NotificationPermissionState } from '../notify'
@@ -77,6 +79,27 @@ function PaletteIcon(): JSX.Element {
   )
 }
 
+function GearIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  )
+}
+
+function RobotIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="4" y="10" width="16" height="10" rx="2.5" />
+      <circle cx="9" cy="15" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="15" r="1" fill="currentColor" stroke="none" />
+      <path d="M12 10V7" />
+      <circle cx="12" cy="5" r="2" />
+    </svg>
+  )
+}
+
 function QuickQuote({ symbol }: { symbol: string }): JSX.Element {
   const { tickers } = useMarket()
   const t = tickers[symbol]
@@ -109,11 +132,13 @@ function LogoutIcon(): JSX.Element {
 
 export default function Header(): JSX.Element {
   const { status, soundOn, toggleSound, upColor, toggleUpColor } = useMarket()
+  const ai = useAi()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [perm, setPerm] = useState<NotificationPermissionState>(notificationState())
   const [now, setNow] = useState<Date>(() => new Date())
   const [menuOpen, setMenuOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -219,6 +244,36 @@ export default function Header(): JSX.Element {
             </button>
             {menuOpen && (
               <div className="user-menu-panel" role="menu">
+                {user.role === 'superadmin' && (
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setAiOpen(true)
+                    }}
+                  >
+                    <GearIcon />
+                    <span>AI 设置</span>
+                    <em className="menu-hint">{ai.status.configured ? ai.status.model || '已配置' : '未配置'}</em>
+                  </button>
+                )}
+                {ai.status.configured && (
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      ai.showRobot()
+                      ai.setChatOpen(true)
+                    }}
+                  >
+                    <RobotIcon />
+                    <span>AI 助手</span>
+                    <em className="menu-hint">{ai.robotVisible ? '对话中' : '唤起'}</em>
+                  </button>
+                )}
+                <div className="menu-sep" />
                 <button className="menu-item" role="menuitem" onClick={toggleUpColor}>
                   <PaletteIcon />
                   <span>涨跌配色</span>
@@ -240,6 +295,7 @@ export default function Header(): JSX.Element {
           </div>
         )}
         <span className="clock mono">{now.toLocaleTimeString('zh-CN', { hour12: false })}</span>
+        {aiOpen && <AiSettingsModal onClose={() => setAiOpen(false)} />}
       </div>
     </header>
   )

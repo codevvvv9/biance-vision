@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import { log } from './logger.js'
+import { fmtMs, kv, log } from './logger.js'
 import type {
   CompactTicker,
   MarketStats,
@@ -26,8 +26,17 @@ export async function restGet<T>(pathname: string): Promise<T> {
       return (await res.json()) as T
     } catch (err) {
       lastErr = err
+      log.warn('binance', 'REST 请求失败，切换备用主机', kv({
+        主机: host.replace(/^https?:\/\//, ''),
+        路径: pathname,
+        错误: (err as Error).message,
+      }))
     }
   }
+  log.error('binance', 'REST 请求失败（所有主机均不可用）', kv({
+    路径: pathname,
+    最后错误: (lastErr as Error)?.message ?? '',
+  }))
   throw lastErr ?? new Error('all binance hosts unreachable')
 }
 
@@ -43,11 +52,24 @@ export class BinanceStream {
   private listeners = new Set<(msg: StreamEvent) => void>()
   private reqId = 1
   private closed = false
+  /** 当前连接的统计：建立时间与收到的消息数（重连时清零） */
+  private openedAt = 0
+  private msgCount = 0
 
   connected = false
 
   constructor() {
     this.connect()
+  }
+
+  /** 供运行状态日志 / health 输出 */
+  stats(): { connected: boolean; uptimeMs: number; messages: number; streams: number } {
+    return {
+      connected: this.connected,
+      uptimeMs: this.connected ? Date.now() - this.openedAt : 0,
+      messages: this.msgCount,
+      streams: this.streams.size,
+    }
   }
 
   on(fn: (msg: StreamEvent) => void): () => void {
@@ -100,8 +122,10 @@ export class BinanceStream {
     ws.on('open', () => {
       this.connected = true
       this.backoff = 1000
-      log.ok('binance', `stream connected: ${url}`)
+      this.openedAt = Date.now()
+      this.msgCount = 0
       const names = [...this.streams.keys()]
+      log.ok('binance', `stream connected: ${url}`, kv({ 订阅流: names.length }))
       if (names.length) {
         this.send({ method: 'SUBSCRIBE', params: names, id: this.reqId++ })
       }
@@ -109,6 +133,7 @@ export class BinanceStream {
     })
 
     ws.on('message', (raw: WebSocket.RawData) => {
+      this.msgCount++
       let msg: unknown
       try {
         msg = JSON.parse(raw.toString())
@@ -133,7 +158,12 @@ export class BinanceStream {
       this.ws = null
       this.emit({ type: 'status', connected: false })
       const wait = this.backoff
-      log.warn('binance', `stream ${reason}, retry in ${wait}ms`)
+      log.warn('binance', '行情流断开，准备重连', kv({
+        原因: reason,
+        在线时长: this.openedAt ? fmtMs(Date.now() - this.openedAt) : '?',
+        收到消息: this.msgCount,
+        重连等待: fmtMs(wait),
+      }))
       setTimeout(() => this.connect(), wait)
       this.backoff = Math.min(this.backoff * 2, 15000)
       this.hostIdx++

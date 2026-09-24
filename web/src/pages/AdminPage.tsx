@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { fmtDateTime } from '../utils'
-import type { AuditAction, AuditEntry, AuditRecord } from '../types'
+import type { AdminUser, AuditAction, AuditEntry, AuditRecord } from '../types'
 
 const ACTION_META: Record<AuditAction, { label: string; cls: string }> = {
   login: { label: '登录', cls: 'act-auth' },
@@ -45,6 +45,8 @@ export default function AdminPage(): JSX.Element {
   const { user } = useAuth()
   const [records, setRecords] = useState<AuditRecord[] | null>(null)
   const [usernames, setUsernames] = useState<string[]>([])
+  const [users, setUsers] = useState<AdminUser[] | null>(null)
+  const [copied, setCopied] = useState('')
   const [username, setUsername] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -61,14 +63,94 @@ export default function AdminPage(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (user?.role === 'superadmin') load('')
+    if (user?.role !== 'superadmin') return
+    load('')
+    api<{ users: AdminUser[] }>('/admin/users')
+      .then((d) => setUsers(d.users))
+      .catch((e: Error) => setError(e.message))
   }, [load, user])
+
+  const copyName = (name: string): void => {
+    navigator.clipboard
+      ?.writeText(name)
+      .then(() => {
+        setCopied(name)
+        window.setTimeout(() => setCopied(''), 1500)
+      })
+      .catch(() => {
+        /* 剪贴板不可用时静默 */
+      })
+  }
+
+  // 日志筛选下拉：真实用户在前，已删除但留有日志的用户在后
+  const filterNames = [...new Set([...(users ?? []).map((u) => u.username), ...usernames])]
 
   // 普通用户直接输入 /admin 时跳回首页；接口侧同样有 403 拦截
   if (user?.role !== 'superadmin') return <Navigate to="/" replace />
 
   return (
     <div className="page">
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">
+            <i className="title-glyph" />
+            用户列表
+          </h2>
+          <button className="btn btn-ghost" onClick={() => api<{ users: AdminUser[] }>('/admin/users').then((d) => setUsers(d.users))}>
+            刷新
+          </button>
+        </div>
+        <div className="table-wrap">
+          <table className="table users-table">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th className="col-role">角色</th>
+                <th className="col-time">创建时间</th>
+                <th className="col-copy" />
+              </tr>
+            </thead>
+            <tbody>
+              {users === null && !error && (
+                <tr className="empty-row">
+                  <td colSpan={4}>加载中…</td>
+                </tr>
+              )}
+              {users?.length === 0 && (
+                <tr className="empty-row">
+                  <td colSpan={4}>暂无用户</td>
+                </tr>
+              )}
+              {(users ?? []).map((u) => (
+                <tr key={u.username}>
+                  <td className="mono col-name">
+                    <b>{u.username}</b>
+                  </td>
+                  <td className="col-role">
+                    <span className={`role-tag ${u.role === 'superadmin' ? 'role-super' : ''}`}>
+                      {u.role === 'superadmin' ? '超级管理员' : '普通用户'}
+                    </span>
+                  </td>
+                  <td className="mono dim col-time">{fmtDateTime(u.createdAt)}</td>
+                  <td className="col-copy">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => copyName(u.username)}
+                      title="复制用户名（AI 档案绑定等场景需精准匹配，可直接粘贴）"
+                    >
+                      {copied === u.username ? '✓ 已复制' : '复制'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="form-hint muted audit-hint">
+          AI 配置档案的「绑定用户」需与上述用户名完全一致（区分大小写），可点击「复制」后直接粘贴。
+        </p>
+      </section>
+
       <section className="panel">
         <div className="panel-head">
           <h2 className="panel-title">
@@ -84,7 +166,7 @@ export default function AdminPage(): JSX.Element {
               }}
             >
               <option value="">全部用户</option>
-              {usernames.map((u) => (
+              {filterNames.map((u) => (
                 <option key={u} value={u}>
                   {u}
                 </option>
