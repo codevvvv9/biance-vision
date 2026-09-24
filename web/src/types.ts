@@ -117,6 +117,58 @@ export interface ToastItem {
   body?: string
 }
 
+/** 管理端 AI 使用统计（与 /api/admin/ai/overview 对应，仅超管） */
+export interface AiUserStat {
+  username: string
+  profileName: string
+  conversations: number
+  messages: number
+  memories: number
+  lastActiveAt: number
+}
+
+/** AI 会话消息（用户/助手） */
+export interface AiStoredMessage {
+  role: 'user' | 'assistant'
+  content: string
+  at: number
+}
+
+/** AI 会话摘要与详情 */
+export interface AiConversationSummary {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messageCount: number
+}
+
+export interface AiConversationDetail extends AiConversationSummary {
+  username: string
+  messages: AiStoredMessage[]
+}
+
+/** 长期记忆（服务端自动从对话提取） */
+export interface AiMemoryItem {
+  id: string
+  kind: 'preference' | 'fact' | 'interest' | 'habit'
+  content: string
+  createdAt: number
+  updatedAt: number
+}
+
+/** 生效档案配置（脱敏，与 /api/admin/ai/user 对应） */
+export interface AiProfileMasked {
+  baseUrl: string
+  model: string
+  apiKeyMasked: string
+  temperature?: number
+  maxTokens?: number
+  extraPrompt?: string
+  dailyLimit?: number
+  allowedUsers?: string[]
+}
+
 /** 服务端 → 前端 WS 消息 */
 export type ServerMessage =
   | { type: 'market'; ts: number; stats: MarketStats; tickers: { s: string; c: string; P: string; h: string; l: string; q: string }[] }

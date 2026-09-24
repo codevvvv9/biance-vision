@@ -169,6 +169,43 @@ export function listConversations(username: string): ConversationSummary[] {
     .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+// ---- 管理端视角（仅超管接口调用） ----
+
+/** 各用户 AI 使用统计 */
+export interface AiUserStat {
+  username: string
+  conversations: number
+  messages: number
+  memories: number
+  lastActiveAt: number
+}
+
+/** 聚合全部用户的会话/消息/记忆统计，按最近活跃倒序 */
+export function adminAiStats(): AiUserStat[] {
+  const map = new Map<string, AiUserStat>()
+  const ensure = (u: string): AiUserStat => {
+    let s = map.get(u)
+    if (!s) {
+      s = { username: u, conversations: 0, messages: 0, memories: 0, lastActiveAt: 0 }
+      map.set(u, s)
+    }
+    return s
+  }
+  for (const c of conversations) {
+    const s = ensure(c.username)
+    s.conversations++
+    s.messages += c.messages.length
+    s.lastActiveAt = Math.max(s.lastActiveAt, c.updatedAt)
+  }
+  for (const m of memories) ensure(m.username).memories++
+  return [...map.values()].sort((a, b) => b.lastActiveAt - a.lastActiveAt)
+}
+
+/** 按 id 取任意用户的会话（不限归属，管理端查看用） */
+export function getConversationAny(id: string): StoredConversation | null {
+  return conversations.find((c) => c.id === id) ?? null
+}
+
 export function getConversation(username: string, id: string): StoredConversation | null {
   const conv = conversations.find((c) => c.id === id)
   return conv && conv.username === username ? conv : null

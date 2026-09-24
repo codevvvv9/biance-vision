@@ -111,6 +111,16 @@ function LogIcon(): JSX.Element {
   )
 }
 
+function ChatLogIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <line x1="8" y1="9" x2="16" y2="9" />
+      <line x1="8" y1="13" x2="13" y2="13" />
+    </svg>
+  )
+}
+
 function QuickQuote({ symbol }: { symbol: string }): JSX.Element {
   const { tickers } = useMarket()
   const t = tickers[symbol]
@@ -263,6 +273,18 @@ export default function Header(): JSX.Element {
                       <LogIcon />
                       <span>管理面板</span>
                       <em className="menu-hint">用户 / 日志</em>
+                    </button>
+                    <button
+                      className="menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        navigate('/admin/ai')
+                      }}
+                    >
+                      <ChatLogIcon />
+                      <span>AI 会话</span>
+                      <em className="menu-hint">上下文 / 记忆</em>
                     </button>
                     <button
                       className="menu-item"

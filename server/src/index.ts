@@ -45,11 +45,13 @@ import {
   listAiModels,
   recordAiUsage,
   resolveAiProfile,
+  resolveAiProfileName,
   resolveApiKey,
   saveAiProfiles,
   testAiConnection,
 } from './ai.js'
 import {
+  adminAiStats,
   appendConversationMessages,
   chatHistoryOf,
   clearMemories,
@@ -57,6 +59,7 @@ import {
   deleteConversation,
   deleteMemory,
   getConversation,
+  getConversationAny,
   initAiMemory,
   listConversations,
   listMemories,
@@ -747,6 +750,52 @@ app.get('/api/admin/audit-logs', async (req) => {
   }
   const q = req.query as { username?: string; limit?: string }
   return queryAudit({ username: q.username, limit: parseInt(q.limit ?? '', 10) || 200 })
+})
+
+// ---- 管理端：AI 会话记录全景（仅超级管理员；上下文 / 记忆 / 提示词 / 配置） ----
+
+/** 各用户 AI 使用统计 + 全部档案（脱敏） */
+app.get('/api/admin/ai/overview', async (req) => {
+  requireSuperadmin(req)
+  return {
+    stats: adminAiStats().map((s) => ({ ...s, profileName: resolveAiProfileName(s.username) })),
+    profiles: getAiProfilesMasked(),
+  }
+})
+
+/** 指定用户 AI 全景：生效档案与配置、会话列表、长期记忆、完整生效提示词 */
+app.get('/api/admin/ai/user', async (req) => {
+  requireSuperadmin(req)
+  const username = String((req.query as { username?: string }).username ?? '').trim()
+  if (!username) throw badRequest('缺少 username')
+  const profileName = resolveAiProfileName(username)
+  const profile = resolveAiProfile(username)
+  return {
+    username,
+    profileName,
+    profileConfigured: !!profile,
+    profileMasked: getAiProfilesMasked()[profileName] ?? null,
+    prompt: profile ? buildSystemPrompt(profile, memoriesPromptBlock(username)) : '',
+    conversations: listConversations(username),
+    memories: listMemories(username),
+  }
+})
+
+/** 任意会话的完整消息记录（不限归属，管理端查看上下文用） */
+app.get('/api/admin/ai/conversations/:id', async (req) => {
+  requireSuperadmin(req)
+  const conv = getConversationAny((req.params as { id: string }).id)
+  if (!conv) throw badRequest('会话不存在')
+  return {
+    conversation: {
+      id: conv.id,
+      username: conv.username,
+      title: conv.title || '新对话',
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+      messages: conv.messages.map((m) => ({ role: m.role, content: m.content, at: m.at })),
+    },
+  }
 })
 
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
