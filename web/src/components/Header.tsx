@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
@@ -67,6 +67,16 @@ function SoundIcon({ off }: { off: boolean }): JSX.Element {
   )
 }
 
+/** 涨跌配色切换图标：左右两个箭头直接使用当前 --up/--down，所见即当前含义 */
+function PaletteIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M7 20V6.5M7 6.5 3.8 9.7M7 6.5l3.2 3.2" stroke="var(--up)" />
+      <path d="M17 4v13.5m0 0 3.2-3.2M17 17.5l-3.2-3.2" stroke="var(--down)" />
+    </svg>
+  )
+}
+
 function QuickQuote({ symbol }: { symbol: string }): JSX.Element {
   const { tickers } = useMarket()
   const t = tickers[symbol]
@@ -98,16 +108,35 @@ function LogoutIcon(): JSX.Element {
 }
 
 export default function Header(): JSX.Element {
-  const { status, soundOn, toggleSound } = useMarket()
+  const { status, soundOn, toggleSound, upColor, toggleUpColor } = useMarket()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [perm, setPerm] = useState<NotificationPermissionState>(notificationState())
   const [now, setNow] = useState<Date>(() => new Date())
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
+
+  // 下拉菜单：点击外部 / Escape 关闭
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onDoc = (e: MouseEvent): void => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
 
   const bellLabel =
     perm === 'granted' ? '系统通知已开启' : perm === 'default' ? '开启系统通知' : '通知被浏览器拦截'
@@ -162,22 +191,53 @@ export default function Header(): JSX.Element {
           <SoundIcon off={!soundOn} />
         </button>
         {user && (
-          <>
-            <span className="user-chip" title={user.role === 'superadmin' ? '超级管理员' : '普通用户'}>
+          <div className={`user-menu ${menuOpen ? 'open' : ''}`} ref={menuRef}>
+            <button
+              className="user-chip"
+              title={user.role === 'superadmin' ? '超级管理员' : '普通用户'}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
               <i className={`user-role-dot ${user.role}`} />
               <span className="user-name">{user.username}</span>
               {user.role === 'superadmin' && <em className="user-role-tag">超管</em>}
-            </span>
-            <button
-              className="icon-btn"
-              title="退出登录"
-              onClick={() => {
-                void logout().then(() => navigate('/login', { replace: true }))
-              }}
-            >
-              <LogoutIcon />
+              <svg
+                className="caret"
+                width="10"
+                height="10"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M2.5 4.5 6 8l3.5-3.5" />
+              </svg>
             </button>
-          </>
+            {menuOpen && (
+              <div className="user-menu-panel" role="menu">
+                <button className="menu-item" role="menuitem" onClick={toggleUpColor}>
+                  <PaletteIcon />
+                  <span>涨跌配色</span>
+                  <em className="menu-hint">{upColor === 'green' ? '绿涨红跌' : '红涨绿跌'}</em>
+                </button>
+                <button
+                  className="menu-item danger"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    void logout().then(() => navigate('/login', { replace: true }))
+                  }}
+                >
+                  <LogoutIcon />
+                  <span>退出登录</span>
+                </button>
+              </div>
+            )}
+          </div>
         )}
         <span className="clock mono">{now.toLocaleTimeString('zh-CN', { hour12: false })}</span>
       </div>
