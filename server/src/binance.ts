@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import { log } from './logger.js'
 import type {
   CompactTicker,
   MarketStats,
@@ -59,7 +60,7 @@ export class BinanceStream {
       try {
         fn(msg)
       } catch (err) {
-        console.error('[binance] listener error:', err)
+        log.error('binance', 'listener error:', err)
       }
     }
   }
@@ -99,7 +100,7 @@ export class BinanceStream {
     ws.on('open', () => {
       this.connected = true
       this.backoff = 1000
-      console.log(`[binance] stream connected: ${url}`)
+      log.ok('binance', `stream connected: ${url}`)
       const names = [...this.streams.keys()]
       if (names.length) {
         this.send({ method: 'SUBSCRIBE', params: names, id: this.reqId++ })
@@ -132,14 +133,14 @@ export class BinanceStream {
       this.ws = null
       this.emit({ type: 'status', connected: false })
       const wait = this.backoff
-      console.warn(`[binance] stream ${reason}, retry in ${wait}ms`)
+      log.warn('binance', `stream ${reason}, retry in ${wait}ms`)
       setTimeout(() => this.connect(), wait)
       this.backoff = Math.min(this.backoff * 2, 15000)
       this.hostIdx++
     }
     ws.on('close', () => drop('closed'))
     ws.on('error', (err: Error) => {
-      if (this.ws === ws) console.warn('[binance] stream error:', err.message)
+      if (this.ws === ws) log.warn('binance', 'stream error:', err.message)
     })
   }
 

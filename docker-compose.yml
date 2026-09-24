@@ -27,6 +27,7 @@ services:
     ports:
       - "3200:3200"
     environment:
+      TZ: Asia/Shanghai # 日志时间戳用北京时间（容器默认 UTC）
       DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
     # JSON 镜像 + seed-users.json 放宿主机这份目录，容器重建数据不丢
     volumes:

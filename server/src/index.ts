@@ -44,6 +44,7 @@ import {
   verifyLogin,
 } from './users.js'
 import type { SessionRecord } from './users.js'
+import { log } from './logger.js'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 const PORT = Number(process.env.PORT || 3200)
@@ -69,12 +70,14 @@ const SYMBOL_RE = /^[A-Z0-9]{4,20}$/
 // 币安行情流：全市场 24h miniTicker + 按需的 kline 订阅
 // ---------------------------------------------------------------------------
 const stream = new BinanceStream()
+// 最近一次收到行情推送的时间（health 暴露，用于判断行情链路是否活着）
+let lastTickerAt = 0
 // !miniTicker@arr：全市场 24h 迷你行情，每秒推送一次（比 !ticker@arr 更轻量，
 // 涨跌幅由 (close - open) / open 计算）
 stream.subscribe('!miniTicker@arr')
 
-/** 带 isAlive 心跳标记的前端连接 */
-type AliveSocket = WebSocket & { isAlive?: boolean }
+/** 带 isAlive 心跳标记与短 id 的前端连接 */
+type AliveSocket = WebSocket & { isAlive?: boolean; cid?: string }
 
 interface ClientState {
   market: boolean
@@ -97,11 +100,12 @@ function broadcast(msg: ServerMessage, filter?: (s: ClientState) => boolean): vo
 function onAlertFired(entry: AlertEntry): void {
   broadcast({ type: 'alert', alert: entry })
   callWebhook(entry)
-  console.log(`[alert] ${entry.message}`)
+  log.ok('alert', entry.message)
 }
 
 stream.on((msg) => {
   if (msg.type === 'tickers') {
+    lastTickerAt = Date.now()
     for (const t of msg.data) {
       const open = parseFloat(t.o)
       const close = parseFloat(t.c)
@@ -171,7 +175,7 @@ if (fs.existsSync(WEB_DIST)) {
     }
     reply.code(404).send({ message: 'Not Found' })
   })
-  console.log(`[server] 托管前端静态资源：${WEB_DIST}`)
+  log.info('server', `托管前端静态资源：${WEB_DIST}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +267,9 @@ app.get('/api/health', async () => ({
   symbols: tickerCache.size,
   clients: clients.size,
   storage: storageMode(),
+  uptime: Math.floor(process.uptime()),
+  lastTickerAt,
+  tickerAgeMs: lastTickerAt === 0 ? null : Date.now() - lastTickerAt,
 }))
 
 app.get('/api/tickers', async (req) => {
@@ -396,16 +403,20 @@ app.get('/api/admin/audit-logs', async (req) => {
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
 app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {
   if (!findSession(readSessionToken(req.headers.cookie))) {
+    log.warn('ws', `未登录连接被拒 ip=${clientIp(req)}`)
     connection.socket.close(4001, 'unauthorized')
     return
   }
   const ws = connection.socket as AliveSocket
   ws.isAlive = true
+  const cid = Math.random().toString(36).slice(2, 8)
+  ws.cid = cid
   ws.on('pong', () => {
     ws.isAlive = true
   })
   const state: ClientState = { market: false, klines: new Set() }
   clients.set(ws, state)
+  log.info('ws', `客户端 ${cid} 连接（当前 ${clients.size} 个）`)
 
   ws.on('message', (raw: WebSocket.RawData) => {
     let msg: ClientMessage
@@ -440,6 +451,7 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
 
   const bye = (): void => {
     clients.delete(ws)
+    log.info('ws', `客户端 ${ws.cid ?? '?'} 断开（剩余 ${clients.size} 个）`)
     for (const name of state.klines) releaseKline(name)
     state.klines.clear()
   }
@@ -459,6 +471,7 @@ function releaseKline(name: string): void {
 setInterval(() => {
   for (const ws of clients.keys()) {
     if (ws.isAlive === false) {
+      log.warn('ws', `客户端 ${ws.cid ?? '?'} 心跳超时，已断开`)
       ws.terminate()
       continue
     }
@@ -474,13 +487,13 @@ setInterval(() => {
 app
   .listen({ port: PORT, host: HOST })
   .then(() => {
-    console.log(`[server] biance-vision api listening on http://${HOST}:${PORT}`)
+    log.ok('server', `biance-vision api listening on http://${HOST}:${PORT}`)
   })
   .catch((err: Error) => {
-    console.error('[server] listen failed:', err)
+    log.error('server', 'listen failed:', err)
     process.exit(1)
   })
 
 process.on('unhandledRejection', (err) => {
-  console.error('[server] unhandled rejection:', err)
+  log.error('server', 'unhandled rejection:', err)
 })

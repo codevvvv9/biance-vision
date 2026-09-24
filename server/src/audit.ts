@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { loadJson, saveJson } from './store.js'
 import { isDbAvailable, mergeMissingAuditRecords, upsertAuditRecord } from './db.js'
+import { log } from './logger.js'
 import type { SessionRecord } from './users.js'
 import { SESSION_TTL_MS } from './users.js'
 
@@ -72,7 +73,7 @@ function persist(changed: AuditSessionRecord): void {
   }
   saveJson('audit.json', records)
   void upsertAuditRecord(changed).catch((e: Error) =>
-    console.warn('[audit] 数据库写入失败:', e.message),
+    log.warn('audit', '数据库写入失败:', e.message),
   )
 }
 
@@ -217,6 +218,6 @@ export function queryAudit(filter: { username?: string; limit?: number } = {}): 
 export async function initAudit(): Promise<void> {
   if (!isDbAvailable() || records.length === 0) return
   await mergeMissingAuditRecords(records).catch((e: Error) =>
-    console.warn('[audit] 数据库回补失败:', e.message),
+    log.warn('audit', '数据库回补失败:', e.message),
   )
 }

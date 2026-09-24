@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR, loadJson, saveJson } from './store.js'
 import { initDb, isDbAvailable, loadUsersFromDb, upsertUsersDb } from './db.js'
+import { log } from './logger.js'
 
 export type UserRole = 'user' | 'superadmin'
 
@@ -103,7 +104,7 @@ function persistUsers(list: UserRecord[]): void {
   } catch {
     /* noop */
   }
-  void upsertUsersDb(list).catch((e: Error) => console.warn('[db] 用户写入失败:', e.message))
+  void upsertUsersDb(list).catch((e: Error) => log.warn('db', '用户写入失败:', e.message))
 }
 
 /**
@@ -127,15 +128,15 @@ export async function initUsers(): Promise<void> {
         updatedAt: now,
       }))
       persistUsers(seeded)
-      console.log(`[users] 已按 seed-users.json 写入内置账号 ${seeded.length} 个`)
+      log.ok('users', `已按 seed-users.json 写入内置账号 ${seeded.length} 个`)
     } else {
-      console.log('[users] 未配置内置账号（server/data/seed-users.json），可用 pnpm user:add 创建')
+      log.warn('users', '未配置内置账号（server/data/seed-users.json），可用 pnpm user:add 创建')
     }
   }
 
   if (isDbAvailable()) {
     const dbUsers = await loadUsersFromDb().catch((e: Error) => {
-      console.warn('[db] 用户读取失败:', e.message)
+      log.warn('db', '用户读取失败:', e.message)
       return []
     })
     if (dbUsers.length > 0) {
