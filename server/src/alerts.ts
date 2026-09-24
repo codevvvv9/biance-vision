@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { loadJson, saveJson } from './store.js'
+import { log } from './logger.js'
 import {
   appendHistory,
   initDb,
@@ -77,7 +78,7 @@ function persistAll(): void {
   saveJson('rules.json', rules)
   saveJson('history.json', history)
   saveJson('settings.json', settings)
-  void persistRules(rules).catch((e: Error) => console.warn('[db] 规则写入失败:', e.message))
+  void persistRules(rules).catch((e: Error) => log.warn('db', '规则写入失败:', e.message))
 }
 
 /**
@@ -98,7 +99,7 @@ export async function initStorage(): Promise<void> {
     await persistRules(rules)
     await mergeMissingHistory(history)
     await persistSettings(settings)
-    console.log(`[db] 已导入 JSON 存量数据：规则 ${rules.length} 条，历史 ${history.length} 条`)
+    log.ok('db', `已导入 JSON 存量数据：规则 ${rules.length} 条，历史 ${history.length} 条`)
     return
   }
 
@@ -123,7 +124,7 @@ export async function initStorage(): Promise<void> {
   saveJson('rules.json', rules)
   saveJson('history.json', history)
   saveJson('settings.json', settings)
-  console.log(`[db] 已从 PostgreSQL 加载：规则 ${rules.length} 条，历史 ${history.length} 条`)
+  log.ok('db', `已从 PostgreSQL 加载：规则 ${rules.length} 条，历史 ${history.length} 条`)
 }
 
 export const getRules = (): AlertRule[] => rules
@@ -212,7 +213,7 @@ export function createRule(input: RuleInput, getTicker: (s: string) => TickerSna
   armRule(rule, getTicker(symbol))
   rules.push(rule)
   saveJson('rules.json', rules)
-  void persistRules(rules).catch((e: Error) => console.warn('[db] 规则写入失败:', e.message))
+  void persistRules(rules).catch((e: Error) => log.warn('db', '规则写入失败:', e.message))
   return rule
 }
 
@@ -239,7 +240,7 @@ export function updateRule(
   // 条件变化或重新启用时重新布防
   if (condChanged || patch.enabled === true) armRule(r, getTicker(r.symbol))
   saveJson('rules.json', rules)
-  void persistRules(rules).catch((e: Error) => console.warn('[db] 规则写入失败:', e.message))
+  void persistRules(rules).catch((e: Error) => log.warn('db', '规则写入失败:', e.message))
   return r
 }
 
@@ -248,7 +249,7 @@ export function removeRule(id: string): boolean {
   if (idx === -1) return false
   rules.splice(idx, 1)
   saveJson('rules.json', rules)
-  void persistRules(rules).catch((e: Error) => console.warn('[db] 规则写入失败:', e.message))
+  void persistRules(rules).catch((e: Error) => log.warn('db', '规则写入失败:', e.message))
   return true
 }
 
@@ -273,8 +274,8 @@ export function evaluateRules(getTicker: (s: string) => TickerSnapshot | null): 
   if (fired.length) {
     saveJson('rules.json', rules)
     saveJson('history.json', history)
-    void persistRules(rules).catch((e: Error) => console.warn('[db] 规则写入失败:', e.message))
-    void appendHistory(fired).catch((e: Error) => console.warn('[db] 历史写入失败:', e.message))
+    void persistRules(rules).catch((e: Error) => log.warn('db', '规则写入失败:', e.message))
+    void appendHistory(fired).catch((e: Error) => log.warn('db', '历史写入失败:', e.message))
   }
   return fired
 }
@@ -285,7 +286,7 @@ export function updateSettings(patch: { webhookUrl?: unknown }): Settings {
   if (url && !/^https?:\/\//.test(url)) throw badRequest('webhookUrl must be http(s)')
   settings = { webhookUrl: url.trim() }
   saveJson('settings.json', settings)
-  void persistSettings(settings).catch((e: Error) => console.warn('[db] 设置写入失败:', e.message))
+  void persistSettings(settings).catch((e: Error) => log.warn('db', '设置写入失败:', e.message))
   return settings
 }
 
@@ -321,12 +322,23 @@ function buildWebhookBody(url: string, entry: AlertEntry): Record<string, unknow
 
 export function callWebhook(entry: AlertEntry): void {
   if (!settings.webhookUrl) return
+  // 日志只打主机名，完整 URL 可能带 token/密钥
+  const host = (() => {
+    try {
+      return new URL(settings.webhookUrl).host
+    } catch {
+      return '无效地址'
+    }
+  })()
   fetch(settings.webhookUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(buildWebhookBody(settings.webhookUrl, entry)),
     signal: AbortSignal.timeout(5000),
   })
-    .then((res) => console.log(`[webhook] ${res.status} ${settings.webhookUrl}`))
-    .catch((err: Error) => console.warn('[webhook] failed:', err.message))
+    .then((res) => {
+      if (res.ok) log.ok('webhook', `${res.status} ${host}`)
+      else log.warn('webhook', `${res.status} ${host}`)
+    })
+    .catch((err: Error) => log.warn('webhook', `推送失败 ${host}:`, err.message))
 }

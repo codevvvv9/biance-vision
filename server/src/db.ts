@@ -6,6 +6,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
 import { alertHistory, alertRules, appSettings, auditRecords, users } from './models.js'
+import { log } from './logger.js'
 import type { NewAlertHistoryRow, NewAlertRuleRow, NewAuditRecordRow, NewUserRow } from './models.js'
 import type { AlertEntry, AlertRule, RuleType, Settings } from './types.js'
 import type { AuditSessionRecord } from './audit.js'
@@ -54,7 +55,7 @@ export async function initDb(): Promise<boolean> {
     await migrate(conn, { migrationsFolder: MIGRATIONS_FOLDER })
     db = conn
     available = true
-    console.log(`[db] PostgreSQL 已连接：${DATABASE_URL.replace(/\/\/[^@]*@/, '//***@')}`)
+    log.ok('db', `PostgreSQL 已连接：${DATABASE_URL.replace(/\/\/[^@]*@/, '//***@')}`)
     return true
   } catch (err) {
     available = false
@@ -63,9 +64,8 @@ export async function initDb(): Promise<boolean> {
       await client?.end({ timeout: 1 })
     } catch {
       /* noop */
-    }    console.warn(
-      `[db] PostgreSQL 不可用（${(err as Error).message}），降级为 JSON 文件存储；docker compose up -d 可启用`,
-    )
+    }
+    log.warn('db', `PostgreSQL 不可用（${(err as Error).message}），降级为 JSON 文件存储；docker compose up -d 可启用`)
     return false
   }
 }
