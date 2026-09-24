@@ -57,3 +57,21 @@ export function lsSet(key: string, value: unknown): void {
     /* noop */
   }
 }
+
+/** 涨跌配色习惯：green=绿涨红跌（默认，币安/国际惯例）red=红涨绿跌（A股惯例） */
+export type UpColorMode = 'green' | 'red'
+const UP_COLOR_KEY = 'bv.upColor'
+
+export function readUpColor(): UpColorMode {
+  return lsGet<UpColorMode>(UP_COLOR_KEY, 'green')
+}
+
+/** 应用到 <html data-up-color>，styles.css 据此翻转 --up/--down */
+export function applyUpColor(mode: UpColorMode): void {
+  document.documentElement.dataset.upColor = mode
+}
+
+export function writeUpColor(mode: UpColorMode): void {
+  lsSet(UP_COLOR_KEY, mode)
+  applyUpColor(mode)
+}

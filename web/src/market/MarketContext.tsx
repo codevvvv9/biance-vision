@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import { api } from '../api'
 import { beep, sysNotify } from '../notify'
-import { lsGet, lsSet } from '../utils'
+import { lsGet, lsSet, readUpColor, writeUpColor } from '../utils'
+import type { UpColorMode } from '../utils'
 import type { AlertEntry, ConnStatus, KlineBar, MarketStats, ServerMessage, ToastItem, Ticker } from '../types'
 
 interface ToastInput {
@@ -23,6 +24,8 @@ interface MarketContextValue {
   subscribeKline: (symbol: string, interval: string, cb: (k: KlineBar) => void) => () => void
   soundOn: boolean
   toggleSound: () => void
+  upColor: UpColorMode
+  toggleUpColor: () => void
 }
 
 const Ctx = createContext<MarketContextValue | null>(null)
@@ -35,6 +38,7 @@ export function MarketProvider({ children }: { children: ReactNode }): JSX.Eleme
   const [alertsHistory, setAlertsHistory] = useState<AlertEntry[]>([])
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const [soundOn, setSoundOn] = useState<boolean>(() => lsGet<boolean>('bv.sound', true))
+  const [upColor, setUpColor] = useState<UpColorMode>(() => readUpColor())
 
   const wsRef = useRef<WebSocket | null>(null)
   const aliveRef = useRef(true)
@@ -191,6 +195,14 @@ export function MarketProvider({ children }: { children: ReactNode }): JSX.Eleme
     })
   }, [])
 
+  const toggleUpColor = useCallback((): void => {
+    setUpColor((m) => {
+      const next: UpColorMode = m === 'green' ? 'red' : 'green'
+      writeUpColor(next)
+      return next
+    })
+  }, [])
+
   const value = useMemo<MarketContextValue>(
     () => ({
       tickers,
@@ -204,8 +216,10 @@ export function MarketProvider({ children }: { children: ReactNode }): JSX.Eleme
       subscribeKline,
       soundOn,
       toggleSound,
+      upColor,
+      toggleUpColor,
     }),
-    [tickers, order, stats, status, alertsHistory, toasts, pushToast, dismissToast, subscribeKline, soundOn, toggleSound],
+    [tickers, order, stats, status, alertsHistory, toasts, pushToast, dismissToast, subscribeKline, soundOn, toggleSound, upColor, toggleUpColor],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

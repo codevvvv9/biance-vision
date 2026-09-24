@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { Chart } from 'klinecharts'
+import type { Chart, DeepPartial, Styles } from 'klinecharts'
 import { dispose, init, registerStyles } from 'klinecharts'
 import FullscreenButton from './FullscreenButton'
 import { api } from '../api'
 import { useFullscreen } from '../hooks/useFullscreen'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice, precisionFor } from '../utils'
+import type { UpColorMode } from '../utils'
 import type { KlineBar } from '../types'
 
 interface IntervalOption {
@@ -80,6 +81,26 @@ function ensureStyles(): void {
   })
 }
 
+/** 涨跌配色覆写：跟随用户配色习惯（绿涨红跌 / 红涨绿跌）同步蜡烛、最新价线、成交量柱 */
+function upDownOverrides(mode: UpColorMode): DeepPartial<Styles> {
+  const up = mode === 'red' ? '#ff4d6a' : '#00d68f'
+  const down = mode === 'red' ? '#00d68f' : '#ff4d6a'
+  return {
+    candle: {
+      bar: {
+        upColor: up,
+        downColor: down,
+        upBorderColor: up,
+        downBorderColor: down,
+        upWickColor: up,
+        downWickColor: down,
+      },
+      priceMark: { last: { upColor: up, downColor: down } },
+    },
+    indicator: { bars: [{ upColor: up, downColor: down }] },
+  }
+}
+
 interface Props {
   symbol: string
   interval: string
@@ -87,7 +108,7 @@ interface Props {
 }
 
 export default function KlineChart({ symbol, interval, onIntervalChange }: Props): JSX.Element {
-  const { tickers, subscribeKline } = useMarket()
+  const { tickers, subscribeKline, upColor } = useMarket()
   const boxRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<Chart | null>(null)
   const lastBarRef = useRef(0)
@@ -118,6 +139,11 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
       chartRef.current = null
     }
   }, [])
+
+  // 配色习惯切换时，同步重绘 K 线蜡烛/成交量颜色
+  useEffect(() => {
+    chartRef.current?.setStyles(upDownOverrides(upColor))
+  }, [upColor])
 
   useEffect(() => {
     let cancelled = false
