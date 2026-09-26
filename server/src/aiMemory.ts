@@ -21,13 +21,14 @@ import {
 // - 回答时整体注入 system prompt，跨会话生效；用户可在前端查看 / 编辑 / 删除
 // ---------------------------------------------------------------------------
 
-export type MemoryKind = 'preference' | 'fact' | 'interest' | 'habit'
+export type MemoryKind = 'preference' | 'fact' | 'interest' | 'habit' | 'manual'
 
 export const MEMORY_KINDS: Record<MemoryKind, string> = {
   preference: '偏好',
   fact: '背景',
   interest: '关注',
   habit: '习惯',
+  manual: '手动', // 用户经 /remember 命令显式写入，模型提取不会生成此类型
 }
 
 export interface StoredMessage {
@@ -258,9 +259,21 @@ export function appendConversationMessages(
   return conv
 }
 
-/** 会话 → 模型输入的历史（最近 20 条，去掉 id/at 元数据） */
+/** 把消息里的 ```chart 数据块压成占位文本（注入模型上下文时省 token；前端渲染不受影响） */
+function stripChartBlocks(content: string): string {
+  return content.replace(/```chart\n([\s\S]*?)\n```/g, (_match, json: string) => {
+    try {
+      const spec = JSON.parse(json) as { title?: string }
+      return `[图表：${spec.title ?? '已生成'}]`
+    } catch {
+      return '[图表]'
+    }
+  })
+}
+
+/** 会话 → 模型输入的历史（最近 20 条；图表数据块替换为占位，去掉 id/at 元数据） */
 export function chatHistoryOf(conv: StoredConversation): ChatMessage[] {
-  return conv.messages.slice(-20).map((m) => ({ role: m.role, content: m.content }))
+  return conv.messages.slice(-20).map((m) => ({ role: m.role, content: stripChartBlocks(m.content) }))
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +330,45 @@ export function clearMemories(username: string): number {
     void deleteAiMemoryDb(m.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
   }
   return mine.length
+}
+
+/** /remember 命令：用户显式写入一条手动记忆 */
+export function addManualMemory(username: string, content: string): AiMemoryItem {
+  const text = content.trim().slice(0, MEM_CONTENT_MAX)
+  if (!text) throw badRequest('记忆内容不能为空')
+  // 与已有内容完全相同的跳过（幂等）
+  const dup = memories.find((m) => m.username === username && m.content === text)
+  if (dup) return dup
+  const item: AiMemoryItem = {
+    id: crypto.randomUUID(),
+    username,
+    kind: 'manual',
+    content: text,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  memories.push(item)
+  // 总量裁剪与自动提取同规则
+  const mine = memories.filter((m) => m.username === username).sort((a, b) => a.updatedAt - b.updatedAt)
+  for (const dropped of mine.slice(0, Math.max(0, mine.length - MEM_KEEP_PER_USER))) {
+    memories = memories.filter((m) => m.id !== dropped.id)
+    void deleteAiMemoryDb(dropped.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
+  }
+  persistMemory(item)
+  return item
+}
+
+/** /forget 命令：删除内容含关键词的记忆，返回删除条数 */
+export function deleteMemoriesByKeyword(username: string, keyword: string): number {
+  const kw = keyword.trim().toLowerCase()
+  if (!kw) throw badRequest('缺少关键词')
+  const matched = memories.filter((m) => m.username === username && m.content.toLowerCase().includes(kw))
+  for (const m of matched) {
+    memories = memories.filter((x) => x.id !== m.id)
+    void deleteAiMemoryDb(m.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
+  }
+  if (matched.length > 0) persistMemories()
+  return matched.length
 }
 
 // ---- 记忆提取（后台任务，不阻塞对话回复、不占用户配额） ----
@@ -390,7 +442,10 @@ async function extractMemories(profile: AiProfile, username: string, conv: Store
 
   let added = 0
   for (const a of plan.add.slice(0, 5)) {
-    const kind = (typeof a?.kind === 'string' && a.kind in MEMORY_KINDS ? a.kind : 'fact') as MemoryKind
+    // 模型提取只允许四种类型；manual 保留给 /remember 显式写入
+    const kind = (typeof a?.kind === 'string' && ['preference', 'fact', 'interest', 'habit'].includes(a.kind)
+      ? a.kind
+      : 'fact') as MemoryKind
     const content = typeof a?.content === 'string' ? a.content.trim().slice(0, MEM_CONTENT_MAX) : ''
     if (!content) continue
     if (memories.some((m) => m.username === username && m.content === content)) continue

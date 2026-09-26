@@ -18,6 +18,8 @@ export interface AiProfile {
   dailyLimit?: number // 每用户每日对话上限，0/缺省 = 不限
   /** 绑定用户：仅这些用户使用此档案；其他用户走 default */
   allowedUsers?: string[]
+  /** 工具调用（function calling）：缺省开启；探测到接口不支持时本进程内自动降级 */
+  enableTools?: boolean
 }
 
 export interface AiProfileMasked extends Omit<AiProfile, 'apiKey'> {
@@ -97,6 +99,7 @@ export function getAiProfilesMasked(): Record<string, AiProfileMasked> {
       extraPrompt: p.extraPrompt,
       dailyLimit: p.dailyLimit,
       allowedUsers: p.allowedUsers,
+      enableTools: p.enableTools,
     }
   }
   return out
@@ -160,6 +163,7 @@ function normalizeAiProfile(raw: unknown, prevKey: string | undefined): AiProfil
     extraPrompt: extraPrompt || undefined,
     dailyLimit,
     allowedUsers: allowedUsers.length > 0 ? allowedUsers : undefined,
+    enableTools: r.enableTools === false ? false : undefined,
   }
 }
 
@@ -357,7 +361,7 @@ export function buildSystemPrompt(profile: AiProfile, memories?: string): string
 }
 
 // ---------------------------------------------------------------------------
-// 对话：SSE 流式转发 OpenAI 兼容接口
+// 对话：SSE 流式转发 OpenAI 兼容接口（含 tool_calls 分片聚合与降级）
 // ---------------------------------------------------------------------------
 
 export interface ChatMessage {
@@ -365,33 +369,64 @@ export interface ChatMessage {
   content: string
 }
 
-/** 流式对话；onDelta 每收到一段文本回调一次，返回完整回复；operator 用于日志归属 */
-export async function chatWithAi(
+/** 一轮流式请求结束后聚合出的工具调用（OpenAI 流式协议按 index 分片拼接） */
+export interface AggregatedToolCall {
+  id: string
+  name: string
+  arguments: string
+}
+
+export interface StreamChatResult {
+  /** 本轮流出的文本（流式已转发；非流式中转可能整段在此返回） */
+  content: string
+  /** 模型请求的工具调用；空数组 = 本轮无工具需求 */
+  toolCalls: AggregatedToolCall[]
+}
+
+/** 探测到接口不支持 tools 参数的档案（baseUrl+model 标识，本进程内不再带 tools） */
+const toolsUnsupported = new Set<string>()
+
+/**
+ * 单轮流式对话：文本 delta 即时回调，同时聚合 tool_calls 分片。
+ * 带 tools 请求被 4xx 拒绝时自动去掉 tools 重试一次并记住该档案（降级为纯对话）。
+ */
+export async function streamChatOnce(
   profile: AiProfile,
-  history: ChatMessage[],
+  messages: Record<string, unknown>[],
   onDelta: (delta: string) => void,
-  operator?: string,
-  memories?: string,
-): Promise<string> {
-  const messages = [{ role: 'system', content: buildSystemPrompt(profile, memories) }, ...history.slice(-20)]
-  const model = profile.model
-  const startedAt = Date.now()
-  let ttft = 0 // 首 token 延迟（Time To First Token）
-  log.info('ai', 'AI 对话开始', kv({ 用户: operator, 模型: model, 消息数: history.length }))
-  try {
+  tools?: unknown[],
+): Promise<StreamChatResult> {
+  const profileKey = `${profile.baseUrl}|${profile.model}`
+  const useTools = tools && tools.length > 0 && !toolsUnsupported.has(profileKey)
+  const request = async (withTools: boolean): Promise<Response> => {
     const body: Record<string, unknown> = {
-      model,
+      model: profile.model,
       messages,
       stream: true,
       temperature: profile.temperature ?? 0.7,
     }
     if (profile.maxTokens && profile.maxTokens > 0) body.max_tokens = profile.maxTokens
-    const res = await fetch(`${profile.baseUrl}/chat/completions`, {
+    if (withTools) body.tools = tools
+    return fetch(`${profile.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${profile.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(120000),
     })
+  }
+  try {
+    let res = await request(!!useTools)
+    if (!res.ok && useTools && res.status >= 400 && res.status < 500) {
+      // 部分中转/模型不支持 tools：去掉重试一次，并记住降级
+      const detail = await res.text().catch(() => '')
+      toolsUnsupported.add(profileKey)
+      log.warn('ai', '接口不支持工具调用，已自动降级为纯对话', kv({
+        模型: profile.model,
+        状态: res.status,
+        详情: detail.slice(0, 120) || undefined,
+      }))
+      res = await request(false)
+    }
     if (!res.ok || !res.body) {
       const detail = await res.text().catch(() => '')
       throw badRequest(`AI 接口返回 HTTP ${res.status}${detail ? `：${detail.slice(0, 200)}` : ''}`)
@@ -399,7 +434,8 @@ export async function chatWithAi(
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let full = ''
+    let content = ''
+    const calls: AggregatedToolCall[] = []
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
@@ -412,37 +448,40 @@ export async function chatWithAi(
         const payload = s.slice(5).trim()
         if (payload === '[DONE]') continue
         try {
-          const delta = (JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content
-          if (delta) {
-            if (!ttft) ttft = Date.now() - startedAt
-            full += delta
-            onDelta(delta)
+          const choice = (JSON.parse(payload) as {
+            choices?: {
+              delta?: {
+                content?: string
+                tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[]
+              }
+            }[]
+          }).choices?.[0]
+          const delta = choice?.delta
+          if (delta?.content) {
+            content += delta.content
+            onDelta(delta.content)
+          }
+          if (Array.isArray(delta?.tool_calls)) {
+            for (const tc of delta.tool_calls) {
+              const i = tc.index ?? 0
+              while (calls.length <= i) calls.push({ id: '', name: '', arguments: '' })
+              if (tc.id) calls[i].id = tc.id
+              if (tc.function?.name) calls[i].name += tc.function.name
+              if (tc.function?.arguments) calls[i].arguments += tc.function.arguments
+            }
           }
         } catch {
           /* 跳过无法解析的行 */
         }
       }
     }
-    log.info('ai', 'AI 对话完成', kv({
-      用户: operator,
-      模型: model,
-      耗时: fmtMs(Date.now() - startedAt),
-      首字延迟: ttft ? fmtMs(ttft) : '?',
-      回复长度: `${full.length} 字`,
-    }))
-    return full
+    return { content, toolCalls: calls.filter((c) => c.name) }
   } catch (err) {
     const e = err as Error
     // 底层连接错误翻译成可读提示
     if (e.message === 'fetch failed') {
       e.message = `无法连接 AI 接口（地址不可达或被拒）：${profile.baseUrl}`
     }
-    log.warn('ai', 'AI 对话失败', kv({
-      用户: operator,
-      模型: model,
-      耗时: fmtMs(Date.now() - startedAt),
-      错误: e.message,
-    }))
     throw err
   }
 }

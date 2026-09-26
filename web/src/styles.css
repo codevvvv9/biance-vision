@@ -2337,6 +2337,77 @@ body {
   width: auto;
   padding: 0 10px;
 }
+
+/* ---------- AI 聊天：图表卡片（render_chart 工具输出） ---------- */
+.ai-chart-card {
+  margin: 6px 0;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: rgba(8, 14, 28, 0.72);
+  overflow: hidden;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.ai-chart-card-title {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 1px solid rgba(126, 178, 255, 0.12);
+  background: linear-gradient(180deg, rgba(0, 229, 255, 0.05), transparent);
+}
+.ai-chart-kline {
+  width: 100%;
+  height: 280px;
+}
+/* 条形图 */
+.ai-chart-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+}
+.ai-chart-barrow {
+  display: grid;
+  grid-template-columns: 72px 1fr 74px;
+  align-items: center;
+  gap: 8px;
+}
+.ai-chart-barlabel {
+  font-size: 11.5px;
+  color: var(--text-2, #b8c6e4);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-chart-bartrack {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(36, 48, 74, 0.45);
+  overflow: hidden;
+}
+.ai-chart-barfill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+}
+.ai-chart-barfill.up {
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.35), var(--up, #00d68f));
+}
+.ai-chart-barfill.down {
+  background: linear-gradient(90deg, rgba(139, 108, 255, 0.35), var(--down, #ff4d6a));
+}
+.ai-chart-barval {
+  font-size: 11.5px;
+  font-family: var(--mono);
+  text-align: right;
+}
+.ai-chart-barval.up {
+  color: var(--up, #00d68f);
+}
+.ai-chart-barval.down {
+  color: var(--down, #ff4d6a);
+}
 .ai-msgs {
   flex: 1;
   overflow-y: auto;
@@ -2355,15 +2426,16 @@ body {
 .ai-msgs::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 229, 255, 0.4);
 }
-.ai-msg {
-  max-width: 92%;
+/* 气泡用独立类名 ai-bubble：避免与管理端 AI 全景页的 .ai-msg 规则互相覆盖 */
+.ai-bubble {
+  max-width: min(92%, 720px);
   padding: 10px 13px;
   border-radius: 14px;
   font-size: 12.5px;
   line-height: 1.7;
   word-break: break-word;
 }
-.ai-msg.me {
+.ai-bubble.me {
   align-self: flex-end;
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.26), rgba(0, 149, 255, 0.13));
   border: 1px solid rgba(0, 229, 255, 0.4);
@@ -2372,7 +2444,7 @@ body {
   white-space: pre-wrap;
   border-bottom-right-radius: 5px;
 }
-.ai-msg.bot {
+.ai-bubble.bot {
   align-self: flex-start;
   background: rgba(23, 36, 63, 0.85);
   border: 1px solid rgba(140, 175, 235, 0.13);
@@ -2520,6 +2592,65 @@ body {
   color: var(--text-3);
   text-align: center;
   background: rgba(9, 15, 29, 0.55);
+}
+
+/* ---------- AI 聊天窗：拖拽改尺寸把手 + 最小化 ---------- */
+.ai-resize {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+}
+.ai-resize.e {
+  top: 10px;
+  bottom: 18px;
+  right: -3px;
+  width: 7px;
+  cursor: ew-resize;
+}
+.ai-resize.s {
+  left: 10px;
+  right: 18px;
+  bottom: -3px;
+  height: 7px;
+  cursor: ns-resize;
+}
+.ai-resize.se {
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+}
+.ai-resize.se::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 11px;
+  height: 11px;
+  border-right: 2px solid rgba(0, 229, 255, 0.65);
+  border-bottom: 2px solid rgba(0, 229, 255, 0.65);
+  border-radius: 0 0 3px 0;
+  box-shadow: 1px 1px 8px rgba(0, 229, 255, 0.35);
+}
+/* 最小化：收成只剩头部的胶囊条，点击头部可展开 */
+.ai-chat.min {
+  width: auto;
+  height: auto;
+  max-width: calc(100vw - 32px);
+}
+.ai-chat.min .ai-chat-head {
+  cursor: pointer;
+  border-bottom: 0;
+}
+.ai-chat.min::before,
+.ai-chat.min::after {
+  display: none;
+}
+.ai-chat.min .ai-msgs,
+.ai-chat.min .ai-input-row,
+.ai-chat.min .ai-disclaim {
+  display: none;
 }
 
 /* ---------- 聊天富文本（移植自 lumen RAG 评测的 rich-text 方案，暗色适配） ---------- */
@@ -3116,4 +3247,119 @@ body {
   margin: 10px 16px;
   max-height: 420px;
   overflow: auto;
+}
+
+/* AI 设置：工具调用开关 */
+.ai-tools-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.ai-tools-toggle input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: #00e5ff;
+  cursor: pointer;
+  flex: none;
+}
+.ai-tools-toggle span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ---------- AI 聊天：/ 命令与 @ 币种菜单（输入框上方浮层） ---------- */
+.ai-input-row {
+  position: relative;
+}
+.ai-cmd-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 10px;
+  right: 10px;
+  z-index: 6;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(10, 18, 36, 0.97);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 229, 255, 0.07);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: menu-in 0.14s ease;
+}
+.ai-cmd-item {
+  display: grid;
+  grid-template-columns: 86px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.ai-cmd-item.on,
+.ai-cmd-item:hover {
+  background: rgba(0, 229, 255, 0.1);
+}
+.ai-cmd-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #7deaff;
+  font-family: var(--mono);
+}
+.ai-cmd-desc {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-cmd-args {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  background: rgba(126, 178, 255, 0.08);
+  border: 1px solid rgba(126, 178, 255, 0.16);
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+.ai-cmd-pct {
+  font-size: 11.5px;
+  font-family: var(--mono);
+}
+.ai-cmd-pct.up {
+  color: var(--up);
+}
+.ai-cmd-pct.down {
+  color: var(--down);
+}
+.ai-cmd-hint {
+  margin: 4px 6px 1px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.ai-welcome-cmd {
+  margin-top: 12px;
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--text-3);
+}
+.ai-welcome-cmd code {
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  color: #7deaff;
+  font-family: var(--mono);
+}
+
+/* 手动记忆标签（/remember 写入） */
+.ai-mem-kind.k-manual {
+  border-color: rgba(158, 173, 201, 0.45);
+  color: #c3cfe6;
+  background: rgba(158, 173, 201, 0.1);
 }
