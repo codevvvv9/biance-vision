@@ -14,6 +14,8 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import 'katex/dist/katex.min.css'
+import ChartCard from './ChartCard'
+import type { ChartSpec } from './ChartCard'
 
 const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s+/
 const HEADING_RE = /^#{1,6}\s/
@@ -61,6 +63,28 @@ function normalizeMathDelimiters(text: string): string {
     .replace(/\\\(([\s\S]*?)\\\)/g, (_match, body: string) => `$${body}$`)
 }
 
+/**
+ * 流式中间态处理：末尾未闭合的 ```chart 块（JSON 还在传输）替换为占位提示，
+ * 避免半截 JSON 闪现；块闭合后正常解析为图表卡片。
+ */
+function maskIncompleteChart(text: string): string {
+  const idx = text.lastIndexOf('```chart')
+  if (idx === -1) return text
+  if (text.slice(idx + 7).includes('```')) return text
+  return `${text.slice(0, idx).replace(/\n+$/, '')}\n\n📊 图表生成中…`
+}
+
+/** ```chart 代码块 → 交互式图表卡片（服务端 render_chart 工具的输出） */
+function renderChartBlock(raw: string): JSX.Element {
+  try {
+    const spec = JSON.parse(raw) as ChartSpec
+    if (spec && (spec.type === 'kline' || spec.type === 'bar')) return <ChartCard spec={spec} />
+  } catch {
+    /* JSON 残缺（历史数据损坏等）→ 原样展示 */
+  }
+  return <code className="language-chart">{raw}</code>
+}
+
 const Markdown = memo(function Markdown({ content }: { content: string }): JSX.Element {
   return (
     <div className="rich-text">
@@ -73,6 +97,11 @@ const Markdown = memo(function Markdown({ content }: { content: string }): JSX.E
               {children}
             </a>
           ),
+          code: ({ className, children }) => {
+            const text = String(children ?? '')
+            if (/language-chart/.test(className ?? '')) return renderChartBlock(text)
+            return <code className={className}>{children}</code>
+          },
           img: ({ src, alt }) => {
             const url = typeof src === 'string' ? src : ''
             return (
@@ -83,7 +112,7 @@ const Markdown = memo(function Markdown({ content }: { content: string }): JSX.E
           },
         }}
       >
-        {normalizeMathDelimiters(normalizeMarkdownBlocks(content))}
+        {normalizeMathDelimiters(normalizeMarkdownBlocks(maskIncompleteChart(content)))}
       </ReactMarkdown>
     </div>
   )

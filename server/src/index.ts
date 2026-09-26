@@ -35,7 +35,6 @@ import {
   aiModelName,
   aiProfileByName,
   buildSystemPrompt,
-  chatWithAi,
   checkAiQuota,
   clearAiConfig,
   clearAiProfile,
@@ -67,6 +66,7 @@ import {
   memoriesPromptBlock,
   updateMemory,
 } from './aiMemory.js'
+import { runSlashCommand, runToolLoop } from './aiTools.js'
 import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage } from './types.js'
 import {
   clearSessionCookie,
@@ -646,7 +646,7 @@ app.post('/api/ai/chat', async (req, reply) => {
   let started = false
   try {
     recordAiUsage(session.username)
-    const full = await chatWithAi(profile, history, (delta) => {
+    const full = await runToolLoop(profile, history, (delta) => {
       if (!started) {
         started = true
         reply.hijack()
@@ -671,6 +671,33 @@ app.post('/api/ai/chat', async (req, reply) => {
     if (started) reply.raw.end(`\n⚠ ${msg}`)
     else throw err
   }
+})
+
+/**
+ * 斜杠命令：显式触发的本地能力（/chart /analyze /calc /remember 等），
+ * 直接执行不调用大模型、不占每日对话配额；结果与图表同样落入会话历史。
+ */
+app.post('/api/ai/command', async (req) => {
+  const session = requireSession(req)
+  const body = (req.body ?? {}) as { conversationId?: unknown; text?: unknown }
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  if (!text.startsWith('/')) throw badRequest('命令需以 / 开头')
+  const wanted = typeof body.conversationId === 'string' ? body.conversationId : ''
+  const existing = wanted ? getConversation(session.username, wanted) : null
+  if (wanted && !existing) throw badRequest('会话不存在')
+
+  // 先执行命令再建/写会话：执行失败（参数错等）不留空会话
+  const r = await runSlashCommand(session.username, text)
+  const conv = existing ?? createConversation(session.username)
+  const replyWithChart = r.chart
+    ? `\`\`\`chart\n${JSON.stringify(r.chart)}\n\`\`\`\n\n${r.reply}`
+    : r.reply
+  appendConversationMessages(conv, [
+    { role: 'user', content: text },
+    { role: 'assistant', content: replyWithChart },
+  ])
+  log.info('ai', '斜杠命令', kv({ 用户: session.username, 命令: text.slice(0, 60) }))
+  return { conversationId: conv.id, reply: r.reply, chart: r.chart ?? null }
 })
 
 // ---- AI 会话历史与长期记忆（用户级持久化，关闭页面/重启后仍在） ----
