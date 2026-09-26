@@ -17,6 +17,7 @@ interface ProfileForm {
   extraPrompt: string
   dailyLimit: string
   allowedUsers: string // 逗号分隔，表单态
+  enableTools: boolean // 工具调用（行情查询/技术分析/画图）
 }
 
 const EMPTY_PROFILE: ProfileForm = {
@@ -28,6 +29,7 @@ const EMPTY_PROFILE: ProfileForm = {
   extraPrompt: '',
   dailyLimit: '',
   allowedUsers: '',
+  enableTools: true,
 }
 
 const toForm = (p: {
@@ -39,6 +41,7 @@ const toForm = (p: {
   extraPrompt?: string
   dailyLimit?: number
   allowedUsers?: string[]
+  enableTools?: boolean
 }): ProfileForm => ({
   baseUrl: p.baseUrl || 'https://api.openai.com/v1',
   apiKey: p.apiKeyMasked,
@@ -48,6 +51,7 @@ const toForm = (p: {
   extraPrompt: p.extraPrompt ?? '',
   dailyLimit: p.dailyLimit === undefined ? '' : String(p.dailyLimit),
   allowedUsers: (p.allowedUsers ?? []).join(', '),
+  enableTools: p.enableTools !== false,
 })
 
 /** AI 大模型设置（仅超级管理员）：多档案 + 用户绑定；Key 只存服务端，界面回显打码 */
@@ -277,6 +281,19 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
               <input type="number" min={0} step={10} value={form.dailyLimit} onChange={(e) => setField('dailyLimit', e.target.value)} placeholder="如 50" />
             </label>
           </div>
+          <label className="ai-field ai-tools-toggle" title="开启后 AI 可调用工具：实时行情查询、K 线技术分析、相关性计算、画图、新闻；接口不支持时自动降级为纯对话">
+            <input
+              type="checkbox"
+              checked={form.enableTools}
+              onChange={(e) =>
+                setProfiles((prev) => ({
+                  ...prev,
+                  [current]: { ...(prev[current] ?? EMPTY_PROFILE), enableTools: e.target.checked },
+                }))
+              }
+            />
+            <span>工具调用（function calling）：行情查询 / 技术分析 / 画图，模型不支持时自动降级</span>
+          </label>
           {current !== 'default' && (
             <div className="ai-field">
               <span>绑定用户（逗号分隔，留空 = 不绑定；绑定的用户使用本档案而非 default）</span>
