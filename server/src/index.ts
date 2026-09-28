@@ -304,18 +304,54 @@ app.addHook('onResponse', (req, reply, done) => {
 })
 
 /**
- * 客户端真实 IP：反向代理 / 隧道场景取 x-forwarded-for 最原始一跳，
- * 其次 x-real-ip（nginx 惯例）；直连时就是连接地址。trustProxy 已开启，
- * req.ip 本身也会按 XFF 解析，这里显式分级兜底。
+ * 客户端真实 IP：取 XFF「最后一段」——隧道代理（ngrok/cloudflared/otun）把真实
+ * 客户端 IP 追加在末尾，首段可被客户端伪造；按首段计数会被随机伪造 XFF 绕过限速。
+ * 其次 x-real-ip（nginx 惯例）；直连时就是连接地址。
  */
 function clientIp(req: FastifyRequest): string {
-  const pick = (v: string | string[] | undefined): string =>
-    (Array.isArray(v) ? v[0] : v)?.split(',')[0]?.trim() ?? ''
-  const xf = pick(req.headers['x-forwarded-for'])
+  const last = (v: string | string[] | undefined): string => {
+    const raw = Array.isArray(v) ? v.join(',') : v
+    const parts = (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+    return parts.length > 0 ? parts[parts.length - 1] : ''
+  }
+  const xf = last(req.headers['x-forwarded-for'])
   if (xf) return xf.slice(0, 64)
-  const real = pick(req.headers['x-real-ip'])
+  const real = last(req.headers['x-real-ip'])
   if (real) return real.slice(0, 64)
   return String(req.ip ?? '')
+}
+
+// ---------------------------------------------------------------------------
+// 登录限速（公网爆破防线，进程内计数，重启即清）：
+// 每 IP 每分钟最多 5 次尝试；累计失败 10 次锁定 15 分钟（成功登录即清零）
+// ---------------------------------------------------------------------------
+const LOGIN_WINDOW_MS = 60_000
+const LOGIN_MAX_PER_WINDOW = 5
+const LOGIN_LOCK_FAILS = 10
+const LOGIN_LOCK_MS = 15 * 60_000
+const LOGIN_GUARD_MAX_KEYS = 20_000
+
+interface LoginGuard {
+  winStart: number
+  winCount: number
+  fails: number
+  lockedUntil: number
+}
+const loginGuards = new Map<string, LoginGuard>()
+
+function loginGuardOf(ip: string): LoginGuard {
+  let g = loginGuards.get(ip)
+  if (g) return g
+  // 防内存膨胀：超限时先清一遍完全过期的条目
+  if (loginGuards.size >= LOGIN_GUARD_MAX_KEYS) {
+    const now = Date.now()
+    for (const [k, v] of loginGuards) {
+      if (v.lockedUntil < now && v.winStart + LOGIN_WINDOW_MS < now) loginGuards.delete(k)
+    }
+  }
+  g = { winStart: Date.now(), winCount: 0, fails: 0, lockedUntil: 0 }
+  loginGuards.set(ip, g)
+  return g
 }
 
 /** 浏览器 / 客户端标识（截断，用于会话审计） */
@@ -374,12 +410,36 @@ app.post('/api/auth/login', async (req, reply) => {
   const name = String(body.username ?? '').trim()
   const ip = clientIp(req)
   const ua = userAgent(req)
+  // 限速：锁定期内直接拒绝；滑动窗口每分钟最多 5 次尝试
+  const guard = loginGuardOf(ip)
+  const now = Date.now()
+  if (guard.lockedUntil > now) {
+    log.warn('auth', '登录被锁定拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 剩余秒: Math.ceil((guard.lockedUntil - now) / 1000) }))
+    throw Object.assign(new Error('尝试过于频繁，账号已临时锁定，请稍后再试'), { statusCode: 429 })
+  }
+  if (now - guard.winStart >= LOGIN_WINDOW_MS) {
+    guard.winStart = now
+    guard.winCount = 0
+  }
+  guard.winCount++
+  if (guard.winCount > LOGIN_MAX_PER_WINDOW) {
+    log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: guard.winCount }))
+    throw Object.assign(new Error('尝试过于频繁，请一分钟后再试'), { statusCode: 429 })
+  }
   const user = verifyLogin(name, String(body.password ?? ''))
   if (!user) {
+    guard.fails++
+    if (guard.fails >= LOGIN_LOCK_FAILS) {
+      guard.lockedUntil = Date.now() + LOGIN_LOCK_MS
+      guard.fails = 0
+      log.warn('auth', '连续登录失败触发锁定', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 锁定分钟: LOGIN_LOCK_MS / 60_000 }))
+    }
     recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
-    log.warn('auth', '登录失败', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua) }))
+    log.warn('auth', '登录失败', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua), 累计失败: guard.fails }))
     throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
   }
+  // 成功登录清零该 IP 的失败计数
+  loginGuards.delete(ip)
   const session = createSession(user)
   startSessionAudit(session, { ip, userAgent: ua })
   log.ok('auth', '登录成功', kv({
