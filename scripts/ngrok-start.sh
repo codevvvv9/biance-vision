@@ -4,10 +4,12 @@
 #   首次：ngrok config add-authtoken <你的token>
 #   启动：bash scripts/ngrok-start.sh [固定域名]
 # 日志：/tmp/ngrok-bv.log；停止：pkill -f "ngrok http"
-# 免费账户自带一个固定静态域名（名字由 ngrok 随机分配、不可自取）：
-DEFAULT_DOMAIN="redacted.ngrok-free.dev"
-
+# 固定静态域名不入库（仓库 public）：通过 NGROK_DOMAIN 环境变量或
+# scripts/tunnels.local.sh（已 gitignore）提供；留空 = ngrok 随机域名
 set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$DIR/tunnels.local.sh" ] && . "$DIR/tunnels.local.sh"
+DEFAULT_DOMAIN="${NGROK_DOMAIN:-}"
 
 PORT="${PORT:-3200}"
 DOMAIN="${1:-$DEFAULT_DOMAIN}"

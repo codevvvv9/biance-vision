@@ -38,3 +38,6 @@ coverage/
 # ===== 本地敏感说明（不入库）=====
 LOCAL_NOTES.md
 GITHUB_ACTIONS_PLAN.md
+
+# 隧道固定域名等本地私有配置（不入库）
+scripts/tunnels.local.sh
