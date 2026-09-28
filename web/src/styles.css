@@ -3726,6 +3726,20 @@ body {
   line-height: 1.7;
 }
 
+.brooks-chart-panel:fullscreen .brooks-chart-hold,
+.brooks-chart-panel:-webkit-fullscreen .brooks-chart-hold {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.brooks-chart-panel:fullscreen .brooks-chart-wrap,
+.brooks-chart-panel:-webkit-fullscreen .brooks-chart-wrap {
+  flex: 1;
+  height: auto;
+}
+
 /* ---- Brooks 术语「!」悬停提醒 ---- */
 /* .panel 默认 overflow:hidden 会裁掉绝对定位的术语气泡；摘要面板单独放开
    （backdrop-filter 会让 position:fixed 也被困在面板内，只能放开裁剪） */

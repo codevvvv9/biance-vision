@@ -81,6 +81,9 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
       })),
     )
     chart.setPriceVolumePrecision(precisionFor(bars[bars.length - 1].close), 2)
+    // 默认每根 9px：千根K线不至于全部挤成一团（用户仍可滚轮缩放，
+    // 缩小时标注会按每根像素宽自动分级降密度）
+    chart.setBarSpace(9)
   }, [bars])
 
   useImperativeHandle(
