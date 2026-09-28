@@ -9,6 +9,8 @@ import { useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAi } from '../ai/AiContext'
 import { useMarket } from '../market/MarketContext'
+import { useFullscreen } from '../hooks/useFullscreen'
+import FullscreenButton from '../components/FullscreenButton'
 import { fmtDateTime, lsGet, lsSet } from '../utils'
 import BrooksChart from '../brooks/BrooksChart'
 import { BrooksTerm, termForSignalKind } from '../brooks/terms'
@@ -88,6 +90,7 @@ export default function BrooksPage(): JSX.Element {
   const [showHelp, setShowHelp] = useState(false)
   const [display, setDisplay] = useState<BrooksDisplay>(() => lsGet('brooks.display', DEFAULT_DISPLAY))
   const chartRef = useRef<BrooksChartHandle | null>(null)
+  const fs = useFullscreen<HTMLElement>()
 
   const analysis = useMemo(() => (bars.length > 0 ? analyzeBrooks(bars, { swingK }) : null), [bars, swingK])
 
@@ -268,7 +271,7 @@ export default function BrooksPage(): JSX.Element {
       </section>
 
       <div className="brooks-grid">
-        <section className="panel chart-panel brooks-chart-panel">
+        <section className="panel chart-panel brooks-chart-panel" ref={fs.ref}>
           <div className="panel-head">
             <h2 className="panel-title">
               <span className="title-glyph teal">▮</span>
@@ -285,6 +288,11 @@ export default function BrooksPage(): JSX.Element {
               >
                 🤖 AI 解读
               </button>
+              <FullscreenButton
+                on={fs.isFullscreen}
+                onClick={fs.toggle}
+                label="全屏查看价格行为结构（放大后自动显示更多标注）"
+              />
               <button className="btn btn-ghost btn-sm" onClick={() => setReload((n) => n + 1)}>
                 刷新
               </button>

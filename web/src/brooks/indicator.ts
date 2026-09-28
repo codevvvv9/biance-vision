@@ -10,7 +10,7 @@
  */
 
 import { registerIndicator } from 'klinecharts'
-import type { Axis, VisibleRange } from 'klinecharts'
+import type { Axis, BarSpace, VisibleRange } from 'klinecharts'
 import type { BrooksAnalysis, BrooksDisplay, RegimeType } from 'biance-vision-brooks'
 
 export interface BrooksExtendData {
@@ -46,12 +46,17 @@ function drawBrooks(
   ext: BrooksExtendData,
   visibleRange: VisibleRange,
   width: number,
+  barSpace: BarSpace,
   xAxis: Axis,
   yAxis: Axis,
 ): void {
   const a = ext.analysis
   if (!a) return
   const d = ext.display
+  // 每根K线的像素宽：决定标注密度分级（缩放/全屏时自动增减细节）
+  //   ≥9px 全量标注；5~9px 摆动标签只画 zigzag 主结构节点、内包标记只留 ii/oo；
+  //   <5px 只保留腿连线/EMA/状态条/信号三角，文字标签仅高置信信号
+  const pxPerBar = barSpace?.bar > 0 ? barSpace.bar : 9
   const up = ext.upColor === 'red' ? '#ff4d6a' : '#00d68f'
   const down = ext.upColor === 'red' ? '#00d68f' : '#ff4d6a'
   const from = Math.max(0, visibleRange.from - 80)
@@ -123,13 +128,21 @@ function drawBrooks(
   }
 
   // ── 摆动点标签 HH/HL/LH/LL ───────────────────────────────────
-  if (d.swings) {
+  // zigzag 节点 = 腿的端点（主结构）；密集视图只画这些，避免次要摆动淹没画面
+  const nodeIdx = new Set<number>()
+  if (a.legs.length > 0) {
+    nodeIdx.add(a.legs[0].fromIndex)
+    for (const l of a.legs) nodeIdx.add(l.toIndex)
+  }
+  if (d.swings && pxPerBar >= 5) {
+    const nodesOnly = pxPerBar < 9
     ctx.save()
     ctx.font = 'bold 11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
     ctx.textAlign = 'center'
     ctx.lineJoin = 'round'
     for (const s of a.swings) {
       if (s.index < from || s.index > to || s.label === '') continue
+      if (nodesOnly && !nodeIdx.has(s.index)) continue
       const px = x(s.index)
       const py = s.kind === 'high' ? y(s.price) - 15 : y(s.price) + 20
       const bullish = s.label === 'HH' || s.label === 'HL'
@@ -143,7 +156,9 @@ function drawBrooks(
   }
 
   // ── 内包/外包标记 ────────────────────────────────────────────
-  if (d.io) {
+  // 密集视图先丢弃单根 i/O（噪音最多），只保留 ii/oo/iii/ioi 序列形态
+  if (d.io && pxPerBar >= 6) {
+    const majorOnly = pxPerBar < 9
     ctx.save()
     ctx.font = FONT
     ctx.textAlign = 'center'
@@ -155,8 +170,8 @@ function drawBrooks(
       else if (f.isII) tag = 'ii'
       else if (f.isOO) tag = 'oo'
       else if (f.isIOI) tag = 'ioi'
-      else if (f.isOutside) tag = 'O'
-      else if (f.isInside) tag = 'i'
+      else if (!majorOnly && f.isOutside) tag = 'O'
+      else if (!majorOnly && f.isInside) tag = 'i'
       if (tag === '') continue
       ctx.strokeStyle = 'rgba(6, 12, 26, 0.8)'
       ctx.lineWidth = 2.5
@@ -176,6 +191,8 @@ function drawBrooks(
       if (!bar) continue
       const px = x(s.index)
       const col = s.direction === 'bull' ? up : s.direction === 'bear' ? down : C.amber
+      // 密集视图只给高置信信号保留文字标签（三角标记不受影响）
+      const withText = pxPerBar >= 6 || s.strength === 'high'
       ctx.fillStyle = col
       ctx.strokeStyle = col
       ctx.lineWidth = 1
@@ -188,13 +205,15 @@ function drawBrooks(
         ctx.lineTo(px + 5.5, py + 3)
         ctx.closePath()
         ctx.fill()
-        ctx.font = 'bold 11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
-        ctx.textAlign = 'center'
-        ctx.strokeStyle = 'rgba(6, 12, 26, 0.85)'
-        ctx.lineWidth = 3
-        ctx.strokeText(s.label, px, py + 15)
-        ctx.fillStyle = col
-        ctx.fillText(s.label, px, py + 15)
+        if (withText) {
+          ctx.font = 'bold 11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
+          ctx.textAlign = 'center'
+          ctx.strokeStyle = 'rgba(6, 12, 26, 0.85)'
+          ctx.lineWidth = 3
+          ctx.strokeText(s.label, px, py + 15)
+          ctx.fillStyle = col
+          ctx.fillText(s.label, px, py + 15)
+        }
       } else if (s.direction === 'bear') {
         const py = y(bar.high) - 10
         ctx.moveTo(px, py + 6)
@@ -202,13 +221,15 @@ function drawBrooks(
         ctx.lineTo(px + 5.5, py - 3)
         ctx.closePath()
         ctx.fill()
-        ctx.font = 'bold 11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
-        ctx.textAlign = 'center'
-        ctx.strokeStyle = 'rgba(6, 12, 26, 0.85)'
-        ctx.lineWidth = 3
-        ctx.strokeText(s.label, px, py - 8)
-        ctx.fillStyle = col
-        ctx.fillText(s.label, px, py - 8)
+        if (withText) {
+          ctx.font = 'bold 11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'
+          ctx.textAlign = 'center'
+          ctx.strokeStyle = 'rgba(6, 12, 26, 0.85)'
+          ctx.lineWidth = 3
+          ctx.strokeText(s.label, px, py - 8)
+          ctx.fillStyle = col
+          ctx.fillText(s.label, px, py - 8)
+        }
       } else {
         ctx.arc(px, y(bar.high) - 10, 3, 0, Math.PI * 2)
         ctx.fill()
@@ -244,10 +265,10 @@ export function ensureBrooksIndicator(): void {
     name: 'BROOKS',
     shortName: 'Brooks 结构',
     calc: (dataList) => dataList.map(() => ({})),
-    draw: ({ ctx, kLineDataList, indicator, visibleRange, bounding, xAxis, yAxis }) => {
+    draw: ({ ctx, kLineDataList, indicator, visibleRange, bounding, barSpace, xAxis, yAxis }) => {
       const ext = indicator.extendData as BrooksExtendData | undefined
       if (!ext || !ext.analysis) return false
-      drawBrooks(ctx, kLineDataList.length, ext, visibleRange, bounding.width, xAxis, yAxis)
+      drawBrooks(ctx, kLineDataList.length, ext, visibleRange, bounding.width, barSpace, xAxis, yAxis)
       return false
     },
   })
