@@ -68,6 +68,7 @@ interface SlashCommand {
 const COMMANDS: SlashCommand[] = [
   { cmd: '/chart', args: 'SOL 1h', desc: '画 K 线图（币种 周期 条数）' },
   { cmd: '/analyze', args: 'BTC 1d', desc: '技术分析：均线 / RSI / 布林 / 回撤' },
+  { cmd: '/brooks', args: 'BTC 1h', desc: '价格行为结构：摆动点 / 趋势震荡 / H2 等信号' },
   { cmd: '/movers', args: '涨|跌', desc: '24h 涨跌榜（条形图）' },
   { cmd: '/corr', args: 'BTC ETH', desc: '两币走势相关性' },
   { cmd: '/calc', args: '10000*3%', desc: '计算器：仓位 / 盈亏 / 收益率' },
@@ -124,7 +125,7 @@ function loadSize(): { w: number; h: number } {
 }
 
 export default function AiChat({ onClose }: Props): JSX.Element {
-  const { status } = useAi()
+  const { status, pendingPrompt, consumePendingPrompt } = useAi()
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -236,24 +237,50 @@ export default function AiChat({ onClose }: Props): JSX.Element {
   }
 
   // 打开聊天窗：拉新闻 + @ 候选币种 + 恢复最近一次会话（跨窗口 / 跨设备保持上下文连续）
+  const restoredRef = useRef(false)
   useEffect(() => {
-    fetch('/api/ai/news')
-      .then((r) => (r.ok ? r.json() : { news: [] }))
-      .then((d: { news?: NewsItem[] }) => setNews(d.news ?? []))
-      .catch(() => {
-        /* 新闻失败不影响聊天 */
-      })
-    fetch('/api/tickers?limit=80')
-      .then((r) => (r.ok ? r.json() : { tickers: [] }))
-      .then((d: { tickers?: SymItem[] }) => setSymbols(d.tickers ?? []))
-      .catch(() => {
-        /* @ 菜单退化：无候选则不弹出 */
-      })
-    void refreshConvList().then((list) => {
-      if (list.length > 0) void loadConversation(list[0].id)
-    })
+    void (async () => {
+      fetch('/api/ai/news')
+        .then((r) => (r.ok ? r.json() : { news: [] }))
+        .then((d: { news?: NewsItem[] }) => setNews(d.news ?? []))
+        .catch(() => {
+          /* 新闻失败不影响聊天 */
+        })
+      fetch('/api/tickers?limit=80')
+        .then((r) => (r.ok ? r.json() : { tickers: [] }))
+        .then((d: { tickers?: SymItem[] }) => setSymbols(d.tickers ?? []))
+        .catch(() => {
+          /* @ 菜单退化：无候选则不弹出 */
+        })
+      const list = await refreshConvList()
+      if (list.length > 0) await loadConversation(list[0].id)
+      restoredRef.current = true
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // 其他页面注入的待发送消息（如 /brooks 的「AI 解读」）：等会话恢复完成后自动发送
+  useEffect(() => {
+    if (!pendingPrompt) return
+    const prompt = pendingPrompt
+    let timer: ReturnType<typeof setTimeout>
+    const cancelled = { v: false }
+    const trySend = (): void => {
+      if (cancelled.v) return
+      if (restoredRef.current) {
+        consumePendingPrompt()
+        void send(prompt)
+      } else {
+        timer = setTimeout(trySend, 120)
+      }
+    }
+    timer = setTimeout(trySend, 120)
+    return () => {
+      cancelled.v = true
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrompt])
 
   // ---- / 命令与 @ 提及菜单（是否可见由 input 派生） ----
 

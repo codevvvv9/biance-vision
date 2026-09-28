@@ -19,7 +19,8 @@
     "drizzle-orm": "0.45.2",
     "fastify": "^4.28.1",
     "postgres": "3.4.9",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "biance-vision-brooks": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",

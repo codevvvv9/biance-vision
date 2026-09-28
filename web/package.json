@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "biance-vision-brooks": "workspace:*",
     "katex": "^0.18.9",
     "klinecharts": "^9.8.0",
     "react": "^18.3.1",

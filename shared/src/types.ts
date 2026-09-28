@@ -7,7 +7,18 @@
  * 3. 每条信号都携带 reason（量化触发细节）与 concept（Brooks 概念出处），供复盘学习对照。
  */
 
-import type { KlineBar } from '../types.js'
+
+
+/** 引擎输入的最小K线结构（web 的 KlineBar 结构兼容，可直接传入） */
+export interface BrooksCandle {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+  closed?: boolean
+}
 
 export type Direction = 'bull' | 'bear' | 'neutral'
 
@@ -162,7 +173,7 @@ export interface BrooksSummary {
 }
 
 export interface BrooksAnalysis {
-  bars: KlineBar[]
+  bars: BrooksCandle[]
   features: BarFeature[]
   ema20: number[]
   atr14: number[]

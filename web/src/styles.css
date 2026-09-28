@@ -3725,3 +3725,68 @@ body {
   color: #ffcf7d;
   line-height: 1.7;
 }
+
+/* ---- Brooks 术语「!」悬停提醒 ---- */
+.brooks-term {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted rgba(255, 176, 32, 0.55);
+}
+
+.brooks-term .term-bang {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  margin-left: 4px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  color: #06121f;
+  background: linear-gradient(135deg, #ffc75a, #ff9f1c);
+  vertical-align: super;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.18);
+}
+
+.brooks-term .term-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  display: none;
+  width: max-content;
+  max-width: 248px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  background: rgba(10, 16, 30, 0.97);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-2);
+  text-align: left;
+  pointer-events: none;
+}
+
+.brooks-term .term-pop b {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11.5px;
+  color: #ffcf7d;
+}
+
+.brooks-term .term-pop em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.brooks-term:hover .term-pop,
+.brooks-term:focus-visible .term-pop {
+  display: block;
+}

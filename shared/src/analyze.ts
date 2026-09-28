@@ -3,16 +3,15 @@
  * 纯函数、零依赖、O(n·k)，千根K线毫秒级完成；只在收盘K线上运行。
  */
 
-import type { KlineBar } from '../types.js'
 import { atr, computeBarFeatures, ema } from './bars.js'
 import { computeAlwaysIn, computeRegime, REGIME_TEXT } from './regime.js'
 import { buildLegs, buildZigzag, findSwings, swingSequenceText, trendStructureText } from './swings.js'
 import { detectSignals } from './signals.js'
-import type { BrooksAnalysis, BrooksOptions } from './types.js'
+import type { BrooksAnalysis, BrooksOptions, BrooksCandle } from './types.js'
 
 export const DEFAULT_OPTIONS: BrooksOptions = { swingK: 3 }
 
-export function analyzeBrooks(bars: KlineBar[], options: BrooksOptions = DEFAULT_OPTIONS): BrooksAnalysis | null {
+export function analyzeBrooks(bars: BrooksCandle[], options: BrooksOptions = DEFAULT_OPTIONS): BrooksAnalysis | null {
   const k = Math.max(1, Math.min(5, Math.round(options.swingK)))
   if (bars.length < Math.max(30, k * 6)) return null
 

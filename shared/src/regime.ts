@@ -10,7 +10,7 @@
  * - Always In：保守翻转——同向状态持续 ≥4 根才翻转方向（Brooks：always-in 交易者一天只翻 2~5 次）。
  */
 
-import type { BarFeature, AlwaysIn, Direction, RegimeType, RegimeSegment } from './types.js'
+import type { BarFeature, AlwaysIn, Direction, RegimeType, RegimeSegment, BrooksCandle } from './types.js'
 
 const WINDOW = 20
 const BULL_RATIO = 0.7

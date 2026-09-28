@@ -4,15 +4,14 @@
  * 内包/外包判定允许边界相等（ByteBard 实现），分类优先级 inside → outside。
  */
 
-import type { KlineBar } from '../types.js'
-import type { BarFeature } from './types.js'
+import type { BarFeature, BrooksCandle } from './types.js'
 
 /** 趋势棒实体占比阈值 */
 export const TREND_BAR_RATIO = 0.55
 /** doji 实体占比阈值 */
 export const DOJI_RATIO = 0.3
 
-export function computeBarFeatures(bars: KlineBar[]): BarFeature[] {
+export function computeBarFeatures(bars: BrooksCandle[]): BarFeature[] {
   const out: BarFeature[] = []
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]
@@ -75,7 +74,7 @@ export function ema(values: number[], period: number): number[] {
 }
 
 /** ATR（Wilder RMA 平滑的真实波幅） */
-export function atr(bars: KlineBar[], period = 14): number[] {
+export function atr(bars: BrooksCandle[], period = 14): number[] {
   const out = new Array<number>(bars.length).fill(0)
   let prevAtr = 0
   for (let i = 0; i < bars.length; i++) {

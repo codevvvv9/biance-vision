@@ -3,9 +3,8 @@
  * 运行：pnpm brooks:selftest
  */
 
-import { analyzeBrooks } from '../web/src/brooks/analyze.js'
-import { computeBarFeatures } from '../web/src/brooks/bars.js'
-import type { KlineBar } from '../web/src/types.js'
+import { analyzeBrooks, computeBarFeatures } from '../shared/src/index.js'
+import type { BrooksCandle } from '../shared/src/index.js'
 
 let passed = 0
 let failed = 0
@@ -21,13 +20,13 @@ function assert(cond: boolean, msg: string): void {
 }
 
 /** 构造单根K线（时间 = index × 60000ms） */
-function mk(i: number, open: number, high: number, low: number, close: number): KlineBar {
+function mk(i: number, open: number, high: number, low: number, close: number): BrooksCandle {
   return { time: i * 60000, open, high, low, close, volume: 100, closed: true }
 }
 
 /** 生成一段单向趋势腿：每根实体占比 ~75% 的趋势棒 */
-function leg(fromIdx: number, count: number, start: number, end: number): KlineBar[] {
-  const out: KlineBar[] = []
+function leg(fromIdx: number, count: number, start: number, end: number): BrooksCandle[] {
+  const out: BrooksCandle[] = []
   const step = (end - start) / count
   for (let j = 0; j < count; j++) {
     const o = start + step * j
@@ -94,7 +93,7 @@ console.log('\n[3] 趋势 vs 震荡状态')
   }
 
   // 震荡：高低交替、大幅重叠
-  const chop: KlineBar[] = []
+  const chop: BrooksCandle[] = []
   let p = 100
   for (let i = 0; i < 60; i++) {
     const up = i % 2 === 0
@@ -221,7 +220,7 @@ console.log('\n[8] 趋势线突破（TLB）')
 
 console.log('\n[9] 全流程冒烟：真实尺寸随机数据不崩溃')
 {
-  const bars: KlineBar[] = []
+  const bars: BrooksCandle[] = []
   let p = 60000
   let seed = 42
   const rnd = (): number => {

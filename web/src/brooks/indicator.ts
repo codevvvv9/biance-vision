@@ -11,7 +11,7 @@
 
 import { registerIndicator } from 'klinecharts'
 import type { Axis, VisibleRange } from 'klinecharts'
-import type { BrooksAnalysis, BrooksDisplay, RegimeType } from './types'
+import type { BrooksAnalysis, BrooksDisplay, RegimeType } from 'biance-vision-brooks'
 
 export interface BrooksExtendData {
   analysis: BrooksAnalysis | null

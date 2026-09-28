@@ -6,7 +6,7 @@
  *   代理目标通过 BV_API_PORT 注入给 vite.config.ts，保证两端联动
  * - 轮询 /api/health 确认后端就绪后再给出访问地址
  */
-import { spawn, execFile } from 'node:child_process'
+import { spawn, execFile, spawnSync } from 'node:child_process'
 import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -187,6 +187,19 @@ async function main(): Promise<void> {
     usesPnpm
       ? ['--filter', pkg, 'run', script, ...args]
       : ['run', script, '-w', pkg, '--', ...args]
+
+  // 先构建共享包（Brooks 结构引擎）：server 生产/开发与 web 都消费其 dist 产物
+  const prebuild = spawnSync(pm, runIn('biance-vision-brooks', 'build'), {
+    cwd: ROOT,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (prebuild.status !== 0) {
+    console.error(`\x1b[36m[bv]\x1b[0m \x1b[31m共享包 biance-vision-brooks 构建失败，请检查 shared/ 源码\x1b[0m`)
+    shutdown(prebuild.status ?? 1)
+    return
+  }
+  console.log(`\x1b[36m[bv]\x1b[0m 共享包 biance-vision-brooks 构建完成`)
 
   const server = spawn(pm, runIn('biance-vision-server', 'dev'), {
     cwd: ROOT,
