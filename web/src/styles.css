@@ -3727,6 +3727,11 @@ body {
 }
 
 /* ---- Brooks 术语「!」悬停提醒 ---- */
+/* .panel 默认 overflow:hidden 会裁掉绝对定位的术语气泡；摘要面板单独放开
+   （backdrop-filter 会让 position:fixed 也被困在面板内，只能放开裁剪） */
+.brooks-summary-panel {
+  overflow: visible;
+}
 .brooks-term {
   position: relative;
   cursor: help;
@@ -3755,7 +3760,7 @@ body {
   position: absolute;
   right: 0;
   bottom: calc(100% + 8px);
-  z-index: 40;
+  z-index: 60;
   display: none;
   width: max-content;
   max-width: 248px;
@@ -3787,6 +3792,7 @@ body {
 }
 
 .brooks-term:hover .term-pop,
-.brooks-term:focus-visible .term-pop {
+.brooks-term:focus .term-pop,
+.brooks-term:focus-within .term-pop {
   display: block;
 }

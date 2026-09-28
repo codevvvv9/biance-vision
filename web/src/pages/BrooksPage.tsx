@@ -305,7 +305,7 @@ export default function BrooksPage(): JSX.Element {
         </section>
 
         <aside className="brooks-side">
-          <section className="panel">
+          <section className="panel brooks-summary-panel">
             <div className="panel-head">
               <h3 className="panel-title">
                 <span className="title-glyph amber">◆</span>当前结构
