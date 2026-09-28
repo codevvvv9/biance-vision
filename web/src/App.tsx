@@ -9,6 +9,7 @@ import AiAssistant from './ai/AiAssistant'
 import AlertsPage from './pages/AlertsPage'
 import AdminPage from './pages/AdminPage'
 import AiInsightsPage from './pages/AiInsightsPage'
+import BrooksPage from './pages/BrooksPage'
 import Dashboard from './pages/Dashboard'
 import LoginPage from './pages/LoginPage'
 import MoversPage from './pages/MoversPage'
@@ -26,6 +27,7 @@ function AuthedApp(): JSX.Element {
             <Route path="/" element={<Dashboard />} />
             <Route path="/movers" element={<MoversPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/brooks" element={<BrooksPage />} />
             {/* 页面内部再校验 superadmin，普通用户直接访问会被跳回首页 */}
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/ai" element={<AiInsightsPage />} />

@@ -18,6 +18,7 @@ const TABS: Tab[] = [
   { to: '/', label: '大盘总览', end: true },
   { to: '/movers', label: '异动榜' },
   { to: '/alerts', label: '预警中心' },
+  { to: '/brooks', label: '价格行为' },
 ]
 
 const QUICK = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']

@@ -3363,3 +3363,365 @@ body {
   color: #c3cfe6;
   background: rgba(158, 173, 201, 0.1);
 }
+
+/* ============ 价格行为复盘页（/brooks） ============ */
+.brooks-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.brooks-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.brooks-symbol-form input {
+  width: 190px;
+}
+
+.brooks-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.brooks-toggle {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: rgba(20, 30, 52, 0.7);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.brooks-toggle:hover {
+  color: var(--text-1);
+  border-color: rgba(0, 229, 255, 0.35);
+}
+
+.brooks-toggle.on {
+  color: #06121f;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.9), rgba(35, 190, 255, 0.85));
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.brooks-note {
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.brooks-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .brooks-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.brooks-chart-hold {
+  position: relative;
+}
+
+.brooks-chart-wrap {
+  height: 580px;
+}
+
+@media (max-width: 900px) {
+  .brooks-chart-wrap {
+    height: 420px;
+  }
+}
+
+.brooks-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brooks-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 2px 4px;
+}
+
+.brooks-kv {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.brooks-kv .k {
+  flex: none;
+  width: 68px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.brooks-kv .v {
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.brooks-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  padding-left: 78px;
+}
+
+.brooks-chip {
+  display: inline-block;
+  min-width: 0;
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  border: 1px solid var(--line);
+  background: rgba(20, 30, 52, 0.6);
+  color: var(--text-1);
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.brooks-chip.dir-bull {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 10%, transparent);
+  font-weight: 700;
+}
+
+.brooks-chip.dir-bear {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+  font-weight: 700;
+}
+
+.brooks-chip.dir-neutral {
+  color: var(--amber, #ffb020);
+  border-color: rgba(255, 176, 32, 0.35);
+  background: rgba(255, 176, 32, 0.08);
+}
+
+.brooks-chip.regime-spike_bull,
+.brooks-chip.regime-spike_bear {
+  font-weight: 700;
+}
+
+.brooks-chip.regime-spike_bull {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 45%, transparent);
+}
+
+.brooks-chip.regime-spike_bear {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 45%, transparent);
+}
+
+.brooks-chip.regime-channel_bull {
+  color: color-mix(in srgb, var(--up) 75%, var(--text-1));
+}
+
+.brooks-chip.regime-channel_bear {
+  color: color-mix(in srgb, var(--down) 75%, var(--text-1));
+}
+
+.brooks-chip.regime-tight_range,
+.brooks-chip.regime-barbwire {
+  color: #b6a1ff;
+  border-color: rgba(124, 92, 255, 0.4);
+}
+
+.brooks-signals-panel {
+  min-width: 0;
+}
+
+.brooks-filter {
+  display: flex;
+  gap: 4px;
+}
+
+.brooks-filter button {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.brooks-filter button.on {
+  color: #06121f;
+  background: rgba(0, 229, 255, 0.85);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.brooks-signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding: 2px 4px 6px 2px;
+}
+
+.brooks-signal {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(16, 24, 42, 0.65);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.brooks-signal:hover {
+  transform: translateY(-1px);
+}
+
+.brooks-signal.bull:hover {
+  border-color: color-mix(in srgb, var(--up) 45%, transparent);
+}
+
+.brooks-signal.bear:hover {
+  border-color: color-mix(in srgb, var(--down) 45%, transparent);
+}
+
+.brooks-signal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brooks-sig-chip {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.brooks-sig-chip.bull {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 8%, transparent);
+}
+
+.brooks-sig-chip.bear {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+}
+
+.brooks-sig-chip.neutral {
+  color: #ffb020;
+  border-color: rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.08);
+}
+
+.brooks-sig-chip.strength-high {
+  box-shadow: 0 0 0 1px currentColor inset;
+}
+
+.brooks-sig-chip.strength-low {
+  opacity: 0.75;
+}
+
+.brooks-signal-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brooks-signal-time {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.brooks-signal-reason {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.brooks-signal-concept {
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  border-left: 2px solid rgba(0, 229, 255, 0.3);
+  padding-left: 7px;
+}
+
+.brooks-signal-prior {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: #ffcf7d;
+}
+
+.brooks-signal-ref {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.brooks-help h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--cyan, #00e5ff);
+}
+
+.brooks-help ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.brooks-help b {
+  color: var(--text-1);
+}
+
+.brooks-disclaimer {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  background: rgba(255, 176, 32, 0.07);
+  font-size: 11px;
+  color: #ffcf7d;
+  line-height: 1.7;
+}

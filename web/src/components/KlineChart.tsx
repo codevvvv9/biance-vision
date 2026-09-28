@@ -25,7 +25,7 @@ const INTERVALS: IntervalOption[] = [
 ]
 
 let stylesRegistered = false
-function ensureStyles(): void {
+export function ensureStyles(): void {
   if (stylesRegistered) return
   stylesRegistered = true
   registerStyles('bv-dark', {
@@ -82,7 +82,7 @@ function ensureStyles(): void {
 }
 
 /** 涨跌配色覆写：跟随用户配色习惯（绿涨红跌 / 红涨绿跌）同步蜡烛、最新价线、成交量柱 */
-function upDownOverrides(mode: UpColorMode): DeepPartial<Styles> {
+export function upDownOverrides(mode: UpColorMode): DeepPartial<Styles> {
   const up = mode === 'red' ? '#ff4d6a' : '#00d68f'
   const down = mode === 'red' ? '#00d68f' : '#ff4d6a'
   return {
