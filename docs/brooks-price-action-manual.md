@@ -146,10 +146,26 @@ L5 概率过滤     80% 规则族 · 二次进场先验 ≈60% · 交易者方�
 
 ---
 
-## 6. 本工具实现边界与迭代方向
+## 6. AI 联动（结构引擎 × AI 助手）
+
+引擎已抽为共享包 `shared/`（`biance-vision-brooks`，pnpm workspace）：web 复盘页与服务端 AI
+共用同一份结构识别代码，三条链路：
+
+1. **🤖 AI 解读按钮**（/brooks 页）：把当前结构摘要（状态/Always In/摆动序列/最近8条信号）
+   一键注入 AI 助手会话，按 Brooks 框架解读，并要求区分高先验信号与"大概率只是回调"的信号；
+2. **AI 工具 `brooks_structure`**（function calling）：模型可自主调用，参数
+   `{symbol, interval, limit≤500, swing_k}`，返回结构化摘要 + 术语速查，自然语言问
+   "BTC 现在什么结构"即可触发；
+3. **斜杠命令 `/brooks BTC 1h`**（别名 `/pa`）：本地直执行不消耗对话次数，结果落入会话可继续追问。
+
+术语学习：复盘页摘要标签带「!」悬停解释（`web/src/brooks/terms.tsx` 词条字典），
+信号种类悬停显示术语定义，图例弹窗含完整规则速查。
+
+## 7. 本工具实现边界与迭代方向
 
 **已实现**：单根K线特征、多尺度摆动点、腿/AB=CD、趋势/震荡/冲刺/铁丝网状态机、Always In、
-H1~H4/L1~L4、楔形、双顶底、ii/外包突破、TLB、MTR、区间突破、图上全量标注 + 规则出处信号面板。
+H1~H4/L1~L4、楔形、双顶底、ii/外包突破、TLB、MTR、区间突破、图上全量标注 + 规则出处信号面板、
+AI 三链路联动（上述）、术语「!」提醒。
 
 **暂未实现（按 Brooks 体系优先级排序的 roadmap）**：
 1. **微通道（micro channel）**：连续不回调的微型趋势线及其突破——紧贴趋势棒序列的更精细结构；
@@ -160,6 +176,8 @@ H1~H4/L1~L4、楔形、双顶底、ii/外包突破、TLB、MTR、区间突破、
 
 **复现/自测**：`pnpm brooks:selftest`（合成K线验证 9 组场景，36 项断言全通过）。
 
-**引擎 API**：`analyzeBrooks(bars: KlineBar[], { swingK: 1|2|3|5 })` →
+**引擎 API**（共享包 `biance-vision-brooks`，源码 `shared/src/`，改后 `pnpm --filter biance-vision-brooks run build`，
+根目录 dev/build 已自动带上）：
+`analyzeBrooks(candles: BrooksCandle[], { swingK: 1|2|3|5 })` →
 `BrooksAnalysis { features, swings, legs, regimeAt, alwaysIn, signals, summary }`，
 纯函数零依赖，千根K线毫秒级。

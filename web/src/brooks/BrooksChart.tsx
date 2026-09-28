@@ -12,7 +12,7 @@ import type { UpColorMode } from '../utils'
 import { precisionFor } from '../utils'
 import type { KlineBar } from '../types'
 import { ensureBrooksIndicator } from './indicator'
-import type { BrooksAnalysis, BrooksDisplay } from './types'
+import type { BrooksAnalysis, BrooksDisplay } from 'biance-vision-brooks'
 
 export interface BrooksChartHandle {
   /** WS tick：直接更新图表最后一根（不影响分析） */

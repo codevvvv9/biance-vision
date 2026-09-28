@@ -12,12 +12,11 @@
  * - 区间突破：80% 的交易区间突破尝试失败，首次突破仅约 50% 存活 → 只作研究关注
  */
 
-import type { KlineBar } from '../types.js'
-import type { BarFeature, BrooksSignal, Direction, Leg, RegimeType, SwingPoint } from './types.js'
+import type { BarFeature, BrooksSignal, Direction, Leg, RegimeType, SwingPoint, BrooksCandle } from './types.js'
 import { maxHighBetween, minLowBetween } from './swings.js'
 
 export interface SignalInput {
-  bars: KlineBar[]
+  bars: BrooksCandle[]
   features: BarFeature[]
   ema20: number[]
   atr14: number[]

@@ -8,10 +8,9 @@
  * 所有基于摆动点的信号都在 confirmIndex 收盘后触发，杜绝重绘。
  */
 
-import type { KlineBar } from '../types.js'
-import type { BarFeature, Leg, SwingLabel, SwingPoint } from './types.js'
+import type { BarFeature, Leg, SwingLabel, SwingPoint, BrooksCandle } from './types.js'
 
-export function findSwings(bars: KlineBar[], k: number): SwingPoint[] {
+export function findSwings(bars: BrooksCandle[], k: number): SwingPoint[] {
   const raw: SwingPoint[] = []
   const n = bars.length
   for (let i = k; i < n - k; i++) {
@@ -68,7 +67,7 @@ export function buildZigzag(swings: SwingPoint[]): SwingPoint[] {
 }
 
 /** 腿特征：幅度、根数、同向趋势棒数、相对前腿的回调深度 */
-export function buildLegs(bars: KlineBar[], features: BarFeature[], zigzag: SwingPoint[]): Leg[] {
+export function buildLegs(bars: BrooksCandle[], features: BarFeature[], zigzag: SwingPoint[]): Leg[] {
   const legs: Leg[] = []
   for (let i = 1; i < zigzag.length; i++) {
     const a = zigzag[i - 1]
@@ -100,14 +99,14 @@ export function buildLegs(bars: KlineBar[], features: BarFeature[], zigzag: Swin
 }
 
 /** [a,b] 区间内最低价 */
-export function minLowBetween(bars: KlineBar[], a: number, b: number): number {
+export function minLowBetween(bars: BrooksCandle[], a: number, b: number): number {
   let v = Infinity
   for (let i = Math.max(0, a); i <= Math.min(bars.length - 1, b); i++) v = Math.min(v, bars[i].low)
   return v
 }
 
 /** [a,b] 区间内最高价 */
-export function maxHighBetween(bars: KlineBar[], a: number, b: number): number {
+export function maxHighBetween(bars: BrooksCandle[], a: number, b: number): number {
   let v = -Infinity
   for (let i = Math.max(0, a); i <= Math.min(bars.length - 1, b); i++) v = Math.max(v, bars[i].high)
   return v

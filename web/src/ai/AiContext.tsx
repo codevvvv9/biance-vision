@@ -17,6 +17,10 @@ interface AiContextValue {
   hideRobot: () => void
   chatOpen: boolean
   setChatOpen: (v: boolean) => void
+  /** 其他页面注入的一条待发送消息（如 /brooks 页「AI 解读」）：打开聊天窗并自动发送 */
+  pendingPrompt: string | null
+  askAi: (prompt: string) => void
+  consumePendingPrompt: () => void
 }
 
 const Ctx = createContext<AiContextValue | null>(null)
@@ -26,6 +30,17 @@ export function AiProvider({ children }: { children: ReactNode }): JSX.Element {
   const [status, setStatus] = useState<AiStatus>({ configured: false, model: '' })
   const [robotHidden, setRobotHidden] = useState<boolean>(() => lsGet<boolean>(HIDDEN_KEY, false))
   const [chatOpen, setChatOpen] = useState(false)
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null)
+
+  const askAi = useCallback((prompt: string): void => {
+    if (!prompt.trim()) return
+    setPendingPrompt(prompt)
+    setChatOpen(true)
+  }, [])
+
+  const consumePendingPrompt = useCallback((): void => {
+    setPendingPrompt(null)
+  }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -60,6 +75,9 @@ export function AiProvider({ children }: { children: ReactNode }): JSX.Element {
         hideRobot,
         chatOpen,
         setChatOpen,
+        pendingPrompt,
+        askAi,
+        consumePendingPrompt,
       }}
     >
       {children}

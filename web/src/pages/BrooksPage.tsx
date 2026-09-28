@@ -7,12 +7,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api'
+import { useAi } from '../ai/AiContext'
 import { useMarket } from '../market/MarketContext'
 import { fmtDateTime, lsGet, lsSet } from '../utils'
 import BrooksChart from '../brooks/BrooksChart'
+import { BrooksTerm, termForSignalKind } from '../brooks/terms'
 import type { BrooksChartHandle } from '../brooks/BrooksChart'
-import { analyzeBrooks } from '../brooks/analyze'
-import type { BrooksDisplay, BrooksSignal } from '../brooks/types'
+import { analyzeBrooks } from 'biance-vision-brooks'
+import type { BrooksDisplay, BrooksSignal } from 'biance-vision-brooks'
 import type { KlineBar } from '../types'
 
 const INTERVALS: { v: string; t: string }[] = [
@@ -69,6 +71,7 @@ function sigDirClass(s: BrooksSignal): string {
 export default function BrooksPage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const { order, subscribeKline, upColor } = useMarket()
+  const { status: aiStatus, askAi, showRobot } = useAi()
   const [symbol, setSymbol] = useState(() => (searchParams.get('symbol') || 'BTCUSDT').toUpperCase())
   const [symbolInput, setSymbolInput] = useState(symbol)
   const [interval, setIntervalValue] = useState(() => {
@@ -153,6 +156,35 @@ export default function BrooksPage(): JSX.Element {
   const applyInterval = (v: string): void => {
     setIntervalValue(v)
     setSearchParams({ symbol, interval: v })
+  }
+
+  /** 把当前结构摘要打包发给 AI 助手，用 Brooks 框架解读（AI 需已配置） */
+  const askAiAnalysis = (): void => {
+    if (!analysis || !summary) return
+    const dirText = (d: string): string => (d === 'bull' ? '多头' : d === 'bear' ? '空头' : '中性')
+    const recent = analysis.signals
+      .slice(-8)
+      .reverse()
+      .map((s, i) => `${i + 1}. [${s.label} · ${dirText(s.direction)}] ${s.reason}`)
+      .join('\n')
+    const lastLegText = summary.lastLeg
+      ? `- 最近一腿：${summary.lastLeg.direction === 'up' ? '上' : '下'} ${summary.lastLeg.barCount} 根（趋势棒 ${summary.lastLeg.trendBarCount}${
+          summary.lastLeg.retracementOfPrev !== undefined
+            ? `，幅度为前腿 ${(summary.lastLeg.retracementOfPrev * 100).toFixed(0)}%`
+            : ''
+        }）\n`
+      : ''
+    const prompt = [
+      `请用 Al Brooks《价格行为交易》三部曲的框架解读以下结构数据（来自内置 Brooks 结构引擎：${symbol} ${interval}，${summary.barCount} 根收盘K线，摆动尺度 k=${analysis.options.swingK}）：`,
+      `- 市场状态：${summary.regimeText}`,
+      `- Always In：${dirText(summary.alwaysIn)}（${summary.alwaysInReason}）`,
+      `- 结构判定：${summary.trendStructure}；摆动序列（旧→新）：${summary.swingSequence}`,
+      lastLegText + `- 最近信号（新→旧）：\n${recent || '无'}`,
+      '',
+      '解读要点：1) 当前结构的含义与多空力量对比；2) 信号之间的印证与矛盾；3) 按 Brooks 概率先验（区间突破 80% 失败、H2 二次进场 ≈60%、趋势线破位 50/50）区分高质量信号与大概率只是回调的信号；4) 当前状态下最需要警惕的陷阱。可调用工具补充实时行情。',
+    ].join('\n')
+    showRobot()
+    askAi(prompt)
   }
 
   const signals = analysis?.signals ?? []
@@ -245,6 +277,14 @@ export default function BrooksPage(): JSX.Element {
             </h2>
             <div className="panel-head-tools">
               <span className="brooks-note">只识别结构 · 不预测涨跌 · 仅收盘K线计入信号</span>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={askAiAnalysis}
+                disabled={!aiStatus.configured || !analysis}
+                title={aiStatus.configured ? '把当前结构摘要发给 AI 助手，按 Brooks 框架解读' : 'AI 未配置（需超管在「AI 设置」中完成配置）'}
+              >
+                🤖 AI 解读
+              </button>
               <button className="btn btn-ghost btn-sm" onClick={() => setReload((n) => n + 1)}>
                 刷新
               </button>
@@ -274,27 +314,27 @@ export default function BrooksPage(): JSX.Element {
             {summary ? (
               <div className="brooks-summary">
                 <div className="brooks-kv">
-                  <span className="k">市场状态</span>
+                  <span className="k"><BrooksTerm term="市场状态">市场状态</BrooksTerm></span>
                   <span className={`brooks-chip regime-${summary.regime}`}>{summary.regimeText}</span>
                 </div>
                 <div className="brooks-kv">
-                  <span className="k">Always In</span>
+                  <span className="k"><BrooksTerm term="alwaysIn">Always In</BrooksTerm></span>
                   <span className={`brooks-chip dir-${summary.alwaysIn}`}>
                     {summary.alwaysIn === 'bull' ? '多头' : summary.alwaysIn === 'bear' ? '空头' : '方向不明'}
                   </span>
                 </div>
                 <div className="brooks-sub">{summary.alwaysInReason}（自第 {summary.alwaysInSince + 1} 根）</div>
                 <div className="brooks-kv">
-                  <span className="k">结构判定</span>
+                  <span className="k"><BrooksTerm term="结构判定">结构判定</BrooksTerm></span>
                   <span className="v">{summary.trendStructure}</span>
                 </div>
                 <div className="brooks-kv">
-                  <span className="k">摆动序列</span>
+                  <span className="k"><BrooksTerm term="摆动序列">摆动序列</BrooksTerm></span>
                   <span className="v mono">{summary.swingSequence}</span>
                 </div>
                 {lastLeg && (
                   <div className="brooks-kv">
-                    <span className="k">最近一腿</span>
+                    <span className="k"><BrooksTerm term="最近一腿">最近一腿</BrooksTerm></span>
                     <span className="v">
                       {lastLeg.direction === 'up' ? '↑' : '↓'} {lastLeg.barCount} 根 · 趋势棒 {lastLeg.trendBarCount}
                       {lastLeg.retracementOfPrev !== undefined
@@ -338,7 +378,7 @@ export default function BrooksPage(): JSX.Element {
                   title="点击定位到图上对应K线"
                 >
                   <div className="brooks-signal-head">
-                    <span className={`brooks-sig-chip ${sigDirClass(s)} strength-${s.strength}`}>{s.label}</span>
+                    <span className={`brooks-sig-chip ${sigDirClass(s)} strength-${s.strength}`} title={termForSignalKind(s.label, s.kind)}>{s.label}</span>
                     <span className="brooks-signal-title">{s.title}</span>
                     <span className="brooks-signal-time">{fmtDateTime(s.time)}</span>
                   </div>
@@ -413,6 +453,16 @@ export default function BrooksPage(): JSX.Element {
                 </li>
                 <li>
                   <b>冲刺↑/↓</b>：连续 ≥5 根同向趋势棒（spike），spike and channel 的起点。
+                </li>
+              </ul>
+              <h4>AI 联动</h4>
+              <ul>
+                <li>
+                  <b>🤖 AI 解读</b>：把当前结构摘要一键发给 AI 助手，按 Brooks 框架解读（需超管配置 AI）。
+                </li>
+                <li>
+                  <b>/brooks 币 周期</b>：AI 聊天里的斜杠命令（如 <code>/brooks BTC 1h</code>），直接输
+                  出结构识别结果；自然语言问「BTC 现在什么结构」时 AI 也会自动调用结构引擎工具。
                 </li>
               </ul>
               <h4>摆动尺度 k</h4>

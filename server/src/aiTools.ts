@@ -1,5 +1,7 @@
 import { restGet, tickerCache, tickerOf, topUsdtTickers } from './binance.js'
 import type { RawKlineRow } from './types.js'
+import { analyzeBrooks } from 'biance-vision-brooks'
+import type { BrooksCandle } from 'biance-vision-brooks'
 import { buildSystemPrompt, getAiNews, streamChatOnce } from './ai.js'
 import type { AiProfile, ChatMessage } from './ai.js'
 import { addManualMemory, clearMemories, deleteMemoriesByKeyword, listMemories, MEMORY_KINDS } from './aiMemory.js'
@@ -140,6 +142,24 @@ export const AI_TOOLS_SCHEMA = [
   {
     type: 'function',
     function: {
+      name: 'brooks_structure',
+      description:
+        'Al Brooks 价格行为结构识别（内置量化引擎）：摆动点 HH/HL/LH/LL、腿、趋势/交易区间/冲刺/铁丝网状态、Always In 方向、H1~H4/L1~L4 回调计数、楔形、双顶底、趋势线突破、MTR 等结构信号。用户问「价格行为/市场结构/回调计数/楔形/Brooks/二次进场」时用',
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: { type: 'string', description: '交易对，如 BTCUSDT' },
+          interval: { type: 'string', enum: INTERVALS, description: 'K 线周期，默认 1h' },
+          limit: { type: 'number', description: '收盘K线根数，默认 300，最大 500' },
+          swing_k: { type: 'number', description: '摆动点左右确认根数：1 微观 / 2 精细 / 3 标准(默认) / 5 主要摆动' },
+        },
+        required: ['symbol'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'correlation',
       description: '计算两个交易对收盘价的相关系数（-1~1），用于「A 和 B 走势是否联动 / 哪个和 BTC 相关」类问题',
       parameters: {
@@ -226,6 +246,51 @@ async function fetchKlines(symbol: string, interval: Interval, limit: number): P
     ohlc: rows.map((r) => [+r[1], +r[2], +r[3], +r[4]]),
     volumes: rows.map((r) => +r[5]),
   }
+}
+
+/** Brooks 结构引擎摘要（AI 工具与 /brooks 命令共用）：拉收盘K线 → 跑结构分析 → 压缩成模型可消费的文本 */
+async function brooksText(symbol: string, interval: Interval, limit: number, swingK: number): Promise<string> {
+  const s = await fetchKlines(symbol, interval, limit + 1)
+  // 币安 REST 会带上未收盘的最后一根：结构识别只认收盘K线，按周期毫秒数剔除
+  const intervalSec = Math.round((365 * 86400) / PERIODS_PER_YEAR[interval])
+  const nowSec = Date.now() / 1000
+  let end = s.times.length
+  while (end > 0 && nowSec - s.times[end - 1] < intervalSec) end--
+  const candles: BrooksCandle[] = []
+  for (let i = 0; i < end; i++) {
+    candles.push({ time: s.times[i], open: s.ohlc[i][0], high: s.ohlc[i][1], low: s.ohlc[i][2], close: s.ohlc[i][3] })
+  }
+  const a = analyzeBrooks(candles, { swingK })
+  if (!a) throw badRequest(`收盘K线不足（${candles.length} 根，至少需要 30 根）`)
+
+  const dirText = (d: string): string => (d === 'bull' ? '多头' : d === 'bear' ? '空头' : '方向不明')
+  const lines: string[] = []
+  lines.push(`${symbol} ${interval} Brooks 价格行为结构（量化引擎识别，${candles.length} 根收盘K线，尺度 k=${a.options.swingK}）：`)
+  lines.push(`- 市场状态：${a.summary.regimeText}`)
+  lines.push(`- Always In（若必须持仓的方向）：${dirText(a.summary.alwaysIn)} —— ${a.summary.alwaysInReason}`)
+  lines.push(`- 结构判定：${a.summary.trendStructure}；摆动序列（旧→新）：${a.summary.swingSequence}`)
+  if (a.summary.lastLeg) {
+    const l = a.summary.lastLeg
+    lines.push(
+      `- 最近一腿：${l.direction === 'up' ? '上' : '下'} ${l.barCount} 根（同向趋势棒 ${l.trendBarCount} 根${
+        l.retracementOfPrev !== undefined ? `，幅度为前腿的 ${(l.retracementOfPrev * 100).toFixed(0)}%` : ''
+      }）`,
+    )
+  }
+  const tail = a.signals.slice(-10).reverse()
+  if (tail.length > 0) {
+    lines.push(`- 最近信号（新→旧，共 ${a.signals.length} 条）：`)
+    tail.forEach((sig, i) => {
+      const strength = sig.strength === 'high' ? '高' : sig.strength === 'medium' ? '中' : '低'
+      lines.push(`  ${i + 1}. [${sig.label}|${dirText(sig.direction)}|置信${strength}] ${sig.reason}`)
+    })
+  } else {
+    lines.push('- 最近信号：无（结构未触发任何规则）')
+  }
+  lines.push(
+    '术语速查：H1~H4/L1~L4=多头/空头回调计数（H2/L2 二次进场为先验≈60%的高胜率结构）；楔顶/楔底=三推反转；双顶/双底=两次测试同一极值；MTR=主要趋势反转（趋势线突破+测试+反转确认）；铁丝网=重叠+doji 的不交易区；Always In=强趋势方向。请基于以上结构数据按 Brooks 框架解读，不要编造未出现的信号。',
+  )
+  return lines.join('\n')
 }
 
 function sma(values: number[], n: number): number {
@@ -399,6 +464,14 @@ export async function executeAiTool(name: string, argsJson: string): Promise<AiT
       const limit = pickInt(args.limit, 30, 300, 100)
       const s = await fetchKlines(symbol, interval, limit)
       return { result: `${symbol} ${interval} 技术统计（币安实时数据）：\n${analyzeSeries(s, interval)}` }
+    }
+    case 'brooks_structure': {
+      const symbol = normSymbol(args.symbol)
+      if (!SYMBOL_RE.test(symbol)) throw new Error('symbol 不合法')
+      const interval = pickInterval(args.interval, '1h')
+      const limit = pickInt(args.limit, 30, 500, 300)
+      const swingK = pickInt(args.swing_k, 1, 5, 3)
+      return { result: await brooksText(symbol, interval, limit, swingK) }
     }
     case 'correlation': {
       const a = normSymbol(args.symbol_a)
@@ -608,6 +681,8 @@ const SLASH_ALIASES: Record<string, string> = {
   kline: 'chart',
   analyze: 'analyze',
   ana: 'analyze',
+  brooks: 'brooks',
+  pa: 'brooks',
   movers: 'movers',
   rank: 'movers',
   corr: 'corr',
@@ -679,6 +754,19 @@ export async function runSlashCommand(username: string, text: string): Promise<S
       const bar = await executeAiTool('render_chart', JSON.stringify({ chart_type: 'bar', direction, limit: n }))
       const summary = bar.result.replace(/并展示给用户。/, '').replace(/请给出简短点评。?/, '').trim()
       return { reply: `📊 ${summary}\n\n> 想要 AI 点评？继续用自然语言提问即可`, chart: bar.chart }
+    }
+    case 'brooks': {
+      const parts = args.split(/\s+/)
+      const r = await executeAiTool(
+        'brooks_structure',
+        JSON.stringify({
+          symbol: resolveSymbol(parts[0] ?? ''),
+          interval: pickInterval(parts[1], '1h'),
+          limit: 300,
+          swing_k: parts[2] ? pickInt(parts[2], 1, 5, 3) : 3,
+        }),
+      )
+      return { reply: `📐 ${r.result}\n\n> 想让 AI 结合结构深入解读？直接用自然语言继续提问即可` }
     }
     case 'corr': {
       const parts = args.split(/\s+/)

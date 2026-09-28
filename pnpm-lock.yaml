@@ -29,6 +29,9 @@ importers:
       '@fastify/websocket':
         specifier: ^8.3.1
         version: 8.3.1
+      biance-vision-brooks:
+        specifier: workspace:*
+        version: link:../shared
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(postgres@3.4.9)
@@ -58,8 +61,17 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  shared:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+
   web:
     dependencies:
+      biance-vision-brooks:
+        specifier: workspace:*
+        version: link:../shared
       katex:
         specifier: ^0.18.9
         version: 0.18.9
