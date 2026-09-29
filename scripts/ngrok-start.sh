@@ -23,6 +23,12 @@ fi
 
 if pgrep -f "ngrok http" >/dev/null 2>&1; then
   echo "⚠ ngrok 已在运行：$(pgrep -f 'ngrok http' | tr '\n' ' ')"
+  # 本地管理 API 读实时公网地址（4040 被占时 ngrok 用 4041）
+  for api in 4040 4041; do
+    url=$(curl -s --max-time 3 "http://127.0.0.1:$api/api/tunnels" 2>/dev/null \
+      | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['tunnels'][0]['public_url'])" 2>/dev/null) && break
+  done
+  [ -n "${url:-}" ] && echo "🌐 公网地址：$url"
   exit 0
 fi
 

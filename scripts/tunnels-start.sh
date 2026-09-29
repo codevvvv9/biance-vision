@@ -22,7 +22,7 @@ fi
 
 echo "== otun（${OTUN_SUBDOMAIN:+固定子域名}）=="
 if pgrep -f "otun http" >/dev/null; then
-  echo "⚠ otun 已在运行"
+  echo "⚠ otun 已在运行，当前地址：$(grep -oE 'https://[a-z0-9-]+\.tunnel\.otun\.dev' /tmp/otun-bv.log 2>/dev/null | tail -1)"
 elif [ -n "$OTUN_SUBDOMAIN" ]; then
   nohup otun http "$PORT" -s "$OTUN_SUBDOMAIN" > /tmp/otun-bv.log 2>&1 &
 else
