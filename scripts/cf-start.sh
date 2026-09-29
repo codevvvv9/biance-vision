@@ -12,13 +12,13 @@ LOG=/tmp/cf-tunnel.log
 if pgrep -f "cloudflared tunnel" >/dev/null 2>&1; then
   # 免费临时隧道会被 Cloudflare 服务端回收：进程不退出但地址永久失效，
   # 日志特征 = 循环 "Unauthorized: Tunnel not found"。检测到即自动重启换新地址。
-  if tail -50 "$LOG" 2>/dev/null | grep -q "Tunnel not found"; then
+  if tail -50 "$LOG" 2>/dev/null | grep -aq "Tunnel not found"; then
     echo "⚠ 临时隧道已被服务端回收（地址失效），自动重启换新地址…"
     pkill -f "cloudflared tunnel" || true
     sleep 2
   else
     echo "⚠ cloudflared 已在运行：$(pgrep -f 'cloudflared tunnel' | tr '\n' ' ')"
-    grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" "$LOG" | tail -1
+    grep -aoE "https://[a-z0-9-]+\.trycloudflare\.com" "$LOG" | tail -1
     exit 0
   fi
 fi
