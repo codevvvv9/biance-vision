@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # 一键拉起全部隧道（本地 3200 -> 三条公网入口）
 # 用法：bash scripts/tunnels-start.sh
-# 固定子域/域名的值不入库（仓库是 public 的，入口地址按需保密）：
-#   首次使用请创建 scripts/tunnels.local.sh（已 gitignore）：
-#     export OTUN_SUBDOMAIN="你的固定子域"        # 留空 = otun 随机子域
-#     export NGROK_DOMAIN="xxx.ngrok-free.dev"    # 留空 = ngrok 随机域名
-#   或直接用环境变量传入。
+# 固定子域/域名的值不入库（仓库是 public 的，入口地址按需保密）。
+# 取值优先级：环境变量（一次性覆盖）> scripts/tunnels.local.sh（持久，已 gitignore）> 随机子域：
+#     OTUN_SUBDOMAIN=mynode bash scripts/tunnels-start.sh   # 本次用 mynode
+#     echo 'export OTUN_SUBDOMAIN="${OTUN_SUBDOMAIN:-mynode}"' >> scripts/tunnels.local.sh  # 持久
 # 各隧道独立脚本：ngrok-start.sh / cf-start.sh；otun 直接在此启动
 # 停止全部：pkill -f "otun http"; pkill -f "ngrok http"; pkill -f "cloudflared tunnel"
 
