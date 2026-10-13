@@ -20,7 +20,8 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY server/package.json server/
 COPY web/package.json web/
 COPY shared/package.json shared/
-RUN pnpm --filter biance-vision-server install --frozen-lockfile --prod
+# shared 的运行时依赖（zod 等）也要装：/app/shared/dist 内的 import 从 shared/node_modules 解析
+RUN pnpm --filter biance-vision-server --filter biance-vision-brooks install --frozen-lockfile --prod
 # shared 源码/编译器不进镜像，只带 dist（server 经 workspace 软链消费）
 COPY --from=build /app/shared/dist ./shared/dist
 COPY --from=build /app/server/dist ./server/dist

@@ -1,0 +1,809 @@
+/* ---------- 操作日志（仅超级管理员，会话聚合式） ---------- */
+.audit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.audit-toolbar select {
+  min-width: 150px;
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.audit-table thead th {
+  cursor: default;
+  text-align: left;
+}
+.audit-table tbody tr {
+  cursor: pointer;
+}
+.audit-table tbody tr.row-detail {
+  cursor: default;
+}
+.audit-table td {
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.audit-table td:first-child {
+  padding-left: 16px;
+}
+.audit-table tbody tr:hover:not(.row-detail) {
+  background: rgba(0, 229, 255, 0.045);
+}
+.audit-table .row-fail td {
+  background: color-mix(in srgb, var(--down) 5%, transparent);
+}
+.audit-table .row-open td {
+  background: rgba(0, 229, 255, 0.06);
+  box-shadow: inset 2.5px 0 0 var(--cyan);
+}
+.audit-table .row-detail td {
+  background: rgba(7, 11, 20, 0.6);
+  padding: 0;
+}
+.toggle-caret {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.sess-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.sess-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.sess-status.st-active {
+  color: var(--up);
+}
+.sess-status.st-active i {
+  background: var(--up);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--up) 80%, transparent);
+}
+.sess-status.st-ended {
+  color: var(--text-2);
+}
+.sess-status.st-ended i {
+  background: var(--text-3);
+}
+.sess-status.st-expired {
+  color: var(--text-3);
+}
+.sess-status.st-expired i {
+  background: var(--amber);
+  opacity: 0.6;
+}
+.act-tag {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.act-tag.is-fail {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+}
+.act-auth {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 8%, transparent);
+}
+.act-fail {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+}
+.act-rule {
+  color: var(--cyan);
+  border-color: rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.07);
+}
+.act-set {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+.audit-timeline {
+  padding: 10px 16px 12px;
+}
+.tl-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.tl-item.tl-fail .tl-detail {
+  color: var(--down);
+}
+.tl-time {
+  flex-shrink: 0;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.tl-detail {
+  color: var(--text-2);
+  white-space: normal;
+  word-break: break-all;
+}
+.audit-hint {
+  padding: 10px 16px;
+  margin: 0;
+}
+
+/* ---------- 管理页：用户列表 ---------- */
+.users-table .col-name {
+  font-size: 12.5px;
+}
+.role-tag {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.role-tag.role-super {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+
+/* ---------- AI 会话记录页（/admin/ai，仅超管） ---------- */
+.ai-stats-table tr {
+  cursor: pointer;
+}
+.ai-stats-table .col-profile {
+  font-size: 12px;
+}
+.ai-insight-conf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 6px 24px;
+  padding: 12px 16px;
+}
+.ai-insight-conf-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--line) 60%, transparent);
+}
+.ai-insight-conf-row > .dim {
+  flex-shrink: 0;
+}
+.ai-insight-conf-row > .mono {
+  text-align: right;
+  word-break: break-all;
+  color: var(--text);
+}
+.ai-insight-extra {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+}
+.ai-insight-extra pre {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-2);
+}
+.ai-memory-list {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-memory-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.ai-memory-item .role-tag {
+  flex-shrink: 0;
+}
+.mem-preference {
+  color: var(--cyan);
+  border-color: rgba(0, 229, 255, 0.35);
+  background: rgba(0, 229, 255, 0.07);
+}
+.mem-fact {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 8%, transparent);
+}
+.mem-interest {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+.mem-habit {
+  color: var(--purple);
+  border-color: rgba(167, 139, 250, 0.4);
+  background: rgba(167, 139, 250, 0.08);
+}
+.ai-memory-content {
+  flex: 1;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.ai-memory-time {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.ai-conv-table tr {
+  cursor: pointer;
+}
+.ai-conv-detail {
+  padding: 8px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+}
+.ai-msg.user {
+  border-color: color-mix(in srgb, var(--cyan) 30%, transparent);
+}
+.ai-msg.assistant {
+  border-color: color-mix(in srgb, var(--purple) 30%, transparent);
+}
+.ai-msg-role {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+.ai-msg.assistant .ai-msg-role {
+  color: var(--purple);
+}
+.ai-msg-time {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.ai-msg-content {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-insight-prompt {
+  margin: 10px 16px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+
+/* ============ 价格行为复盘页（/brooks） ============ */
+.brooks-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.brooks-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.brooks-symbol-form input {
+  width: 190px;
+}
+
+.brooks-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.brooks-toggle {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: rgba(20, 30, 52, 0.7);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.brooks-toggle:hover {
+  color: var(--text-1);
+  border-color: rgba(0, 229, 255, 0.35);
+}
+
+.brooks-toggle.on {
+  color: var(--on-accent);
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.9), rgba(35, 190, 255, 0.85));
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.brooks-note {
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.brooks-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .brooks-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.brooks-chart-hold {
+  position: relative;
+}
+
+.brooks-chart-wrap {
+  height: 580px;
+}
+
+@media (max-width: 900px) {
+  .brooks-chart-wrap {
+    height: 420px;
+  }
+}
+
+.brooks-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brooks-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 2px 4px;
+}
+
+.brooks-kv {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.brooks-kv .k {
+  flex: none;
+  width: 68px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.brooks-kv .v {
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.brooks-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  padding-left: 78px;
+}
+
+.brooks-chip {
+  display: inline-block;
+  min-width: 0;
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  border: 1px solid var(--line);
+  background: rgba(20, 30, 52, 0.6);
+  color: var(--text-1);
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.brooks-chip.dir-bull {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 10%, transparent);
+  font-weight: 700;
+}
+
+.brooks-chip.dir-bear {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+  font-weight: 700;
+}
+
+.brooks-chip.dir-neutral {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 35%, transparent);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+
+.brooks-chip.regime-spike_bull,
+.brooks-chip.regime-spike_bear {
+  font-weight: 700;
+}
+
+.brooks-chip.regime-spike_bull {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 45%, transparent);
+}
+
+.brooks-chip.regime-spike_bear {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 45%, transparent);
+}
+
+.brooks-chip.regime-channel_bull {
+  color: color-mix(in srgb, var(--up) 75%, var(--text-1));
+}
+
+.brooks-chip.regime-channel_bear {
+  color: color-mix(in srgb, var(--down) 75%, var(--text-1));
+}
+
+.brooks-chip.regime-tight_range,
+.brooks-chip.regime-barbwire {
+  color: color-mix(in srgb, var(--purple) 85%, white);
+  border-color: rgba(124, 92, 255, 0.4);
+}
+
+.brooks-signals-panel {
+  min-width: 0;
+}
+
+.brooks-filter {
+  display: flex;
+  gap: 4px;
+}
+
+.brooks-filter button {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.brooks-filter button.on {
+  color: var(--on-accent);
+  background: rgba(0, 229, 255, 0.85);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.brooks-signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding: 2px 4px 6px 2px;
+}
+
+.brooks-signal {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(16, 24, 42, 0.65);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.brooks-signal:hover {
+  transform: translateY(-1px);
+}
+
+.brooks-signal.bull:hover {
+  border-color: color-mix(in srgb, var(--up) 45%, transparent);
+}
+
+.brooks-signal.bear:hover {
+  border-color: color-mix(in srgb, var(--down) 45%, transparent);
+}
+
+.brooks-signal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brooks-sig-chip {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.brooks-sig-chip.bull {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 40%, transparent);
+  background: color-mix(in srgb, var(--up) 8%, transparent);
+}
+
+.brooks-sig-chip.bear {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 40%, transparent);
+  background: color-mix(in srgb, var(--down) 8%, transparent);
+}
+
+.brooks-sig-chip.neutral {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+
+.brooks-sig-chip.strength-high {
+  box-shadow: 0 0 0 1px currentColor inset;
+}
+
+.brooks-sig-chip.strength-low {
+  opacity: 0.75;
+}
+
+.brooks-signal-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brooks-signal-time {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.brooks-signal-reason {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+.brooks-signal-concept {
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+  border-left: 2px solid rgba(0, 229, 255, 0.3);
+  padding-left: 7px;
+}
+
+.brooks-signal-prior {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--amber) 72%, white);
+}
+
+.brooks-signal-ref {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.brooks-help h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--cyan);
+}
+
+.brooks-help ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+.brooks-help b {
+  color: var(--text-1);
+}
+
+.brooks-disclaimer {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
+  background: color-mix(in srgb, var(--amber) 7%, transparent);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--amber) 72%, white);
+  line-height: 1.7;
+}
+
+.brooks-chart-panel:fullscreen .brooks-chart-hold,
+.brooks-chart-panel:-webkit-fullscreen .brooks-chart-hold {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.brooks-chart-panel:fullscreen .brooks-chart-wrap,
+.brooks-chart-panel:-webkit-fullscreen .brooks-chart-wrap {
+  flex: 1;
+  height: auto;
+}
+
+/* ---- Brooks 术语「!」悬停提醒 ---- */
+/* .panel 默认 overflow:hidden 会裁掉绝对定位的术语气泡；摘要面板单独放开
+   （backdrop-filter 会让 position:fixed 也被困在面板内，只能放开裁剪） */
+.brooks-summary-panel {
+  overflow: visible;
+}
+.brooks-term {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted color-mix(in srgb, var(--amber) 55%, transparent);
+}
+
+.brooks-term .term-bang {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  margin-left: 4px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--on-accent);
+  background: linear-gradient(135deg, #ffc75a, #ff9f1c);
+  vertical-align: super;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 18%, transparent);
+}
+
+.brooks-term .term-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 60;
+  display: none;
+  width: max-content;
+  max-width: 248px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+  background: rgba(10, 16, 30, 0.97);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-2);
+  text-align: left;
+  pointer-events: none;
+}
+
+.brooks-term .term-pop b {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--amber) 72%, white);
+}
+
+.brooks-term .term-pop em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.brooks-term:hover .term-pop,
+.brooks-term:focus .term-pop,
+.brooks-term:focus-within .term-pop {
+  display: block;
+}
+
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+
+.admin-row input {
+  width: auto;
+  min-width: 180px;
+}
+
+.caps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.cap-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.cap-item label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.debug-result ul {
+  margin: 6px 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+
+.debug-result pre {
+  margin: 4px 0 10px;
+}
+

@@ -11,7 +11,7 @@ export interface AiStatus {
 interface AiContextValue {
   status: AiStatus
   refresh: () => Promise<void>
-  /** 机器人是否显示（配置完成且用户未右键隐藏） */
+  /** 悬浮助手入口是否显示（AI 已配置且用户未隐藏） */
   robotVisible: boolean
   showRobot: () => void
   hideRobot: () => void

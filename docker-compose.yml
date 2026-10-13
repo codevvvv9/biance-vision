@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    # pgvector 镜像 = postgres 17 + vector 扩展（知识库向量召回）；
+    # 已有 pgdata 卷可无缝换镜像，扩展由 0007 迁移的守卫式 DDL / init 脚本补建
+    image: pgvector/pgvector:pg17
     container_name: biance-vision-postgres
     restart: unless-stopped
     ports:
@@ -29,12 +31,86 @@ services:
     environment:
       TZ: Asia/Shanghai # 日志时间戳用北京时间（容器默认 UTC）
       DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
-    # JSON 镜像 + seed-users.json 放宿主机这份目录，容器重建数据不丢
+      RESEARCH_PY_URL: http://research-py:8100
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: biance_minio
+      MINIO_SECRET_KEY: biance_minio_secret
+      MINIO_BUCKET: biance-knowledge
+    # JSON 镜像 + seed-users.json + secrets.json 放宿主机这份目录，容器重建数据不丢
     volumes:
       - ./server/data:/app/server/data
     depends_on:
       postgres:
         condition: service_healthy
 
+  # 队列消费进程：行情采集/补洞 + 知识文档解析（与 app 同镜像不同入口）
+  worker:
+    image: biance-vision:latest
+    container_name: biance-vision-worker
+    restart: unless-stopped
+    command: ["node", "server/dist/worker.js"]
+    environment:
+      TZ: Asia/Shanghai
+      DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
+      RESEARCH_PY_URL: http://research-py:8100
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: biance_minio
+      MINIO_SECRET_KEY: biance_minio_secret
+      MINIO_BUCKET: biance-knowledge
+    volumes:
+      - ./server/data:/app/server/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started # 先让 app 跑迁移再消费（worker 自身 initDb 也会迁移，双保险）
+
+  # 对象存储：知识库原始文件/解析产物（BlobStore 接口；本地开发不设 MINIO_* 时自动落磁盘）
+  minio:
+    image: minio/minio:latest
+    container_name: biance-vision-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: biance_minio
+      MINIO_ROOT_PASSWORD: biance_minio_secret
+    ports:
+      - "127.0.0.1:9110:9000"   # S3 API（仅本机；910x 被 cy-report 占用）
+      - "127.0.0.1:9111:9001"   # 控制台
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 首启动建桶（幂等；跑一次即退出）
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 biance_minio biance_minio_secret &&
+      mc mb --ignore-existing local/biance-knowledge &&
+      echo bucket-ready"
+
+  # Python 研究服务：Docling 文档解析 + 分位 GBM 训练/推理（固定任务端点，无任意代码执行）
+  research-py:
+    build: ./research-py
+    image: biance-vision-research-py:latest
+    container_name: biance-vision-research-py
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8100:8100" # 仅本机调试用；容器间走内网名
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - research-models:/data/models
+
 volumes:
   pgdata:
+  research-models:
+  minio-data:

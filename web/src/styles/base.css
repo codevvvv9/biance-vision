@@ -1,0 +1,424 @@
+/* ============================================================
+   Biance Vision · 币安大盘监控终端
+   暗色科技风设计系统
+   ============================================================ */
+
+:root {
+  --bg-0: #04060c;
+  --bg-1: #070b14;
+  --bg-2: #0b1120;
+  --bg-3: #101a2e;
+  --line: #1a2438;
+  --line-2: #24304a;
+  --line-3: #33436b;
+
+  --text: #e8eefc;
+  --text-1: #c9d6ef;
+  --text-2: #8ea0c2;
+  --text-3: #5a6b8c;
+
+  --cyan: #00e5ff;
+  --cyan-soft: rgba(0, 229, 255, 0.12);
+  --up: #00d68f;
+  --down: #ff4d6a;
+  --amber: #f0b90b;
+  --purple: #a78bfa;
+  --blue: #4da3ff;
+  /* 置于 cyan/amber 渐变高亮上的深色文字 */
+  --on-accent: #06121f;
+
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+
+  --panel-bg: linear-gradient(180deg, rgba(18, 28, 50, 0.72), rgba(10, 16, 30, 0.86));
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+
+/* 红涨绿跌（A股配色习惯）：main.tsx 挂载前 / Header 切换时设置 <html data-up-color="red">
+   全站涨跌色均派生自 --up/--down（含 color-mix 透明度变体），翻转变量即整体切换 */
+:root[data-up-color='red'] {
+  --up: #ff4d6a;
+  --down: #00d68f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg-0);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.muted {
+  color: var(--text-3);
+}
+.dim {
+  color: var(--text-2);
+}
+.up {
+  color: var(--up);
+}
+.down {
+  color: var(--down);
+}
+/* 通用错误行内文本（表单/请求失败提示） */
+.err-text {
+  color: var(--down);
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--line-3);
+}
+
+/* ---------- 背景特效层 ---------- */
+.bg-fx {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 520px at 72% -12%, rgba(0, 229, 255, 0.075), transparent 65%),
+    radial-gradient(900px 600px at -10% 30%, rgba(124, 92, 255, 0.06), transparent 60%),
+    radial-gradient(700px 400px at 50% 115%, color-mix(in srgb, var(--up) 4.5%, transparent), transparent 60%),
+    var(--bg-0);
+}
+.bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(120, 160, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 160, 255, 0.035) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 100%);
+}
+.bg-glow {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  animation: drift 26s ease-in-out infinite alternate;
+}
+.glow-a {
+  top: -180px;
+  right: -120px;
+  background: rgba(0, 229, 255, 0.07);
+}
+.glow-b {
+  bottom: -220px;
+  left: -160px;
+  background: rgba(124, 92, 255, 0.06);
+  animation-delay: -13s;
+}
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-60px, 40px, 0) scale(1.12);
+  }
+}
+
+/* ---------- 顶栏 ---------- */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  height: 62px;
+  padding: 0 22px;
+  background: rgba(6, 10, 19, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-shrink: 0;
+}
+.brand-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  background: linear-gradient(90deg, #e8eefc, #7fd8ff 60%, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+}
+.brand-sub {
+  display: block;
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: 0.32em;
+  white-space: nowrap;
+}
+
+.nav {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  margin-left: 8px;
+}
+.nav a {
+  position: relative;
+  padding: 8px 16px;
+  white-space: nowrap;
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 13.5px;
+  border-radius: var(--radius-sm);
+  transition: color 0.18s, background 0.18s;
+}
+.nav a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.nav a.on {
+  color: var(--cyan);
+  background: var(--cyan-soft);
+}
+.nav a.on::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+.quick-quotes {
+  display: flex;
+  gap: 16px;
+}
+.quick-quote {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+}
+.quick-quote.muted {
+  color: var(--text-3);
+}
+.qq-sym {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.qq-price {
+  color: var(--text);
+}
+.qq-chg {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.qq-chg.up {
+  color: var(--up);
+}
+.qq-chg.down {
+  color: var(--down);
+}
+
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: rgba(10, 16, 30, 0.6);
+  white-space: nowrap;
+}
+.conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.conn.connected .conn-dot {
+  background: var(--up);
+  box-shadow: 0 0 8px var(--up);
+  animation: pulse 2s infinite;
+}
+.conn.connecting .conn-dot,
+.conn.offline .conn-dot {
+  background: var(--amber);
+  animation: pulse 0.9s infinite;
+}
+.conn-dot.live {
+  background: var(--down);
+  box-shadow: 0 0 8px var(--down);
+  animation: pulse 1.6s infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: rgba(10, 16, 30, 0.6);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--line-3);
+}
+.icon-btn.active {
+  color: var(--cyan);
+  border-color: rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.22) inset;
+}
+
+.clock {
+  font-size: 12.5px;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* ---------- 滚动行情条 ---------- */
+.tape {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(7, 11, 20, 0.66);
+  overflow: hidden;
+  position: relative;
+}
+.tape-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  height: 100%;
+  padding: 0 16px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--down);
+  border-right: 1px solid var(--line);
+  background: rgba(10, 16, 30, 0.6);
+}
+.tape-empty {
+  padding-left: 16px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.tape-track {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  width: max-content;
+  animation: tape 60s linear infinite;
+  padding-left: 12px;
+}
+.tape:hover .tape-track {
+  animation-play-state: paused;
+}
+@keyframes tape {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.tape-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 22px;
+  font-size: 12px;
+  white-space: nowrap;
+  border-right: 1px solid rgba(26, 36, 56, 0.5);
+}
+.ti-sym {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.ti-sym em {
+  font-style: normal;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.ti-chg {
+  font-size: 11.5px;
+}
+
+/* ---------- 布局 ---------- */
+.main {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 20px 22px 40px;
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+

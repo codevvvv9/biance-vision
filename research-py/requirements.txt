@@ -1,0 +1,12 @@
+# research-py pinned dependencies (direct deps only; resolved on Python 3.9,
+# all pins also have cp312 wheels for the python:3.12-slim Docker image).
+# docling（PDF/DOCX 解析）独立在 requirements-docling.txt：默认镜像不装
+# （解析层懒加载，PDF 显式 failed；TXT/MD/HTML 不受影响），
+# 需要 PDF 解析时 docker build --build-arg WITH_DOCLING=1。
+fastapi==0.128.8
+uvicorn==0.39.0
+pydantic==2.13.5
+scikit-learn==1.6.1
+joblib==1.5.3
+numpy==2.0.2
+httpx==0.28.1

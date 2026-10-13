@@ -1,0 +1,6 @@
+/* 样式入口：按职责拆分，顺序即级联顺序（后者覆盖前者） */
+@import './base.css';
+@import './components.css';
+@import './pages.css';
+@import './ai.css';
+@import './research.css';
