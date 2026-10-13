@@ -1,0 +1,22 @@
+# 境外 VPS（腾讯/阿里香港轻量、Vultr/DO、Hetzner 等）部署覆盖层，
+# 与根 docker-compose.yml 叠加使用：
+#   BV_VERSION=v0.2.1 docker compose -f docker-compose.yml -f deploy/vps/compose.override.yml up -d
+# - 镜像来自 tag 触发的 GHCR（.github/workflows/release.yml；先本地过 pnpm release:gate 再打 tag）
+# - 需 Docker Compose v2.24+（!reset/!override 语法）；BV_VERSION 缺省 latest
+# - 内容与 deploy/oracle/compose.override.yml 保持一致，两份同步修改
+services:
+  app:
+    # 去掉本地构建，改用发版镜像
+    build: !reset null
+    image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
+  worker:
+    image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
+  research-py:
+    build: !reset null
+    image: ghcr.io/codevvvv9/biance-vision-research-py:${BV_VERSION:-latest}
+  postgres:
+    ports: !override
+      # 公网服务器只绑回环（根文件 0.0.0.0 暴露 + 弱口令仅适合本机开发；
+      # 服务器上仅供本机 pg_dump/调试用，外部访问一律走 app 的 3200）。
+      # ports 列表默认追加合并，必须 !override 整体替换才能去掉 0.0.0.0 映射
+      - "127.0.0.1:5434:5432"
