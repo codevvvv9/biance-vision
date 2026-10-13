@@ -20,7 +20,7 @@
     "brooks:selftest": "tsx scripts/brooks-selftest.ts",
     "market:smoke": "tsx scripts/market-ingest-smoke.ts",
     "build": "pnpm --filter biance-vision-brooks run build && pnpm --filter biance-vision-server run build && pnpm --filter biance-vision-web run build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --filter biance-vision-brooks run build && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "typecheck": "pnpm --filter biance-vision-brooks run build && tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "start": "pnpm --filter biance-vision-server run start",
     "brooks:causality": "tsx scripts/causality-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
