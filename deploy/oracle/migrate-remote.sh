@@ -14,7 +14,7 @@ $COMPOSE stop app worker research-py minio || true
 tar xzf /tmp/server-data.tgz -C server
 
 echo '[2/3] 恢复 minio-data 卷'
-docker run --rm -v biance-vision_minio-data:/data -v /tmp:/in alpine \
+docker run --rm -v biance-vision_minio-data:/data -v /tmp:/in biance-vision:latest \
   sh -c 'rm -rf /data/* && tar xzf /in/minio-data.tgz -C /data'
 
 echo '[3/3] 恢复 PostgreSQL（重建空库 → --role=biance_app 恢复属主）'
