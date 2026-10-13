@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-08",
+  "entries": [
+    {
+      "id": "brooks-glossary",
+      "url": "https://www.brookstradingcourse.com/price-action-trading-terms-glossary/",
+      "type": "official_glossary",
+      "title": "Brooks 价格行为术语表",
+      "topics": ["术语", "定义", "H/L计数"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "术语归一与同义词表的主要依据；EMA20 等用法出处。"
+    },
+    {
+      "id": "brooks-abbreviations",
+      "url": "https://www.brookstradingcourse.com/brooks-price-action-abbreviations/",
+      "type": "official_glossary",
+      "title": "Brooks 价格行为缩写表",
+      "topics": ["术语", "缩写", "H/L计数"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "H2/L2、ii/ioi、MTR 等短词精确词项的来源。"
+    },
+    {
+      "id": "brooks-books-page",
+      "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
+      "type": "official_doc",
+      "title": "Brooks 书籍与图表下载页",
+      "topics": ["书籍", "图表", "样章"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "仅导入公开页面与官方免费样章/图表；书籍本体需购买，见 book-* 条目。"
+    },
+    {
+      "id": "brooks-course-catalog",
+      "url": "https://www.brookstradingcourse.com/trade-price-action/",
+      "type": "course",
+      "title": "Brooks 价格行为课程目录",
+      "topics": ["课程", "教学", "目录"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "仅目录页公开；课程视频为会员内容，不抓取。"
+    },
+    {
+      "id": "brooks-trading-manual",
+      "url": "https://www.brookstradingcourse.com/how-to-trade-price-action-manual/",
+      "type": "official_doc",
+      "title": "How to Trade Price Action 手册及公开章节",
+      "topics": ["交易手册", "规则", "公开章节"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "仅公开章节可 URL 导入；完整手册需购买，仅用户上传有使用权文件。"
+    },
+    {
+      "id": "brooks-ask-al",
+      "url": "https://www.brookstradingcourse.com/blog/ask-al/",
+      "type": "faq",
+      "title": "Ask Al 问答专栏",
+      "topics": ["问答", "答疑", "实战"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "Al Brooks 公开答疑文章列表。"
+    },
+    {
+      "id": "brooks-encyclopedia-sampler",
+      "url": "https://www.brookstradingcourse.com/price-action/brooks-encyclopedia-chart-patterns-sampler/",
+      "type": "sample",
+      "title": "Brooks 图形百科样例",
+      "topics": ["图形百科", "形态", "样例"],
+      "access": "public",
+      "sourceTier": "official",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "Encyclopedia of Chart Patterns 公开样例；完整百科为会员内容，不抓取。"
+    },
+    {
+      "id": "wiley-glossary-pdf",
+      "url": "https://onlinelibrary.wiley.com/doi/pdf/10.1002/9781119203117.gloss",
+      "type": "official_glossary",
+      "title": "Wiley 书内词汇表 PDF",
+      "topics": ["术语", "定义", "书籍词汇表"],
+      "access": "public",
+      "sourceTier": "official_derivative",
+      "importMethod": "url_fetch",
+      "enabled": true,
+      "notes": "出版社官方 PDF，术语权威出处之一；若链接失效或转为受限，改为用户上传。"
+    },
+    {
+      "id": "brooks-community-forum",
+      "url": "https://www.brookspriceaction.com",
+      "type": "community_forum",
+      "title": "Brooks 社区论坛",
+      "topics": ["社区讨论", "经验统计", "溯源参考"],
+      "access": "public",
+      "sourceTier": "community",
+      "importMethod": "url_fetch",
+      "enabled": false,
+      "notes": "默认不入库，仅作调研溯源参考；确需引用时单条 URL 导入并人工审核。"
+    },
+    {
+      "id": "book-tpa-trends",
+      "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
+      "type": "book",
+      "title": "Trading Price Action: Trends",
+      "topics": ["价格行为", "趋势", "三部曲"],
+      "access": "purchase",
+      "sourceTier": "official",
+      "importMethod": "user_upload",
+      "enabled": false,
+      "notes": "商业书籍：仅用户上传有使用权的文件导入，URL 导入不绕过访问限制；启用前确认使用权，入库保留页码/图号。"
+    },
+    {
+      "id": "book-tpa-trading-ranges",
+      "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
+      "type": "book",
+      "title": "Trading Price Action: Trading Ranges",
+      "topics": ["价格行为", "交易区间", "三部曲"],
+      "access": "purchase",
+      "sourceTier": "official",
+      "importMethod": "user_upload",
+      "enabled": false,
+      "notes": "商业书籍：仅用户上传有使用权的文件导入，URL 导入不绕过访问限制；启用前确认使用权，入库保留页码/图号。"
+    },
+    {
+      "id": "book-tpa-reversals",
+      "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
+      "type": "book",
+      "title": "Trading Price Action: Reversals",
+      "topics": ["价格行为", "反转", "三部曲"],
+      "access": "purchase",
+      "sourceTier": "official",
+      "importMethod": "user_upload",
+      "enabled": false,
+      "notes": "商业书籍：仅用户上传有使用权的文件导入，URL 导入不绕过访问限制；启用前确认使用权，入库保留页码/图号。"
+    },
+    {
+      "id": "book-reading-price-charts",
+      "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
+      "type": "book",
+      "title": "Reading Price Charts Bar by Bar",
+      "topics": ["价格行为", "逐根K线", "独立著作"],
+      "access": "purchase",
+      "sourceTier": "official",
+      "importMethod": "user_upload",
+      "enabled": false,
+      "notes": "三部曲之前的独立著作，单独归档；商业书籍：仅用户上传有使用权的文件导入，启用前确认使用权，入库保留页码/图号。"
+    }
+  ]
+}

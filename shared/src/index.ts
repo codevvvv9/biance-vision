@@ -7,6 +7,7 @@
  */
 
 export type {
+  AlwaysIn,
   BarFeature,
   BrooksAnalysis,
   BrooksCandle,
@@ -19,11 +20,13 @@ export type {
   RegimeType,
   RegimeSegment,
   SignalKind,
+  StructureEvent,
+  StructureEventKind,
   SwingKind,
   SwingLabel,
   SwingPoint,
-  AlwaysIn,
 } from './types.js'
+export { ENGINE_VERSION } from './version.js'
 export { computeBarFeatures, ema, atr, TREND_BAR_RATIO, DOJI_RATIO } from './bars.js'
 export {
   findSwings,
@@ -34,6 +37,12 @@ export {
   swingSequenceText,
   trendStructureText,
 } from './swings.js'
-export { computeRegime, computeAlwaysIn, REGIME_TEXT } from './regime.js'
+export { computeRegime, computeAlwaysIn, regimeChangeEvents, REGIME_TEXT } from './regime.js'
+export type { RegimeChange, RegimeResult } from './regime.js'
 export { detectSignals } from './signals.js'
+export type { SignalInput, SignalOutput } from './signals.js'
 export { analyzeBrooks, DEFAULT_OPTIONS } from './analyze.js'
+
+// ── 行情与 API 契约（zod；server 与 web 同源引用） ──
+export * from './market.js'
+export * from './contract/index.js'

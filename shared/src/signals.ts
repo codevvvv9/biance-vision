@@ -1,19 +1,37 @@
 /**
  * 信号规则层：把 Brooks 三部曲的结构规则翻译成确定性代码。
- * 每条信号 = 结构规则触发 + 量化 reason + 概念 concept（出处）+ 概率先验 prior。
+ * 每条信号 = 结构规则触发 + 量化 reason + 概念 concept（出处）+ 经验统计备注 empiricalNote。
  * 全部信号只做「结构标注 / 研究提示」，不含行情预测。
  *
+ * 口径纪律：
+ * - empiricalNote 引用的是 Brooks 在其美股股指期货市场的经验统计，仅用于理解体系；
+ *   它不是本工具对任何币种/周期的预测胜率，不参与判定逻辑（预测概率唯一来自统计模块）。
+ * - strength 是规则匹配强度（结构证据完整度），不是置信度，更不是未来事件概率。
+ *
+ * 生命周期：setup（形态登记）与失效/过期通过 StructureEvent 表达；BrooksSignal 本身
+ * 只在触发时产生（status: 'triggered'），knownAtIndex = 触发 bar（输入全部已确认）。
+ *
  * 规则出处速查：
- * - H1/H2/H3、L1~L4：《价格行为交易》回调计数，H2/L2 为 Brooks 体系中胜率最高的二次进场（≈60%）
+ * - H1/H2/H3、L1~L4：《价格行为交易》回调计数，H2/L2 为 Brooks 体系中最常用的二次进场
  * - Wedge 三推反转：《高级反转技术分析》，任意三推形态都当楔形交易
  * - Double top/bottom：两摆动高点近似等高 + 明显回落（容差 0.3×ATR，间隔 ≥3 根）
  * - ii/外包线：突破模式（ii 为日内最可靠突破形态之一，外包线后常跟 H2/L2）
  * - TLB/MTR：趋势线突破 → 测试 → 反转信号（《高级反转技术分析》主要趋势反转序列）
- * - 区间突破：80% 的交易区间突破尝试失败，首次突破仅约 50% 存活 → 只作研究关注
+ * - 区间突破：Brooks 经验统计中区间突破尝试大多失败 → 只作研究关注
  */
 
-import type { BarFeature, BrooksSignal, Direction, Leg, RegimeType, SwingPoint, BrooksCandle } from './types.js'
+import type {
+  BarFeature,
+  BrooksCandle,
+  BrooksSignal,
+  Direction,
+  Leg,
+  RegimeType,
+  StructureEvent,
+  SwingPoint,
+} from './types.js'
 import { maxHighBetween, minLowBetween } from './swings.js'
+import { ENGINE_VERSION } from './version.js'
 
 export interface SignalInput {
   bars: BrooksCandle[]
@@ -23,6 +41,11 @@ export interface SignalInput {
   swings: SwingPoint[]
   legs: Leg[]
   regime: RegimeType[]
+}
+
+export interface SignalOutput {
+  signals: BrooksSignal[]
+  events: StructureEvent[]
 }
 
 function fmt(v: number): string {
@@ -37,30 +60,30 @@ function fmt(v: number): string {
 // H1~H4 / L1~L4 回调计数状态机（Brooks 核心信号）
 // ---------------------------------------------------------------------------
 
-const HL_TITLES: Record<number, { h: string; l: string; prior: string }> = {
+const HL_TITLES: Record<number, { h: string; l: string; note: string }> = {
   1: {
     h: 'H1 · 多头第一次进场尝试',
     l: 'L1 · 空头第一次进场尝试',
-    prior: '首次尝试成功率较低（趋势惯性强，80% 的反转尝试只是回调）',
+    note: 'Brooks 经验统计：趋势中首次反转尝试大多只是回调（美股股指期货口径，非本品种验证结论）',
   },
   2: {
-    h: 'H2 · 多头二次进场（高胜率结构）',
-    l: 'L2 · 空头二次进场（高胜率结构）',
-    prior: 'Brooks 体系中二次进场胜率先验 ≈60%（趋势中的顺势回调二买/二卖）',
+    h: 'H2 · 多头二次进场',
+    l: 'L2 · 空头二次进场',
+    note: 'H2/L2 是 Brooks 体系中最常用的顺势回调二次进场（其美股股指期货经验统计约 60%，非本品种验证胜率）',
   },
   3: {
     h: 'H3 · 多头第三次进场尝试',
     l: 'L3 · 空头第三次进场尝试',
-    prior: '计数越高动能越弱；趋势惯性强时仍可顺势，但失败率上升',
+    note: '计数越高动能越弱；趋势惯性强时仍可顺势，但失败率上升（经验描述）',
   },
   4: {
     h: 'H4 · 多头第四次进场尝试（警惕趋势衰竭）',
     l: 'L4 · 空头第四次进场尝试（警惕趋势衰竭）',
-    prior: 'H4/L4 常出现在趋势末期或震荡中，Brooks 建议降低预期',
+    note: 'H4/L4 常出现在趋势末期或震荡中，Brooks 建议降低预期（经验描述）',
   },
 }
 
-function detectHL(input: SignalInput, signals: BrooksSignal[]): void {
+function detectHL(input: SignalInput, signals: BrooksSignal[], events: StructureEvent[]): void {
   const { bars, features, ema20, regime } = input
   const n = bars.length
 
@@ -74,7 +97,6 @@ function detectHL(input: SignalInput, signals: BrooksSignal[]): void {
 
     for (let i = 1; i < n; i++) {
       const b = bars[i]
-      const f = features[i]
       const gate = side === 'bull' ? b.close > ema20[i] : b.close < ema20[i]
       if (!gate) {
         gated = false
@@ -102,6 +124,19 @@ function detectHL(input: SignalInput, signals: BrooksSignal[]): void {
         if (!inPullback && b.high < bars[i - 1].high) {
           inPullback = true
           pullbackExtreme = b.low
+          // setup：多头回调开始（H/L 计数上下文成立，等待上破触发）
+          events.push({
+            kind: 'setup',
+            ruleId: 'hl_count',
+            ruleVersion: ENGINE_VERSION,
+            direction: 'bull',
+            atIndex: i,
+            atTime: b.time,
+            knownAtIndex: i,
+            knownAtTime: b.time,
+            barIndices: [i],
+            note: `多头回调开始（第 ${i + 1} 根高点低于前一根），进入 H/L 计数上下文`,
+          })
         } else if (inPullback) {
           pullbackExtreme = Math.min(pullbackExtreme, b.low)
           if (b.high > bars[i - 1].high) {
@@ -120,9 +155,11 @@ function detectHL(input: SignalInput, signals: BrooksSignal[]): void {
                 title: t.h,
                 reason: `第 ${i + 1} 根K线高点 ${fmt(b.high)} 上穿前一根高点，为本轮多头回调的第 ${count} 次进场尝试；回调低点 ${fmt(stop)}，趋势极值 ${fmt(extreme)}`,
                 concept: '《价格行为交易》：多头腿中突破前一根K线高点 = H1；失败后的第二次尝试 = H2（二次进场）',
-                prior: t.prior,
+                empiricalNote: t.note,
                 strength: count === 2 ? 'high' : count <= 3 ? 'medium' : 'low',
                 ref: { entry, stop, target },
+                knownAtIndex: i,
+                status: 'triggered',
               })
             }
             inPullback = false
@@ -132,6 +169,18 @@ function detectHL(input: SignalInput, signals: BrooksSignal[]): void {
         if (!inPullback && b.low > bars[i - 1].low) {
           inPullback = true
           pullbackExtreme = b.high
+          events.push({
+            kind: 'setup',
+            ruleId: 'hl_count',
+            ruleVersion: ENGINE_VERSION,
+            direction: 'bear',
+            atIndex: i,
+            atTime: b.time,
+            knownAtIndex: i,
+            knownAtTime: b.time,
+            barIndices: [i],
+            note: `空头回调开始（第 ${i + 1} 根低点高于前一根），进入 L 计数上下文`,
+          })
         } else if (inPullback) {
           pullbackExtreme = Math.max(pullbackExtreme, b.high)
           if (b.low < bars[i - 1].low) {
@@ -150,9 +199,11 @@ function detectHL(input: SignalInput, signals: BrooksSignal[]): void {
                 title: t.l,
                 reason: `第 ${i + 1} 根K线低点 ${fmt(b.low)} 跌破前一根低点，为本轮空头回调的第 ${count} 次进场尝试；回调高点 ${fmt(stop)}，趋势极值 ${fmt(extreme)}`,
                 concept: '《价格行为交易》：空头腿中跌破前一根K线低点 = L1；失败后的第二次尝试 = L2（二次进场）',
-                prior: t.prior,
+                empiricalNote: t.note,
                 strength: count === 2 ? 'high' : count <= 3 ? 'medium' : 'low',
                 ref: { entry, stop, target },
+                knownAtIndex: i,
+                status: 'triggered',
               })
             }
             inPullback = false
@@ -199,9 +250,11 @@ function detectSpikes(input: SignalInput, signals: BrooksSignal[]): void {
         title: bull ? '多头冲刺启动（Spike）' : '空头冲刺启动（Spike）',
         reason: `连续 5 根同向趋势棒（实体占比 ≥55%），累计幅度 ${fmt(runHigh - runLow)} ≈ ${((runHigh - runLow) / a).toFixed(1)}×ATR`,
         concept: '《高级趋势技术分析》spike and channel：冲刺腿是趋势最强阶段，回调通常止于通道起点',
-        prior: '冲刺后进入通道的概率高；首次逆冲刺交易 80% 会失败',
+        empiricalNote: 'Brooks 经验统计：冲刺后进入通道的概率高；逆冲刺的首次交易大多失败（美股股指期货口径）',
         strength: 'high',
         ref: { entry: bull ? bars[i].high : bars[i].low, stop: bull ? runLow : runHigh },
+        knownAtIndex: i,
+        status: 'triggered',
       })
     }
   }
@@ -245,9 +298,11 @@ function detectWedges(input: SignalInput, signals: BrooksSignal[]): void {
       title: `三推楔形顶（第3推 ${fmt(h3.price)}）${fading ? '· 动能衰减' : ''}`,
       reason: `三个摆动高点依次抬升 ${fmt(h1.price)} → ${fmt(h2.price)} → ${fmt(h3.price)}（跨度 ${span} 根）；第三推幅度 ${fmt(push2)}${fading ? ` 小于第一推 ${fmt(push1)}（动能递减）` : ''}`,
       concept: '《高级反转技术分析》：任意三推形态都当楔形交易；第三推常由微型趋势通道线延伸产生，反转目标为楔形起点',
-      prior: '楔形反转后常见两腿回调；测量目标 = 楔形全幅回到起点',
+      empiricalNote: 'Brooks 经验统计：楔形反转后常见两腿回调；测量目标 = 楔形全幅回到起点（形态学目标，非胜率）',
       strength: fading ? 'high' : 'medium',
       ref: { entry: h3.price, stop: h3.price + 0.5 * atr, target: h3.price - (h3.price - h1.price) },
+      knownAtIndex: h3.confirmIndex,
+      status: 'triggered',
     })
   }
 
@@ -280,9 +335,11 @@ function detectWedges(input: SignalInput, signals: BrooksSignal[]): void {
       title: `三推楔形底（第3推 ${fmt(l3.price)}）${fading ? '· 动能衰减' : ''}`,
       reason: `三个摆动低点依次下移 ${fmt(l1.price)} → ${fmt(l2.price)} → ${fmt(l3.price)}（跨度 ${span} 根）；第三推幅度 ${fmt(push2)}${fading ? ` 小于第一推 ${fmt(push1)}（动能递减）` : ''}`,
       concept: '《高级反转技术分析》：下跌三推衰竭后的楔形底，是空头趋势转多的经典反转结构',
-      prior: '楔形底反转后常见两腿上涨；测量目标 = 楔形全幅回到起点',
+      empiricalNote: 'Brooks 经验统计：楔形底反转后常见两腿上涨；测量目标 = 楔形全幅回到起点（形态学目标，非胜率）',
       strength: fading ? 'high' : 'medium',
       ref: { entry: l3.price, stop: l3.price - 0.5 * atr, target: l3.price + (l1.price - l3.price) },
+      knownAtIndex: l3.confirmIndex,
+      status: 'triggered',
     })
   }
 }
@@ -315,9 +372,11 @@ function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
       title: `双顶 ${fmt(h2.price)}`,
       reason: `两个摆动高点近似等高（${fmt(h1.price)} / ${fmt(h2.price)}，差 ${fmt(Math.abs(h1.price - h2.price))} ≤ 0.3×ATR），中间回落至 ${fmt(dip)}`,
       concept: '《高级反转技术分析》双顶：第二高点测试前高失败（1 tick 更高也算），跌破颈线（中间低点）确认',
-      prior: '双顶跌破颈线后的测量目标 = 双顶高度自颈线下投',
+      empiricalNote: '形态学测量目标 = 双顶高度自颈线下投（目标位约定，非胜率）',
       strength: 'medium',
       ref: { entry: h2.price, stop: h2.price + 0.5 * a, target: dip - (Math.max(h1.price, h2.price) - dip) },
+      knownAtIndex: h2.confirmIndex,
+      status: 'triggered',
     })
   }
 
@@ -340,9 +399,11 @@ function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
       title: `双底 ${fmt(l2.price)}`,
       reason: `两个摆动低点近似等低（${fmt(l1.price)} / ${fmt(l2.price)}，差 ${fmt(Math.abs(l1.price - l2.price))} ≤ 0.3×ATR），中间反弹至 ${fmt(bump)}`,
       concept: '《高级反转技术分析》双底：第二低点测试前低失败，收破中间高点（颈线）确认反转',
-      prior: '双底收破颈线后的测量目标 = 双底高度自颈线上投',
+      empiricalNote: '形态学测量目标 = 双底高度自颈线上投（目标位约定，非胜率）',
       strength: 'medium',
       ref: { entry: l2.price, stop: l2.price - 0.5 * a, target: bump + (bump - Math.min(l1.price, l2.price)) },
+      knownAtIndex: l2.confirmIndex,
+      status: 'triggered',
     })
   }
 }
@@ -351,7 +412,7 @@ function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
 // ii 突破 + 外包线反转（突破模式）
 // ---------------------------------------------------------------------------
 
-function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): void {
+function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], events: StructureEvent[]): void {
   const { bars, features } = input
   interface Pending {
     high: number
@@ -367,7 +428,23 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): vo
 
     // 先当触发器：检查挂起的 ii 形态是否被收盘突破（5 根内，先到先得）
     for (const p of pending) {
-      if (p.done || i - p.bornIndex > 5) continue
+      if (p.done) continue
+      if (i - p.bornIndex > 5) {
+        // 失效事件：5 根内未突破，形态过期（setup 与失效分离）
+        p.done = true
+        events.push({
+          kind: 'expiry',
+          ruleId: 'ii_breakout',
+          ruleVersion: ENGINE_VERSION,
+          atIndex: i,
+          atTime: b.time,
+          knownAtIndex: i,
+          knownAtTime: b.time,
+          barIndices: [p.bornIndex - 1, p.bornIndex, i],
+          note: `ii 形态（第 ${p.bornIndex + 1} 根登记）5 根内未被收盘突破，形态失效`,
+        })
+        continue
+      }
       if (b.close > p.high) {
         p.done = true
         signals.push({
@@ -379,9 +456,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): vo
           title: 'ii 形态向上突破',
           reason: `第 ${p.bornIndex + 1} 根出现连续内包（ii）后，第 ${i + 1} 根收盘 ${fmt(b.close)} 上破形态高点 ${fmt(p.high)}`,
           concept: '《价格行为交易》：ii = 连续两根内包线，突破模式；ii 突破属日内最可靠的突破形态之一',
-          prior: 'ii 突破沿突破方向延续的概率显著高于单根内包线',
+          empiricalNote: 'Brooks 经验描述：ii 突破沿突破方向延续的概率显著高于单根内包线（定性描述，非数值胜率）',
           strength: 'medium',
           ref: { entry: b.high, stop: p.low },
+          knownAtIndex: i,
+          status: 'triggered',
         })
       } else if (b.close < p.low) {
         p.done = true
@@ -394,9 +473,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): vo
           title: 'ii 形态向下突破',
           reason: `第 ${p.bornIndex + 1} 根出现连续内包（ii）后，第 ${i + 1} 根收盘 ${fmt(b.close)} 跌破形态低点 ${fmt(p.low)}`,
           concept: '《价格行为交易》：ii = 连续两根内包线，突破模式；向下突破常引发空头趋势腿',
-          prior: 'ii 突破沿突破方向延续的概率显著高于单根内包线',
+          empiricalNote: 'Brooks 经验描述：ii 突破沿突破方向延续的概率显著高于单根内包线（定性描述，非数值胜率）',
           strength: 'medium',
           ref: { entry: b.low, stop: p.high },
+          knownAtIndex: i,
+          status: 'triggered',
         })
       }
     }
@@ -408,6 +489,18 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): vo
         low: Math.min(b.low, bars[i - 1].low),
         bornIndex: i,
         done: false,
+      })
+      // setup：ii 形态登记（已知，等待触发或过期）
+      events.push({
+        kind: 'setup',
+        ruleId: 'ii_breakout',
+        ruleVersion: ENGINE_VERSION,
+        atIndex: i,
+        atTime: b.time,
+        knownAtIndex: i,
+        knownAtTime: b.time,
+        barIndices: [i - 1, i],
+        note: `ii 形态登记（第 ${i}、${i + 1} 根连续内包），等待 5 根内收盘突破 ${fmt(Math.max(b.high, bars[i - 1].high))} / ${fmt(Math.min(b.low, bars[i - 1].low))}`,
       })
     }
 
@@ -424,9 +517,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): vo
           title: '外包线多头反转跟随',
           reason: `第 ${i + 1} 根外包线吞没前一根后，下一根收盘 ${fmt(nx.close)} 站上外包线高点 ${fmt(b.high)}`,
           concept: '《价格行为交易》：外包线（outside bar）之后常出现二次突破（H2/L2），多头跟随确认',
-          prior: '外包线后的反向突破可靠性中等，常演变为两段式行情',
+          empiricalNote: 'Brooks 经验描述：外包线后的反向突破可靠性中等，常演变为两段式行情（定性描述）',
           strength: 'low',
           ref: { entry: nx.high, stop: b.low },
+          knownAtIndex: i + 1,
+          status: 'triggered',
         })
       } else if (nx.close < b.low) {
         signals.push({
@@ -438,9 +533,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[]): vo
           title: '外包线空头反转跟随',
           reason: `第 ${i + 1} 根外包线吞没前一根后，下一根收盘 ${fmt(nx.close)} 跌破外包线低点 ${fmt(b.low)}`,
           concept: '《价格行为交易》：外包线（outside bar）之后常出现二次突破（H2/L2），空头跟随确认',
-          prior: '外包线后的反向突破可靠性中等，常演变为两段式行情',
+          empiricalNote: 'Brooks 经验描述：外包线后的反向突破可靠性中等，常演变为两段式行情（定性描述）',
           strength: 'low',
           ref: { entry: nx.low, stop: b.high },
+          knownAtIndex: i + 1,
+          status: 'triggered',
         })
       }
     }
@@ -527,9 +624,11 @@ function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): voi
             label: side === 'bull' ? '破线↓' : '破线↑',
             title: side === 'bull' ? '多头趋势线被收盘跌穿（警戒）' : '空头趋势线被收盘上穿（警戒）',
             reason: `连接摆动${kind === 'low' ? '低点' : '高点'} ${fmt(p1.price)}(第${p1.index + 1}根) 与 ${fmt(p2.price)}(第${p2.index+1}根) 的趋势线，在第 ${i + 1} 根被收盘穿越（线值 ${fmt(lv)}，收盘 ${fmt(bars[i].close)}）`,
-            concept: '《高级反转技术分析》：趋势线突破是趋势减弱的第一个信号，但 50% 情况趋势会恢复——需要「测试 + 反转信号」确认',
-            prior: '趋势线被突破后：约 50% 最终反转、50% 恢复原趋势',
+            concept: '《高级反转技术分析》：趋势线突破是趋势减弱的第一个信号，但需要「测试 + 反转信号」确认',
+            empiricalNote: 'Brooks 经验统计：趋势线被突破后约半数最终反转、半数恢复原趋势（美股股指期货口径，只作警戒）',
             strength: 'low',
+            knownAtIndex: i,
+            status: 'triggered',
           })
         }
       } else if (!mtrDone && i - brokenIndex <= 20 && i >= 1) {
@@ -559,8 +658,10 @@ function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): voi
             title: side === 'bull' ? '主要趋势反转（多头 → 空头）' : '主要趋势反转（空头 → 多头）',
             reason: `第 ${brokenIndex + 1} 根趋势线破位${testSeen ? '、出现回测' : ''}后，第 ${i + 1} 根${originBreak ? `收盘 ${fmt(bars[i].close)} 击穿趋势线起点摆动${kind === 'low' ? '低' : '高'}点` : '以强反转趋势棒收盘确认'}，MTR 序列完成`,
             concept: '《高级反转技术分析》MTR：趋势线突破 → 测试 → 反转信号（HL/LH），三者齐备才是主要趋势反转',
-            prior: 'MTR 成立后市场约 80% 至少演变为区间，反向两腿是最低预期',
+            empiricalNote: 'Brooks 经验统计：MTR 成立后市场大多至少演变为区间，反向两腿是最低预期（美股股指期货口径）',
             strength: 'high',
+            knownAtIndex: i,
+            status: 'triggered',
           })
         }
       }
@@ -569,7 +670,7 @@ function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): voi
 }
 
 // ---------------------------------------------------------------------------
-// 交易区间突破（研究关注，80% 失败先验）
+// 交易区间突破（研究关注；Brooks 经验统计中大多失败）
 // ---------------------------------------------------------------------------
 
 function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments: { from: number; to: number; type: RegimeType }[]): void {
@@ -597,9 +698,11 @@ function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments
           title: '交易区间向上突破',
           reason: `第 ${seg.from + 1}~${seg.to + 1} 根构成 ${len} 根交易区间（${fmt(lo)}~${fmt(hi)}），第 ${j + 1} 根以趋势棒收盘 ${fmt(bars[j].close)} 上破区间高点`,
           concept: '《高级区间技术分析》：区间突破需强趋势棒确认；突破后回测区间顶（突破测试）是低风险二次进场',
-          prior: '80% 的区间突破尝试失败；首次突破仅约 50% 存活——本信号仅作结构研究',
+          empiricalNote: 'Brooks 经验统计：区间突破尝试大多失败、首次突破约半数存活（美股股指期货口径）——本信号仅作结构研究',
           strength: 'medium',
           ref: { entry: bars[j].high, stop: hi, target: hi + (hi - lo) },
+          knownAtIndex: j,
+          status: 'triggered',
         })
       } else if (bars[j].close < lo && features[j].isTrendBar) {
         fired = true
@@ -612,9 +715,11 @@ function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments
           title: '交易区间向下突破',
           reason: `第 ${seg.from + 1}~${seg.to + 1} 根构成 ${len} 根交易区间（${fmt(lo)}~${fmt(hi)}），第 ${j + 1} 根以趋势棒收盘 ${fmt(bars[j].close)} 跌破区间低点`,
           concept: '《高级区间技术分析》：区间突破需强趋势棒确认；突破后回测区间底（突破测试）是低风险二次进场',
-          prior: '80% 的区间突破尝试失败；首次突破仅约 50% 存活——本信号仅作结构研究',
+          empiricalNote: 'Brooks 经验统计：区间突破尝试大多失败、首次突破约半数存活（美股股指期货口径）——本信号仅作结构研究',
           strength: 'medium',
           ref: { entry: bars[j].low, stop: lo, target: lo - (hi - lo) },
+          knownAtIndex: j,
+          status: 'triggered',
         })
       }
     }
@@ -623,15 +728,44 @@ function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments
 
 // ---------------------------------------------------------------------------
 
-export function detectSignals(input: SignalInput, segments: { from: number; to: number; type: RegimeType }[]): BrooksSignal[] {
+/** 失效扫描：触发后收盘击穿结构止损 → invalidation 事件（因果：扫描窗右端即已知） */
+function scanInvalidations(bars: BrooksCandle[], signals: BrooksSignal[], events: StructureEvent[]): void {
+  const MAX_SCAN = 100
+  for (const s of signals) {
+    const stop = s.ref?.stop
+    if (stop === undefined || s.direction === 'neutral') continue
+    const end = Math.min(bars.length - 1, s.index + MAX_SCAN)
+    for (let i = s.index + 1; i <= end; i++) {
+      const adverse = s.direction === 'bull' ? bars[i].close < stop : bars[i].close > stop
+      if (!adverse) continue
+      events.push({
+        kind: 'invalidation',
+        ruleId: s.kind,
+        ruleVersion: ENGINE_VERSION,
+        direction: s.direction,
+        atIndex: i,
+        atTime: bars[i].time,
+        knownAtIndex: i,
+        knownAtTime: bars[i].time,
+        barIndices: [s.index, i],
+        note: `${s.label}（第 ${s.index + 1} 根触发）后第 ${i + 1} 根收盘 ${fmt(bars[i].close)} 击穿结构止损 ${fmt(stop)}，结构失效`,
+      })
+      break
+    }
+  }
+}
+
+export function detectSignals(input: SignalInput, segments: { from: number; to: number; type: RegimeType }[]): SignalOutput {
   const signals: BrooksSignal[] = []
-  detectHL(input, signals)
+  const events: StructureEvent[] = []
+  detectHL(input, signals, events)
   detectSpikes(input, signals)
   detectWedges(input, signals)
   detectDoubles(input, signals)
-  detectBreakoutPatterns(input, signals)
+  detectBreakoutPatterns(input, signals, events)
   detectTrendLineBreaks(input, signals)
   detectTRBreakouts(input, signals, segments)
+  scanInvalidations(input.bars, signals, events)
 
   signals.sort((a, b) => a.index - b.index)
   // 去重：同一根K线上同一种信号只保留一条
@@ -643,5 +777,5 @@ export function detectSignals(input: SignalInput, segments: { from: number; to: 
     seen.add(key)
     out.push(s)
   }
-  return out
+  return { signals: out, events }
 }

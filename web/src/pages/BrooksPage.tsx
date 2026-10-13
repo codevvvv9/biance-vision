@@ -392,7 +392,7 @@ export default function BrooksPage(): JSX.Element {
                   </div>
                   <div className="brooks-signal-reason">{s.reason}</div>
                   <div className="brooks-signal-concept">{s.concept}</div>
-                  {s.prior && <div className="brooks-signal-prior">先验：{s.prior}</div>}
+                  {s.empiricalNote && <div className="brooks-signal-prior" title="Brooks 在其美股股指期货市场的经验统计，非本品种验证胜率">经验统计：{s.empiricalNote}</div>}
                   {s.ref && (s.ref.entry !== undefined || s.ref.stop !== undefined || s.ref.target !== undefined) && (
                     <div className="brooks-signal-ref mono">
                       {s.ref.entry !== undefined && <span>突破 {s.ref.entry.toPrecision(6)}</span>}

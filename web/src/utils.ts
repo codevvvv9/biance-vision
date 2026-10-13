@@ -66,7 +66,7 @@ export function readUpColor(): UpColorMode {
   return lsGet<UpColorMode>(UP_COLOR_KEY, 'green')
 }
 
-/** 应用到 <html data-up-color>，styles.css 据此翻转 --up/--down */
+/** 应用到 <html data-up-color>，styles/base.css 据此翻转 --up/--down */
 export function applyUpColor(mode: UpColorMode): void {
   document.documentElement.dataset.upColor = mode
 }
