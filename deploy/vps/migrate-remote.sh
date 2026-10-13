@@ -11,7 +11,7 @@ done
 
 echo '[1/3] 恢复 server/data（先停服务，避免空配置起跑写脏数据）'
 $COMPOSE stop app worker research-py minio || true
-tar xzf /tmp/server-data.tgz
+tar xzf /tmp/server-data.tgz -C server
 
 echo '[2/3] 恢复 minio-data 卷'
 docker run --rm -v biance-vision_minio-data:/data -v /tmp:/in alpine \
