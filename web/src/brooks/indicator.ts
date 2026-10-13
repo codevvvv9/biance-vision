@@ -6,17 +6,29 @@
  * - 内包/外包标记（i / O / ii / oo / ioi）
  * - 信号三角标 + 短标签（H2、楔顶、MTR…）
  * - 右上角 Always In 方向水印
+ * - 证据联动高亮竖带（highlightTime）与关键价位虚线（levels，止损/强平/执行价）：
+ *   这两项无需分析结果，供研究工作台叠加使用
  * 分析结果通过 extendData 注入；只绘制可见范围附近，千根K线无压力。
  */
 
 import { registerIndicator } from 'klinecharts'
-import type { Axis, BarSpace, VisibleRange } from 'klinecharts'
+import type { Axis, BarSpace, KLineData, VisibleRange } from 'klinecharts'
 import type { BrooksAnalysis, BrooksDisplay, RegimeType } from 'biance-vision-brooks'
+
+/** 关键价位（水平虚线 + 标签）：止损/强平/执行价等，全部来自结果 payload 契约字段 */
+export interface BrooksChartLevel {
+  price: number
+  label: string
+}
 
 export interface BrooksExtendData {
   analysis: BrooksAnalysis | null
   display: BrooksDisplay
   upColor: 'green' | 'red'
+  /** 证据联动：高亮 bar 的 openTime（琥珀色竖带，无分析数据时也可画） */
+  highlightTime?: number | null
+  /** 关键价位水平虚线（仅画落在可视价格区间内的，不扩缩价格轴） */
+  levels?: BrooksChartLevel[]
 }
 
 const C = {
@@ -42,15 +54,54 @@ const FONT_BOLD = 'bold 10px -apple-system, "PingFang SC", "Microsoft YaHei", sa
 
 function drawBrooks(
   ctx: CanvasRenderingContext2D,
-  barCount: number,
+  kLineDataList: KLineData[],
   ext: BrooksExtendData,
   visibleRange: VisibleRange,
-  width: number,
+  bounding: { width: number; height: number },
   barSpace: BarSpace,
   xAxis: Axis,
   yAxis: Axis,
 ): void {
   const a = ext.analysis
+  const barCount = kLineDataList.length
+  const x = (i: number): number => xAxis.convertToPixel(i)
+  const y = (p: number): number => yAxis.convertToPixel(p)
+
+  // ── 证据联动高亮竖带（按图表数据时间戳定位，无需分析结果） ──────
+  if (ext.highlightTime !== undefined && ext.highlightTime !== null) {
+    const idx = kLineDataList.findIndex((k) => k.timestamp === ext.highlightTime)
+    if (idx >= 0) {
+      const bw = barSpace?.bar > 0 ? barSpace.bar : 9
+      ctx.save()
+      ctx.fillStyle = 'rgba(255,176,32,0.18)'
+      ctx.fillRect(x(idx) - bw / 2 - 1, 0, bw + 2, bounding.height)
+      ctx.restore()
+    }
+  }
+
+  // ── 关键价位水平虚线 + 标签（止损/强平/执行价；超出可视区间的跳过） ──
+  if (ext.levels !== undefined) {
+    ctx.save()
+    ctx.font = FONT
+    ctx.textAlign = 'left'
+    for (const lv of ext.levels) {
+      if (!Number.isFinite(lv.price)) continue
+      const py = y(lv.price)
+      if (py < 0 || py > bounding.height) continue
+      ctx.strokeStyle = 'rgba(0,229,255,0.75)'
+      ctx.lineWidth = 1
+      ctx.setLineDash([5, 4])
+      ctx.beginPath()
+      ctx.moveTo(0, py)
+      ctx.lineTo(bounding.width, py)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.fillStyle = 'rgba(0,229,255,0.95)'
+      ctx.fillText(`${lv.label} ${lv.price}`, 6, py - 4)
+    }
+    ctx.restore()
+  }
+
   if (!a) return
   const d = ext.display
   // 每根K线的像素宽：决定标注密度分级（缩放/全屏时自动增减细节）
@@ -61,8 +112,6 @@ function drawBrooks(
   const down = ext.upColor === 'red' ? '#00d68f' : '#ff4d6a'
   const from = Math.max(0, visibleRange.from - 80)
   const to = Math.min(barCount - 1, visibleRange.to + 80)
-  const x = (i: number): number => xAxis.convertToPixel(i)
-  const y = (p: number): number => yAxis.convertToPixel(p)
 
   // ── 顶部市场状态条 ────────────────────────────────────────────
   if (d.regime) {
@@ -104,17 +153,20 @@ function drawBrooks(
     ctx.lineWidth = 1.4
     for (const leg of a.legs) {
       if (leg.toIndex < from || leg.fromIndex > to) continue
+      // 未完成腿（provisional，knownAtIndex = null）：虚线展示，不代表已确认结构
+      if (leg.provisional) ctx.setLineDash([4, 3])
       ctx.strokeStyle = leg.direction === 'up' ? 'rgba(0,214,143,.55)' : 'rgba(255,77,106,.55)'
       ctx.beginPath()
       ctx.moveTo(x(leg.fromIndex), y(leg.fromPrice))
       ctx.lineTo(x(leg.toIndex), y(leg.toPrice))
       ctx.stroke()
+      ctx.setLineDash([])
     }
-    // 最后一根摆动点 → 最新收盘的虚线延伸（未确认的腿）
+    // 引擎未产出 provisional 腿时（最后摆动点后无新高/新低），补一条到最新收盘的虚线
     // 注意：图表数据可能比分析数据多一根实时未收盘K线，一律以分析数组自身长度为准
     const zig = a.legs.length > 0 ? a.legs[a.legs.length - 1] : null
     const lastAnalysis = a.bars.length - 1
-    if (zig && lastAnalysis >= 0 && to >= lastAnalysis) {
+    if (zig && !zig.provisional && lastAnalysis >= 0 && to >= lastAnalysis) {
       const lastBar = a.bars[lastAnalysis]
       ctx.strokeStyle = 'rgba(138,160,194,.4)'
       ctx.setLineDash([3, 3])
@@ -248,7 +300,7 @@ function drawBrooks(
     ctx.globalAlpha = 0.9
     ctx.fillText(
       `Always In：${ai.direction === 'bull' ? '多头' : '空头'}（第 ${ai.sinceIndex + 1} 根起）`,
-      width - 10,
+      bounding.width - 10,
       18,
     )
     ctx.restore()
@@ -267,8 +319,8 @@ export function ensureBrooksIndicator(): void {
     calc: (dataList) => dataList.map(() => ({})),
     draw: ({ ctx, kLineDataList, indicator, visibleRange, bounding, barSpace, xAxis, yAxis }) => {
       const ext = indicator.extendData as BrooksExtendData | undefined
-      if (!ext || !ext.analysis) return false
-      drawBrooks(ctx, kLineDataList.length, ext, visibleRange, bounding.width, barSpace, xAxis, yAxis)
+      if (!ext) return false
+      drawBrooks(ctx, kLineDataList, ext, visibleRange, bounding, barSpace, xAxis, yAxis)
       return false
     },
   })

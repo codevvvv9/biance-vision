@@ -8,9 +8,14 @@
  * - Tight trading range：最近 3 根的总覆盖幅度 ≤1.5×单根最大幅度（大部分重叠）；
  *   其中含 doji 即 barbwire（铁丝网，Brooks 明确建议不交易）。
  * - Always In：保守翻转——同向状态持续 ≥4 根才翻转方向（Brooks：always-in 交易者一天只翻 2~5 次）。
+ *
+ * 因果性（替代旧 despeckle 的未来读取）：
+ * 原始逐根分类 raw 本身只依赖 ≤i 的数据；状态翻转采用「两根确认」因果状态机——
+ * raw 连续两根同为新状态才确认翻转（确认 bar 即 knownAtIndex），孤立毛刺被自然丢弃，
+ * 不需要读取 i+1。perBar[i] 只依赖 ≤i 的收盘数据，前缀输入的结果是全量结果的严格前缀。
  */
 
-import type { BarFeature, AlwaysIn, Direction, RegimeType, RegimeSegment, BrooksCandle } from './types.js'
+import type { AlwaysIn, BarFeature, Direction, RegimeSegment, RegimeType, StructureEvent } from './types.js'
 
 const WINDOW = 20
 const BULL_RATIO = 0.7
@@ -19,13 +24,32 @@ const SPIKE_BARS = 5
 const SPIKE_RANGE_ATR = 1.5
 const TIGHT_COVER = 1.5
 
+export interface RegimeChange {
+  type: RegimeType
+  /** raw 分类首次翻转的位置（状态实际开始处） */
+  atIndex: number
+  /** 连续两根确认的位置（可知时间） */
+  knownAtIndex: number
+}
+
+export interface RegimeResult {
+  /** 原始逐根分类（因果，未平滑） */
+  raw: RegimeType[]
+  /** 因果确认后的逐根状态 */
+  perBar: RegimeType[]
+  /** 每根正在观察中的候选状态（null = 无） */
+  pendingAt: (RegimeType | null)[]
+  segments: RegimeSegment[]
+  changes: RegimeChange[]
+}
+
 export function computeRegime(
   features: BarFeature[],
   ema20: number[],
   atr14: number[],
-): { perBar: RegimeType[]; segments: RegimeSegment[] } {
+): RegimeResult {
   const n = features.length
-  const perBar: RegimeType[] = new Array(n).fill('trading_range')
+  const raw: RegimeType[] = new Array(n).fill('trading_range')
 
   for (let i = 0; i < n; i++) {
     if (i < WINDOW) continue
@@ -38,7 +62,7 @@ export function computeRegime(
     const tight = maxBarRange > 0 && maxH - minL <= TIGHT_COVER * maxBarRange
     const hasDoji = f3.some((f) => f.isDoji)
     if (tight) {
-      perBar[i] = hasDoji ? 'barbwire' : 'tight_range'
+      raw[i] = hasDoji ? 'barbwire' : 'tight_range'
       continue
     }
 
@@ -61,7 +85,7 @@ export function computeRegime(
     if (runLen >= SPIKE_BARS && runDir !== null) {
       const a = atr14[i] > 0 ? atr14[i] : 1e-9
       if (runHigh - runLow >= SPIKE_RANGE_ATR * a) {
-        perBar[i] = runDir === 'up' ? 'spike_bull' : 'spike_bear'
+        raw[i] = runDir === 'up' ? 'spike_bull' : 'spike_bear'
         continue
       }
     }
@@ -72,21 +96,59 @@ export function computeRegime(
       if (features[j].close > ema20[j]) above++
     }
     const ratio = above / WINDOW
-    if (ratio >= BULL_RATIO) perBar[i] = 'channel_bull'
-    else if (ratio <= BEAR_RATIO) perBar[i] = 'channel_bear'
-    else perBar[i] = 'trading_range'
+    if (ratio >= BULL_RATIO) raw[i] = 'channel_bull'
+    else if (ratio <= BEAR_RATIO) raw[i] = 'channel_bear'
+    else raw[i] = 'trading_range'
   }
 
-  despeckle(perBar)
+  const { perBar, pendingAt, changes } = confirmCausal(raw)
   const segments = toSegments(perBar)
-  return { perBar, segments }
+  return { raw, perBar, pendingAt, segments, changes }
 }
 
-/** 单根毛刺平滑：与前后都不同的孤立状态并入前一段 */
-function despeckle(types: RegimeType[]): void {
-  for (let i = 1; i < types.length - 1; i++) {
-    if (types[i] !== types[i - 1] && types[i] !== types[i + 1]) types[i] = types[i - 1]
+/**
+ * 因果两根确认状态机：raw 连续两根同为新状态时确认翻转。
+ * perBar[i] 只依赖 raw[0..i]；孤立单根毛刺（A A B A）不会翻转状态，
+ * 等价于旧 despeckle 的平滑意图，但不读取任何未来数据。
+ */
+function confirmCausal(raw: RegimeType[]): {
+  perBar: RegimeType[]
+  pendingAt: (RegimeType | null)[]
+  changes: RegimeChange[]
+} {
+  const n = raw.length
+  const perBar = new Array<RegimeType>(n)
+  const pendingAt = new Array<RegimeType | null>(n).fill(null)
+  const changes: RegimeChange[] = []
+  if (n === 0) return { perBar, pendingAt, changes }
+
+  let current = raw[0]
+  let pending: RegimeType | null = null
+  let pendingSince = -1
+  perBar[0] = current
+
+  for (let i = 1; i < n; i++) {
+    const r = raw[i]
+    if (r === current) {
+      pending = null
+      pendingSince = -1
+      perBar[i] = current
+      continue
+    }
+    if (pending === r) {
+      changes.push({ type: r, atIndex: pendingSince, knownAtIndex: i })
+      current = r
+      pending = null
+      pendingSince = -1
+      perBar[i] = r
+      continue
+    }
+    pending = r
+    pendingSince = i
+    perBar[i] = current
+    pendingAt[i] = r
   }
+  return { perBar, pendingAt, changes }
 }
 
 function toSegments(perBar: RegimeType[]): RegimeSegment[] {
@@ -94,9 +156,29 @@ function toSegments(perBar: RegimeType[]): RegimeSegment[] {
   for (let i = 0; i < perBar.length; i++) {
     const last = segments[segments.length - 1]
     if (last && last.type === perBar[i]) last.to = i
-    else segments.push({ from: i, to: i, type: perBar[i] })
+    // 因果状态机下段边界只出现在确认 bar 上：knownAtIndex 恒等于 from
+    else segments.push({ from: i, to: i, type: perBar[i], knownAtIndex: i })
   }
   return segments
+}
+
+/** 把状态确认记录转成统一结构事件（在 analyze 层合并进事件流） */
+export function regimeChangeEvents(
+  changes: RegimeChange[],
+  bars: { time: number }[],
+  ruleVersion: string,
+): StructureEvent[] {
+  return changes.map((c) => ({
+    kind: 'regime_change' as const,
+    ruleId: 'regime.confirm',
+    ruleVersion,
+    atIndex: c.atIndex,
+    atTime: bars[c.atIndex]?.time ?? 0,
+    knownAtIndex: c.knownAtIndex,
+    knownAtTime: bars[c.knownAtIndex]?.time ?? null,
+    barIndices: [c.atIndex, c.knownAtIndex],
+    note: `市场状态确认为 ${c.type}（raw 自第 ${c.atIndex + 1} 根翻转，第 ${c.knownAtIndex + 1} 根收盘确认）`,
+  }))
 }
 
 const REGIME_DIR: Partial<Record<RegimeType, Direction>> = {

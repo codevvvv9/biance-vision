@@ -1,0 +1,3 @@
+# 全量镜像可选依赖：--build-arg WITH_DOCLING=1 时追加安装
+# docling requires Python >= 3.10 and is heavy (pulls torch et al., 数分钟)。
+docling==2.131.0

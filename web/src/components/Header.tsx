@@ -19,6 +19,7 @@ const TABS: Tab[] = [
   { to: '/movers', label: '异动榜' },
   { to: '/alerts', label: '预警中心' },
   { to: '/brooks', label: '价格行为' },
+  { to: '/research', label: '研究终端' },
 ]
 
 const QUICK = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
@@ -97,6 +98,34 @@ function RobotIcon(): JSX.Element {
       <circle cx="15" cy="15" r="1" fill="currentColor" stroke="none" />
       <path d="M12 10V7" />
       <circle cx="12" cy="5" r="2" />
+    </svg>
+  )
+}
+
+function BookIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 1 4 17.5z" />
+      <path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20" />
+    </svg>
+  )
+}
+
+function TuneIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h13M21 18h-1" />
+      <circle cx="16" cy="6" r="2" />
+      <circle cx="10" cy="12" r="2" />
+      <circle cx="19" cy="18" r="2" />
+    </svg>
+  )
+}
+
+function ChartIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
     </svg>
   )
 }
@@ -286,6 +315,42 @@ export default function Header(): JSX.Element {
                       <ChatLogIcon />
                       <span>AI 会话</span>
                       <em className="menu-hint">上下文 / 记忆</em>
+                    </button>
+                    <button
+                      className="menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        navigate('/admin/knowledge')
+                      }}
+                    >
+                      <BookIcon />
+                      <span>知识库</span>
+                      <em className="menu-hint">导入 / 发布 / 检索调试</em>
+                    </button>
+                    <button
+                      className="menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        navigate('/admin/agents')
+                      }}
+                    >
+                      <TuneIcon />
+                      <span>Agent 配置</span>
+                      <em className="menu-hint">能力 / 版本 / 回滚</em>
+                    </button>
+                    <button
+                      className="menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        navigate('/admin/evals')
+                      }}
+                    >
+                      <ChartIcon />
+                      <span>评测与模型</span>
+                      <em className="menu-hint">数据集 / 训练 / 指标</em>
                     </button>
                     <button
                       className="menu-item"

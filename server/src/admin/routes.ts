@@ -1,0 +1,485 @@
+/**
+ * /api/admin/agents/*、/api/admin/evaluations/*、/api/admin/models/* 路由
+ * （docs/specs/api-storage.md、admin-security.md、evaluation-deployment.md）。
+ * 全部 requireSuperadmin；DB 不可用 503；发布/回滚/训练触发写审计。
+ * debug-run：用版本配置跑一次轻量校验（能力/知识绑定解析 + 检索冒烟），不产生正式研究结论。
+ */
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { and, desc, eq } from 'drizzle-orm'
+import { z } from 'zod'
+import {
+  AgentCapabilitiesSchema,
+  AgentConfigSchema,
+  AgentVersionSchema,
+  EvalDatasetSchema,
+  EvalDatasetKindSchema,
+  EvalRunSchema,
+} from 'biance-vision-brooks'
+import { recordAudit } from '../audit.js'
+import type { SessionRecord } from '../users.js'
+import { getDb } from '../db.js'
+import { kv, log } from '../logger.js'
+import { evalDatasets, evalRuns, predictionModels } from '../models.js'
+import type { EvalDatasetRow, EvalRunRow, PredictionModelRow } from '../models.js'
+import { searchHybrid } from '../knowledge/retrieval.js'
+import { latestKnowledgeVersion } from '../knowledge/store.js'
+import { getCapabilities, refreshCapabilities, resolveSecret, saveCapabilities } from './capabilities.js'
+import {
+  createDraft,
+  getCurrentAgentVersion,
+  getVersion,
+  listVersions,
+  publishVersion,
+  rollbackTo,
+  toVersionDto,
+  updateDraft,
+} from './agentVersions.js'
+import { enqueueEvalRun, enqueueTrainJob, pinnedConfigVersion } from './jobs.js'
+import { researchPyHealthy } from '../researchpy.js'
+import { toModelInfo } from '../research/productRoutes.js'
+
+interface AdminRouteDeps {
+  requireSuperadmin: (req: FastifyRequest) => SessionRecord
+}
+
+function ensureStorage(reply: FastifyReply): boolean {
+  if (!getDb()) {
+    reply.code(503).send({ code: 'storage_unavailable', message: 'PostgreSQL 不可用' })
+    return false
+  }
+  return true
+}
+
+function badRequest(reply: FastifyReply, message: string): FastifyReply {
+  return reply.code(400).send({ code: 'bad_request', message })
+}
+
+function parseBody<S extends z.ZodTypeAny>(schema: S, body: unknown, reply: FastifyReply): z.infer<S> | null {
+  const r = schema.safeParse(body)
+  if (!r.success) {
+    badRequest(reply, r.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('；'))
+    return null
+  }
+  return r.data as z.infer<S>
+}
+
+// ---- /api/admin/agents ----
+
+function registerAgentRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  app.get('/api/admin/agents/versions', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const current = await getCurrentAgentVersion()
+    return { versions: (await listVersions()).map(toVersionDto).map((v) => AgentVersionSchema.parse(v)), currentVersionId: current?.id ?? null }
+  })
+
+  app.post('/api/admin/agents/versions', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = parseBody(z.object({ label: z.string().trim().min(1).max(64), config: AgentConfigSchema }), req.body, reply)
+    if (!body) return reply
+    try {
+      const row = await createDraft(body)
+      recordAudit(session, { action: 'settings_update', target: row.id, detail: `新建 Agent 版本草稿「${body.label}」` })
+      return reply.code(201).send({ version: AgentVersionSchema.parse(toVersionDto(row)) })
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      const status = /duplicate|unique/i.test(e.message) ? 400 : (e.statusCode ?? 500)
+      return reply.code(status).send({ code: 'create_failed', message: /unique/i.test(e.message) ? '版本标签已存在' : e.message })
+    }
+  })
+
+  app.put('/api/admin/agents/versions/:id', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const body = parseBody(z.object({ config: AgentConfigSchema }), req.body, reply)
+    if (!body) return reply
+    try {
+      const row = await updateDraft(id, body.config)
+      recordAudit(session, { action: 'settings_update', target: id, detail: '编辑 Agent 版本草稿' })
+      return { version: AgentVersionSchema.parse(toVersionDto(row)) }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'update_failed', message: e.message })
+    }
+  })
+
+  app.post('/api/admin/agents/versions/:id/publish', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    try {
+      const row = await publishVersion(id)
+      await refreshCapabilities()
+      recordAudit(session, { action: 'settings_update', target: id, detail: `发布 Agent 版本「${row.label}」（当前发布指针切换）` })
+      return { version: AgentVersionSchema.parse(toVersionDto(row)) }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'publish_failed', message: e.message })
+    }
+  })
+
+  app.post('/api/admin/agents/versions/:id/rollback', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    try {
+      const row = await rollbackTo(id)
+      await refreshCapabilities()
+      recordAudit(session, { action: 'settings_update', target: id, detail: `回滚到 Agent 版本「${row.label}」` })
+      return { version: AgentVersionSchema.parse(toVersionDto(row)) }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'rollback_failed', message: e.message })
+    }
+  })
+
+  /** 调试运行：解析版本配置的依赖（能力/知识版本）并跑一次检索冒烟，返回校验结果 */
+  app.post('/api/admin/agents/versions/:id/debug-run', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const row = await getVersion(id)
+    if (!row) return reply.code(404).send({ code: 'not_found', message: '版本不存在' })
+    const config = AgentConfigSchema.parse(row.config)
+    const caps = getCapabilities()
+    const latestKv = await latestKnowledgeVersion()
+    const outcome = await searchHybrid('H2 second entry pullback', {
+      finalLimit: config.retrieval?.finalLimit ?? 5,
+      candidateLimit: config.retrieval?.candidateLimit,
+      skipRerank: config.retrieval?.rerank === false,
+    })
+    return {
+      versionLabel: row.label,
+      checks: {
+        chat: caps.chat.enabled ? 'on' : '待配置',
+        embedding: caps.embedding.enabled ? 'on' : '待配置（向量召回跳过）',
+        rerank: caps.rerank.enabled ? 'on' : '待配置（精排跳过）',
+        search: caps.search.enabled ? 'on' : '待配置（事件研究搜索不可用）',
+        knowledgeVersion: config.ruleParams?.knowledgeVersion ?? latestKv?.id ?? '无发布知识版本',
+      },
+      retrievalSmoke: {
+        hits: outcome.hits.length,
+        topTitles: outcome.hits.slice(0, 3).map((h) => h.docTitle),
+        notes: outcome.debug.notes,
+      },
+    }
+  })
+
+  /** 能力配置读写（草稿期全局配置；Agent 版本发布后以其 config.capabilities 为准） */
+  app.get('/api/admin/agents/capabilities', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    await refreshCapabilities()
+    return { capabilities: getCapabilities(), source: (await getCurrentAgentVersion()) ? 'agent_version' : 'app_settings' }
+  })
+
+  app.put('/api/admin/agents/capabilities', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    try {
+      const caps = await saveCapabilities(req.body)
+      recordAudit(session, { action: 'settings_update', target: 'capabilities', detail: `能力配置更新（app_settings）` })
+      return { capabilities: caps }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 400).send({ code: 'save_failed', message: e.message })
+    }
+  })
+
+  /**
+   * 能力连通性测试：body 可携带未保存的草稿配置（先测后存）；
+   * 缺省测当前生效配置。embedding 报告维度与耗时（维度需与
+   * knowledge_chunks.embedding 列一致）；未启用/未配置的能力明确「待配置」。
+   */
+  app.post('/api/admin/agents/capabilities/test', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    await refreshCapabilities()
+    const overrides = (req.body ?? {}) as { capabilities?: unknown }
+    let caps = getCapabilities()
+    if (overrides.capabilities !== undefined) {
+      const parsed = AgentCapabilitiesSchema.safeParse(overrides.capabilities)
+      if (!parsed.success) return badRequest(reply, '草稿能力配置不合法')
+      caps = parsed.data
+    }
+    const started = Date.now()
+    const results: Record<string, { status: 'ok' | 'failed' | 'skipped'; detail: string; latencyMs?: number }> = {}
+
+    if (!caps.embedding.enabled || !caps.embedding.baseUrl || !caps.embedding.model) {
+      results.embedding = { status: 'skipped', detail: '待配置（enabled/baseUrl/model 不全）' }
+    } else {
+      const t0 = Date.now()
+      try {
+        const key = resolveSecret(caps.embedding.secretRef)
+        const res = await fetch(`${caps.embedding.baseUrl.replace(/\/+$/, '')}/embeddings`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
+          body: JSON.stringify({ model: caps.embedding.model, input: ['connectivity probe'] }),
+          signal: AbortSignal.timeout(20_000),
+        })
+        if (!res.ok) {
+          results.embedding = { status: 'failed', detail: `HTTP ${res.status}：${(await res.text().catch(() => '')).slice(0, 200)}`, latencyMs: Date.now() - t0 }
+        } else {
+          const json = (await res.json()) as { data?: { embedding: number[] }[] }
+          const dims = json.data?.[0]?.embedding.length ?? 0
+          results.embedding = { status: 'ok', detail: `连接成功，返回 ${dims} 维（配置 ${caps.embedding.dims ?? 1536}${dims === (caps.embedding.dims ?? 1536) ? '' : '，与配置不一致！'}）`, latencyMs: Date.now() - t0 }
+        }
+      } catch (err) {
+        results.embedding = { status: 'failed', detail: (err as Error).message, latencyMs: Date.now() - t0 }
+      }
+    }
+
+    if (!caps.rerank.enabled || !caps.rerank.baseUrl || !caps.rerank.model) {
+      results.rerank = { status: 'skipped', detail: '待配置' }
+    } else {
+      const t0 = Date.now()
+      try {
+        const key = resolveSecret(caps.rerank.secretRef)
+        const res = await fetch(`${caps.rerank.baseUrl.replace(/\/+$/, '')}/rerank`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
+          body: JSON.stringify({ model: caps.rerank.model, query: 'probe', documents: ['probe'] }),
+          signal: AbortSignal.timeout(15_000),
+        })
+        results.rerank = res.ok
+          ? { status: 'ok', detail: '连接成功', latencyMs: Date.now() - t0 }
+          : { status: 'failed', detail: `HTTP ${res.status}`, latencyMs: Date.now() - t0 }
+      } catch (err) {
+        results.rerank = { status: 'failed', detail: (err as Error).message, latencyMs: Date.now() - t0 }
+      }
+    }
+
+    if (!caps.chat.enabled || !caps.chat.baseUrl || !caps.chat.model) {
+      results.chat = { status: 'skipped', detail: '待配置' }
+    } else {
+      const t0 = Date.now()
+      try {
+        const res = await fetch(`${caps.chat.baseUrl.replace(/\/+$/, '')}/models`, {
+          headers: { authorization: `Bearer ${resolveSecret(caps.chat.secretRef) ?? ''}` },
+          signal: AbortSignal.timeout(10_000),
+        })
+        results.chat = res.ok
+          ? { status: 'ok', detail: '模型列表可达', latencyMs: Date.now() - t0 }
+          : { status: 'failed', detail: `HTTP ${res.status}`, latencyMs: Date.now() - t0 }
+      } catch (err) {
+        results.chat = { status: 'failed', detail: (err as Error).message, latencyMs: Date.now() - t0 }
+      }
+    }
+
+    for (const k of ['vision', 'search'] as const) {
+      results[k] = { status: 'skipped', detail: caps[k].enabled ? '已启用（本页不探测，运行时验证）' : '待配置' }
+    }
+    return { results, totalMs: Date.now() - started }
+  })
+}
+
+// ---- /api/admin/evaluations ----
+
+function toDatasetDto(row: EvalDatasetRow): z.infer<typeof EvalDatasetSchema> {
+  return EvalDatasetSchema.parse({
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    version: row.version,
+    itemCount: row.itemCount,
+  })
+}
+
+function toEvalRunDto(row: EvalRunRow): z.infer<typeof EvalRunSchema> {
+  return EvalRunSchema.parse({
+    id: row.id,
+    datasetId: row.datasetId,
+    configVersion: row.configVersion,
+    status: row.status,
+    metrics: row.metrics ?? null,
+    startedAt: row.startedAt ?? undefined,
+    endedAt: row.endedAt ?? undefined,
+  })
+}
+
+function registerEvaluationRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  app.get('/api/admin/evaluations/datasets', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const rows = await getDb()!.select().from(evalDatasets).orderBy(desc(evalDatasets.createdAt))
+    // 只返回元信息（items 可能很大，详情按 id 取）
+    return { datasets: rows.map(toDatasetDto) }
+  })
+
+  app.get('/api/admin/evaluations/datasets/:id', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const rows = await getDb()!.select().from(evalDatasets).where(eq(evalDatasets.id, id)).limit(1)
+    if (rows.length === 0) return reply.code(404).send({ code: 'not_found', message: '数据集不存在' })
+    return { dataset: toDatasetDto(rows[0]), items: rows[0].items }
+  })
+
+  app.post('/api/admin/evaluations/datasets', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = parseBody(
+      z.object({
+        kind: EvalDatasetKindSchema,
+        name: z.string().trim().min(1).max(100),
+        items: z.array(z.unknown()).min(1).max(2000),
+      }),
+      req.body,
+      reply,
+    )
+    if (!body) return reply
+    // 同名数据集版本递增（旧行保留）
+    const prev = await getDb()!
+      .select({ version: evalDatasets.version })
+      .from(evalDatasets)
+      .where(and(eq(evalDatasets.kind, body.kind), eq(evalDatasets.name, body.name)))
+      .orderBy(desc(evalDatasets.version))
+      .limit(1)
+    const version = (prev[0]?.version ?? 0) + 1
+    const rows = await getDb()!
+      .insert(evalDatasets)
+      .values({ kind: body.kind, name: body.name, version, itemCount: body.items.length, items: body.items })
+      .returning()
+    recordAudit(session, { action: 'settings_update', target: rows[0].id, detail: `新建评测数据集「${body.name}」v${version}（${body.kind}，${body.items.length} 条）` })
+    return reply.code(201).send({ dataset: toDatasetDto(rows[0]) })
+  })
+
+  /**
+   * 编辑已有数据集版本（改名或整体替换 items）：原地更新、version 不变——
+   * 版本递增语义由 POST（同名新建 = version+1）承担，PUT 只修正该版本行本身。
+   */
+  app.put('/api/admin/evaluations/datasets/:id', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const body = parseBody(
+      z
+        .object({
+          name: z.string().trim().min(1).max(100).optional(),
+          items: z.array(z.unknown()).min(1).max(2000).optional(),
+        })
+        .refine((v) => v.name !== undefined || v.items !== undefined, { message: '至少提供 name 或 items 之一' }),
+      req.body,
+      reply,
+    )
+    if (!body) return reply
+    const patch: { name?: string; items?: unknown[]; itemCount?: number; updatedAt: Date } = { updatedAt: new Date() }
+    if (body.name !== undefined) patch.name = body.name
+    if (body.items !== undefined) {
+      patch.items = body.items
+      patch.itemCount = body.items.length
+    }
+    const rows = await getDb()!.update(evalDatasets).set(patch).where(eq(evalDatasets.id, id)).returning()
+    if (rows.length === 0) return reply.code(404).send({ code: 'not_found', message: '数据集不存在' })
+    recordAudit(session, {
+      action: 'settings_update',
+      target: id,
+      detail: `编辑评测数据集「${rows[0].name}」v${rows[0].version}（${[body.name !== undefined ? '改名' : null, body.items !== undefined ? `替换 items=${body.items.length}` : null].filter(Boolean).join('，')}）`,
+    })
+    return { dataset: toDatasetDto(rows[0]) }
+  })
+
+  app.delete('/api/admin/evaluations/datasets/:id', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const rows = await getDb()!.delete(evalDatasets).where(eq(evalDatasets.id, id)).returning()
+    if (rows.length === 0) return reply.code(404).send({ code: 'not_found', message: '数据集不存在' })
+    recordAudit(session, { action: 'settings_update', target: id, detail: `删除评测数据集「${rows[0].name}」v${rows[0].version}` })
+    return { ok: true }
+  })
+
+  app.post('/api/admin/evaluations/runs', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = parseBody(z.object({ datasetId: z.string().uuid() }), req.body, reply)
+    if (!body) return reply
+    const ds = await getDb()!.select().from(evalDatasets).where(eq(evalDatasets.id, body.datasetId)).limit(1)
+    if (ds.length === 0) return reply.code(404).send({ code: 'not_found', message: '数据集不存在' })
+    const configVersion = await pinnedConfigVersion()
+    const rows = await getDb()!
+      .insert(evalRuns)
+      .values({ datasetId: body.datasetId, configVersion, status: 'queued' })
+      .returning()
+    const queued = await enqueueEvalRun(rows[0].id)
+    if (!queued) return reply.code(503).send({ code: 'queue_unavailable', message: '队列不可用，稍后重试' })
+    recordAudit(session, { action: 'settings_update', target: rows[0].id, detail: `触发评测（数据集 ${ds[0].name} v${ds[0].version}，配置 ${configVersion}）` })
+    return reply.code(202).send({ run: toEvalRunDto(rows[0]) })
+  })
+
+  app.get('/api/admin/evaluations/runs/:id', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const rows = await getDb()!.select().from(evalRuns).where(eq(evalRuns.id, id)).limit(1)
+    if (rows.length === 0) return reply.code(404).send({ code: 'not_found', message: '评测运行不存在' })
+    return { run: toEvalRunDto(rows[0]), report: rows[0].report ?? null, error: rows[0].error ?? null }
+  })
+
+  app.get('/api/admin/evaluations/runs', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const rows = await getDb()!.select().from(evalRuns).orderBy(desc(evalRuns.createdAt)).limit(50)
+    return { runs: rows.map(toEvalRunDto) }
+  })
+}
+
+// ---- /api/admin/models（训练触发 + 注册表管理视角） ----
+
+function registerModelRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  app.get('/api/admin/models', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const rows = await getDb()!.select().from(predictionModels).orderBy(desc(predictionModels.updatedAt))
+    return {
+      models: rows.map((r: PredictionModelRow) => ({ ...toModelInfo(r), artifactPath: r.artifactPath ?? null, unavailableReason: r.status })),
+      researchPy: { healthy: await researchPyHealthy() },
+    }
+  })
+
+  app.post('/api/admin/models/train', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = parseBody(
+      z.object({
+        modelVersion: z.string().trim().min(1).max(64),
+        horizon: z.enum(['10m', '30m', '1h', '1d', '1w']),
+        symbol: z.string().trim().optional(),
+        marketType: z.enum(['spot', 'usdm_perp']).optional(),
+        /** 事件（strike_relative，指数价）| 方向研究（return_positive，成交价；1w 方向研究用） */
+        targetType: z.enum(['strike_relative', 'return_positive']).optional(),
+      }),
+      req.body,
+      reply,
+    )
+    if (!body) return reply
+    if (!(await researchPyHealthy())) {
+      return reply.code(503).send({ code: 'researchpy_down', message: 'research-py 服务不可达（先启动 compose research-py 或本地 uvicorn）' })
+    }
+    const queued = await enqueueTrainJob(body)
+    if (!queued) return reply.code(503).send({ code: 'queue_unavailable', message: '队列不可用，稍后重试' })
+    recordAudit(session, { action: 'settings_update', target: body.modelVersion, detail: `触发模型训练（${body.horizon}，${body.symbol ?? 'BTCUSDT'}）` })
+    log.ok('model', '训练任务入队', kv({ 模型: body.modelVersion, 期限: body.horizon }))
+    return reply.code(202).send({ ok: true, modelVersion: body.modelVersion })
+  })
+
+  /** 分布校准确认 + 发布：数值门槛（训练时落库）与校准确认双门控后才 published */
+  app.post('/api/admin/models/:modelVersion/calibrate-confirm', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return
+    const { modelVersion } = req.params as { modelVersion: string }
+    const { confirmCalibrationAndPublish } = await import('../research/training.js')
+    const r = await confirmCalibrationAndPublish(modelVersion)
+    if (!r.ok) return reply.code(409).send({ code: 'calibration_rejected', message: r.reason })
+    recordAudit(session, { action: 'settings_update', target: modelVersion, detail: '分布校准确认并发布模型（candidate → published）' })
+    return { ok: true, modelVersion, status: 'published' }
+  })
+}
+
+export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  registerAgentRoutes(app, deps)
+  registerEvaluationRoutes(app, deps)
+  registerModelRoutes(app, deps)
+}

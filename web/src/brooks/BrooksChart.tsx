@@ -2,6 +2,7 @@
  * Brooks 复盘图表：klinecharts 主图 + BROOKS 自定义指标（结构标注）。
  * 页面负责取数与分析重算；本组件只做渲染与增量更新（WS tick 直接进图表，
  * 收盘K线通过 bars 属性替换触发重算），保证复盘滚动流畅。
+ * 研究工作台复用时通过 highlightTime / levels 叠加证据高亮与关键价位。
  */
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
@@ -12,13 +13,18 @@ import type { UpColorMode } from '../utils'
 import { precisionFor } from '../utils'
 import type { KlineBar } from '../types'
 import { ensureBrooksIndicator } from './indicator'
+import type { BrooksChartLevel } from './indicator'
 import type { BrooksAnalysis, BrooksDisplay } from 'biance-vision-brooks'
+
+export type { BrooksChartLevel }
 
 export interface BrooksChartHandle {
   /** WS tick：直接更新图表最后一根（不影响分析） */
   updateBar: (b: KlineBar) => void
   /** 信号面板点击后定位到对应K线 */
   scrollTo: (index: number) => void
+  /** 证据联动：按 openTime 定位到对应K线（找不到则不动） */
+  scrollToTime: (time: number) => void
 }
 
 interface Props {
@@ -26,15 +32,22 @@ interface Props {
   analysis: BrooksAnalysis | null
   display: BrooksDisplay
   upColor: UpColorMode
+  /** 证据联动：高亮 bar 的 openTime（琥珀色竖带，并自动滚动定位） */
+  highlightTime?: number | null
+  /** 关键价位水平虚线（止损/强平/执行价；超出可视价格区间的跳过） */
+  levels?: BrooksChartLevel[]
 }
 
 const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
-  { bars, analysis, display, upColor },
+  { bars, analysis, display, upColor, highlightTime = null, levels },
   ref,
 ) {
   const boxRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<Chart | null>(null)
-  const extRef = useRef({ analysis, display, upColor })
+  const extRef = useRef({ analysis, display, upColor, highlightTime, levels })
+  /** scrollToTime 需要最新 bars（时间→下标），不纳入 handle 依赖 */
+  const barsRef = useRef(bars)
+  barsRef.current = bars
 
   useEffect(() => {
     ensureStyles()
@@ -59,12 +72,12 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 分析结果 / 绘制开关 / 配色变化 → 注入指标重绘
+  // 分析结果 / 绘制开关 / 配色 / 证据高亮与关键价位变化 → 注入指标重绘
   useEffect(() => {
-    extRef.current = { analysis, display, upColor }
+    extRef.current = { analysis, display, upColor, highlightTime, levels }
     chartRef.current?.overrideIndicator({ name: 'BROOKS', extendData: extRef.current })
     chartRef.current?.setStyles(upDownOverrides(upColor))
-  }, [analysis, display, upColor])
+  }, [analysis, display, upColor, highlightTime, levels])
 
   // 收盘K线集合变化 → 整体替换
   useEffect(() => {
@@ -86,6 +99,13 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
     chart.setBarSpace(9)
   }, [bars])
 
+  // 证据高亮变化（或数据刷新后高亮仍存在）→ 滚动定位到对应K线
+  useEffect(() => {
+    if (highlightTime === null) return
+    const i = bars.findIndex((b) => b.time === highlightTime)
+    if (i >= 0) chartRef.current?.scrollToDataIndex(Math.max(0, i - 30))
+  }, [highlightTime, bars])
+
   useImperativeHandle(
     ref,
     () => ({
@@ -100,6 +120,10 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
         })
       },
       scrollTo: (i) => chartRef.current?.scrollToDataIndex(Math.max(0, i - 30)),
+      scrollToTime: (t) => {
+        const i = barsRef.current.findIndex((b) => b.time === t)
+        if (i >= 0) chartRef.current?.scrollToDataIndex(Math.max(0, i - 30))
+      },
     }),
     [],
   )

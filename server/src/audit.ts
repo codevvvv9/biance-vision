@@ -15,6 +15,9 @@ export type AuditAction =
   | 'rule_delete'
   | 'settings_update'
   | 'settings_test'
+  | 'knowledge_import'
+  | 'knowledge_publish'
+  | 'prediction_confirm'
 
 /** 会话内单次操作 */
 export interface AuditEntry {

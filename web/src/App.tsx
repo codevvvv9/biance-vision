@@ -8,12 +8,16 @@ import { AiProvider } from './ai/AiContext'
 import AiAssistant from './ai/AiAssistant'
 import AlertsPage from './pages/AlertsPage'
 import AdminPage from './pages/AdminPage'
+import AdminAgentsPage from './pages/AdminAgentsPage'
+import AdminEvalsPage from './pages/AdminEvalsPage'
+import AdminKnowledgePage from './pages/AdminKnowledgePage'
 import AiInsightsPage from './pages/AiInsightsPage'
 import BrooksPage from './pages/BrooksPage'
 import Dashboard from './pages/Dashboard'
 import LoginPage from './pages/LoginPage'
 import MoversPage from './pages/MoversPage'
 import RegisterPage from './pages/RegisterPage'
+import ResearchPage from './research/ResearchPage'
 
 /** 登录后才挂载行情应用（WebSocket / 行情接口都要求会话） */
 function AuthedApp(): JSX.Element {
@@ -28,9 +32,13 @@ function AuthedApp(): JSX.Element {
             <Route path="/movers" element={<MoversPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/brooks" element={<BrooksPage />} />
+            <Route path="/research" element={<ResearchPage />} />
             {/* 页面内部再校验 superadmin，普通用户直接访问会被跳回首页 */}
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/ai" element={<AiInsightsPage />} />
+            <Route path="/admin/knowledge" element={<AdminKnowledgePage />} />
+            <Route path="/admin/agents" element={<AdminAgentsPage />} />
+            <Route path="/admin/evals" element={<AdminEvalsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

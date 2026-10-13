@@ -10,9 +10,17 @@ PORT="${PORT:-3200}"
 LOG=/tmp/cf-tunnel.log
 
 if pgrep -f "cloudflared tunnel" >/dev/null 2>&1; then
-  echo "⚠ cloudflared 已在运行：$(pgrep -f 'cloudflared tunnel' | tr '\n' ' ')"
-  grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" "$LOG" | tail -1
-  exit 0
+  # 免费临时隧道会被 Cloudflare 服务端回收：进程不退出但地址永久失效，
+  # 日志特征 = 循环 "Unauthorized: Tunnel not found"。检测到即自动重启换新地址。
+  if tail -50 "$LOG" 2>/dev/null | grep -aq "Tunnel not found"; then
+    echo "⚠ 临时隧道已被服务端回收（地址失效），自动重启换新地址…"
+    pkill -f "cloudflared tunnel" || true
+    sleep 2
+  else
+    echo "⚠ cloudflared 已在运行：$(pgrep -f 'cloudflared tunnel' | tr '\n' ' ')"
+    grep -aoE "https://[a-z0-9-]+\.trycloudflare\.com" "$LOG" | tail -1
+    exit 0
+  fi
 fi
 
 nohup cloudflared tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate --protocol http2 > "$LOG" 2>&1 &
