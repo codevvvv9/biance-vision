@@ -82,6 +82,15 @@ import {
 } from './users.js'
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
+import { startQueue } from './queue.js'
+import { registerMarketRoutes } from './market/routes.js'
+import { registerKnowledgeRoutes } from './knowledge/routes.js'
+import { probeVectorSupport } from './knowledge/vector.js'
+import { refreshCapabilities } from './admin/capabilities.js'
+import { registerProductRoutes } from './research/productRoutes.js'
+import { registerResearchRunRoutes } from './research/runs/routes.js'
+import { registerAdminRoutes } from './admin/routes.js'
+import multipart from '@fastify/multipart'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 const PORT = Number(process.env.PORT || 3200)
@@ -884,6 +893,27 @@ app.get('/api/admin/ai/conversations/:id', async (req) => {
     },
   }
 })
+
+// ---- 行情数据基础（/api/market/*，只读；采集在 worker 进程，本进程仅入队） ----
+registerMarketRoutes(app, { requireSession })
+
+// ---- 知识库（/api/admin/knowledge/*，超管；multipart 供文件上传） ----
+await app.register(multipart, {
+  limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 20 },
+})
+registerKnowledgeRoutes(app, { requireSuperadmin })
+await refreshCapabilities()
+void probeVectorSupport().catch(() => {})
+
+// ---- 研究流程（/api/research/runs + SSE、/api/portfolio、/api/event-quotes、/api/predictions） ----
+registerResearchRunRoutes(app, { requireSession })
+registerProductRoutes(app, { requireSession })
+
+// ---- Admin 配置域（/api/admin/agents|evaluations|models，超管） ----
+registerAdminRoutes(app, { requireSuperadmin })
+
+// pg-boss 队列：app 侧只入队不消费；DB 不可用/启动失败仅告警，不阻断 app 启动
+await startQueue()
 
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
 app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {

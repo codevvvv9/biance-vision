@@ -282,13 +282,13 @@ async function brooksText(symbol: string, interval: Interval, limit: number, swi
     lines.push(`- 最近信号（新→旧，共 ${a.signals.length} 条）：`)
     tail.forEach((sig, i) => {
       const strength = sig.strength === 'high' ? '高' : sig.strength === 'medium' ? '中' : '低'
-      lines.push(`  ${i + 1}. [${sig.label}|${dirText(sig.direction)}|置信${strength}] ${sig.reason}`)
+      lines.push(`  ${i + 1}. [${sig.label}|${dirText(sig.direction)}|规则强度${strength}] ${sig.reason}`)
     })
   } else {
     lines.push('- 最近信号：无（结构未触发任何规则）')
   }
   lines.push(
-    '术语速查：H1~H4/L1~L4=多头/空头回调计数（H2/L2 二次进场为先验≈60%的高胜率结构）；楔顶/楔底=三推反转；双顶/双底=两次测试同一极值；MTR=主要趋势反转（趋势线突破+测试+反转确认）；铁丝网=重叠+doji 的不交易区；Always In=强趋势方向。请基于以上结构数据按 Brooks 框架解读，不要编造未出现的信号。',
+    '术语速查：H1~H4/L1~L4=多头/空头回调计数（H2/L2 为 Brooks 体系中最常用的顺势回调二次进场；其胜率经验统计来自美股股指期货，不能当作本品种本周期的事实）；楔顶/楔底=三推反转；双顶/双底=两次测试同一极值；MTR=主要趋势反转（趋势线突破+测试+反转确认）；铁丝网=重叠+doji 的不交易区；Always In=强趋势方向。规则强度只表示结构证据完整度，不是置信度或未来概率。请基于以上结构数据按 Brooks 框架解读，不要编造未出现的信号，不要把经验统计当作本品种的预测胜率。',
   )
   return lines.join('\n')
 }

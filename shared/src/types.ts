@@ -17,7 +17,13 @@ export interface BrooksCandle {
   low: number
   close: number
   volume?: number
+  /**
+   * 收盘标记：false = 未收盘（引擎入口拒绝）；缺省视为历史已收盘数据。
+   * 传入 options.asOf 时还必须携带 closeTime（毫秒），否则无法验证截止约束。
+   */
   closed?: boolean
+  /** 收盘时间（UTC 毫秒）；与 asOf 配合做统一截止时间校验 */
+  closeTime?: number
 }
 
 export type Direction = 'bull' | 'bear' | 'neutral'
@@ -67,7 +73,11 @@ export interface SwingPoint {
   price: number
   kind: SwingKind
   label: SwingLabel
-  /** 右侧确认根数：confirmIndex 收盘后该摆动点才成立（信号的天然滞后） */
+  /**
+   * 可知时间（bar 索引）：右侧第 k 根收盘后该摆动点才成立（信号的天然滞后）。
+   * confirmIndex 即 knownAt 的 bar 索引形态：模型与回放只能在 confirmIndex 之后使用它，
+   * 展示可以把 pivot 画回 index，但那不代表当时已知。
+   */
   confirmIndex: number
 }
 
@@ -84,6 +94,10 @@ export interface Leg {
   trendBarCount: number
   /** 与上一腿幅度之比（回调深度），>1 意味着击穿前一腿（趋势减弱/反转线索） */
   retracementOfPrev?: number
+  /** 可知时间（bar 索引）：终点摆动点的 confirmIndex；provisional 腿为 null */
+  knownAtIndex: number | null
+  /** 未完成腿：最后一个摆动点之后的进行中移动，可能继续延伸，不得覆盖已确认证据 */
+  provisional?: boolean
 }
 
 /**
@@ -104,6 +118,12 @@ export interface RegimeSegment {
   from: number
   to: number
   type: RegimeType
+  /**
+   * 可知时间（bar 索引）：该段状态被因果确认的位置。
+   * 因果状态机下段边界只出现在确认 bar 上，因此恒等于 from；
+   * 状态实际开始的位置更早，记录在 regime_change 事件的 atIndex。
+   */
+  knownAtIndex: number
 }
 
 export interface AlwaysInFlip {
@@ -146,22 +166,73 @@ export interface BrooksSignal {
   reason: string
   /** Brooks 概念出处（《价格行为交易》三部曲 / 官方词汇表） */
   concept: string
-  /** Brooks 经验概率先验（如 H2 ≈60%、区间突破 80% 失败） */
-  prior?: string
+  /**
+   * Brooks 在其美股股指期货市场的经验统计备注（带上下文的原文口径）。
+   * 注意：这不是本工具对任何币种/周期的预测胜率，不参与判定逻辑；
+   * 预测概率唯一来自统计模块（见 docs/specs/prediction.md）。
+   */
+  empiricalNote?: string
+  /** 规则匹配强度（结构证据完整度），不是置信度、更不是未来事件概率 */
   strength: 'high' | 'medium' | 'low'
   /** 研究参考位：突破确认价 / 结构止损 / 测量移动目标（AB=CD） */
   ref?: { entry?: number; stop?: number; target?: number }
+  /** 可知时间（bar 索引）：信号在该索引的收盘后可得（全部输入均已确认） */
+  knownAtIndex: number
+  /** 生命周期：triggered = 触发已确认；setup/失效/过期走 StructureEvent 表达 */
+  status: 'triggered'
+}
+
+/** 结构事件种类：摆动/腿/状态切换/形态登记（setup）/触发/失效/过期 */
+export type StructureEventKind =
+  | 'swing'
+  | 'leg'
+  | 'regime_change'
+  | 'setup'
+  | 'trigger'
+  | 'invalidation'
+  | 'expiry'
+
+/**
+ * 结构事件：引擎对外的事实载体，全部携带 atIndex（结构发生位置）与
+ * knownAtIndex（可知位置，provisional 为 null）。回放与模型只能使用
+ * knownAtIndex <= t 的事件；已发布的事件记录不得被后续重算覆盖。
+ */
+export interface StructureEvent {
+  kind: StructureEventKind
+  /** 规则标识，如 swing.fractal / regime.confirm / hl_count / ii_breakout / H2 / WEDGE_TOP */
+  ruleId: string
+  /** 规则版本（引擎版本） */
+  ruleVersion: string
+  direction?: Direction
+  /** 结构发生位置（摆动 pivot、raw 状态翻转点、setup 成立 bar） */
+  atIndex: number
+  atTime: number
+  /** 可知位置（确认收盘 bar）；provisional 事件为 null */
+  knownAtIndex: number | null
+  knownAtTime: number | null
+  /** 涉及的 bar 索引（如腿的两端、ii 形态区间） */
+  barIndices: number[]
+  /** 进行中/未确认标记（如未完成腿） */
+  provisional?: boolean
+  note?: string
 }
 
 export interface BrooksOptions {
   /** 摆动点左右各确认根数（1=微观 / 2~3=标准 / 5=主要摆动） */
   swingK: number
+  /**
+   * 统一截止时间（UTC 毫秒）。提供时每根 K 线必须携带 closeTime 且 closeTime <= asOf，
+   * 否则引擎入口抛错——回放/研究不得混入截止后才收盘的数据。
+   */
+  asOf?: number
 }
 
 export interface BrooksSummary {
   barCount: number
   regime: RegimeType
   regimeText: string
+  /** 末根正在观察中的候选状态（因果确认前），null = 无 */
+  pendingRegime: RegimeType | null
   alwaysIn: Direction
   alwaysInReason: string
   alwaysInSince: number
@@ -179,10 +250,18 @@ export interface BrooksAnalysis {
   atr14: number[]
   swings: SwingPoint[]
   legs: Leg[]
+  /** 因果确认后的逐根状态（只依赖当时及之前的收盘数据） */
   regimeAt: RegimeType[]
+  /** 未经确认的原始逐根分类（因果，但未经两根确认平滑），供 UI 展示 pending 提示 */
+  rawRegimeAt: RegimeType[]
+  /** 每根正在观察中的候选状态（null = 无候选），与 rawRegimeAt 配合展示 provisional */
+  regimePendingAt: (RegimeType | null)[]
   regimes: RegimeSegment[]
   alwaysIn: AlwaysIn
   signals: BrooksSignal[]
+  /** 结构事件流：摆动/腿/状态切换/setup/触发/失效/过期，按 knownAtIndex 排序 */
+  events: StructureEvent[]
+  engineVersion: string
   summary: BrooksSummary
   options: BrooksOptions
 }

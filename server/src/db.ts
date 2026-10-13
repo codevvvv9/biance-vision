@@ -5,7 +5,9 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
-import { aiConversations, aiMemories, aiMessages, alertHistory, alertRules, appSettings, auditRecords, users } from './models.js'
+// 供 scripts/ 下的校验脚本复用（根 package 不直接依赖 drizzle-orm）
+export { sql }
+import { aiConversations, aiMemories, aiMessages, alertHistory, alertRules, appSettings, auditRecords, ingestState, marketCandles, marketFundingRates, marketOpenInterest, marketSnapshots, structureEvents, users } from './models.js'
 import { log } from './logger.js'
 import type {
   NewAiConversationRow,
@@ -40,7 +42,7 @@ function loadDotEnv(file: string): void {
 }
 loadDotEnv('.env')
 
-const DATABASE_URL =
+export const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision'
 
 export const HISTORY_KEEP = 200
@@ -60,7 +62,19 @@ export async function initDb(): Promise<boolean> {
   try {
     client = postgres(DATABASE_URL, { max: 5, connect_timeout: 3, idle_timeout: 20 })
     await client`select 1`
-    const conn = drizzle(client, { schema: { alertRules, alertHistory, appSettings } })
+    const conn = drizzle(client, {
+      schema: {
+        alertRules,
+        alertHistory,
+        appSettings,
+        marketCandles,
+        marketFundingRates,
+        marketOpenInterest,
+        marketSnapshots,
+        ingestState,
+        structureEvents,
+      },
+    })
     await migrate(conn, { migrationsFolder: MIGRATIONS_FOLDER })
     db = conn
     available = true
@@ -160,6 +174,14 @@ const rowToEntry = (row: {
 const guard = (): Db | null => {
   if (!available || !db) return null
   return db
+}
+
+/**
+ * 行情等新业务域的 drizzle 句柄（PG 唯一权威，无 JSON 镜像降级）。
+ * DB 不可用时返回 null —— 调用方必须按「503 storage_unavailable / 不启动任务」处理。
+ */
+export function getDb(): Db | null {
+  return guard()
 }
 
 export async function loadAllFromDb(): Promise<{
