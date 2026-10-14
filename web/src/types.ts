@@ -69,6 +69,20 @@ export interface AdminUser {
   createdAt: number
 }
 
+/** 用户级聊天管控策略（与 PUT /api/admin/users/:username/chat-policy 对应） */
+export interface ChatPolicy {
+  disabled: boolean
+  /** 每日交互上限；null = 不限 */
+  dailyLimit: number | null
+}
+
+/** 管理端用户列表行（GET /api/admin/users）：附带聊天管控、当日用量与在线近似（5 分钟内有操作） */
+export interface AdminUserRow extends AdminUser {
+  chatPolicy: ChatPolicy
+  chatUsage: { today: number; limit: number | null }
+  online: boolean
+}
+
 export interface Settings {
   webhookUrl: string
 }
@@ -83,6 +97,8 @@ export type AuditAction =
   | 'rule_delete'
   | 'settings_update'
   | 'settings_test'
+  | 'chat_policy_update'
+  | 'chat_cutoff'
 
 /** 会话内单次操作 */
 export interface AuditEntry {
@@ -167,6 +183,76 @@ export interface AiProfileMasked {
   extraPrompt?: string
   dailyLimit?: number
   allowedUsers?: string[]
+}
+
+/** 研究会话上下文（链路 B conversations.context；与服务端会话同步字段一致，其余键原样保留） */
+export interface AdminConversationContext {
+  product?: 'perp' | 'event' | 'teaching'
+  symbol?: string
+  marketType?: 'spot' | 'usdm_perp'
+  horizon?: '10m' | '30m' | '1h' | '1d' | '1w'
+  positionId?: string | null
+  quoteId?: string | null
+  /** 待确认的持仓草稿（确认卡未落库前挂在上下文上） */
+  draft?: Record<string, unknown> | null
+  [key: string]: unknown
+}
+
+/** 研究会话摘要（GET /api/admin/conversations?username=，仅超管） */
+export interface AdminConversationSummary {
+  id: string
+  title: string
+  context: AdminConversationContext
+  updatedAt: number
+  messageCount: number
+}
+
+/** 消息意图（与服务端 Intent 一致） */
+export type ChatIntent = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system'
+
+/** 会话内联卡片：confirm_position 持仓确认卡 / completion */
+export interface AdminMessageCard {
+  kind: 'confirm_position' | 'completion'
+  draft: Record<string, unknown>
+  missingFields?: string[]
+  complete?: boolean
+}
+
+/** 研究会话消息（GET /api/admin/conversations/:id） */
+export interface AdminConversationMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  intent: ChatIntent | null
+  content: string
+  card: AdminMessageCard | null
+  runId: string | null
+  createdAt: number
+}
+
+export type ResearchRunStatus = 'queued' | 'running' | 'validating' | 'published' | 'failed' | 'cancelled'
+
+/** 会话引用的研究运行摘要（按 runId 去重后随详情返回） */
+export interface AdminRunRef {
+  id: string
+  status: ResearchRunStatus
+  product: string
+  symbol: string
+  horizon: string
+  createdAt: number
+}
+
+/** 研究会话详情（GET /api/admin/conversations/:id）：完整消息 + 引用运行摘要 */
+export interface AdminConversationDetail {
+  conversation: {
+    id: string
+    userId: string
+    title: string
+    context: AdminConversationContext
+    createdAt: number
+    updatedAt: number
+  }
+  messages: AdminConversationMessage[]
+  runs: Record<string, AdminRunRef>
 }
 
 /** 服务端 → 前端 WS 消息 */

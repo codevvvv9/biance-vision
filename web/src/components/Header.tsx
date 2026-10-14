@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
 import { useAi } from '../ai/AiContext'
 import AiSettingsModal from '../ai/AiSettingsModal'
+import { ADMIN_MENU } from '../admin/menu'
 import { fmtPct, fmtPrice } from '../utils'
 import { notificationState, requestNotifications } from '../notify'
 import type { NotificationPermissionState } from '../notify'
@@ -170,6 +171,15 @@ const STATUS_LABEL: Record<string, string> = {
   offline: '已断线 · 重连中',
 }
 
+/** 管理菜单图标：按 ADMIN_MENU 的 path 映射，保持原硬编码菜单的图标不变 */
+const ADMIN_ICONS: Record<string, JSX.Element> = {
+  '/admin': <LogIcon />,
+  '/admin/ai': <ChatLogIcon />,
+  '/admin/knowledge': <BookIcon />,
+  '/admin/agents': <TuneIcon />,
+  '/admin/evals': <ChartIcon />,
+}
+
 function LogoutIcon(): JSX.Element {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -291,66 +301,21 @@ export default function Header(): JSX.Element {
               <div className="user-menu-panel" role="menu">
                 {user.role === 'superadmin' && (
                   <>
-                    <button
-                      className="menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        navigate('/admin')
-                      }}
-                    >
-                      <LogIcon />
-                      <span>管理面板</span>
-                      <em className="menu-hint">用户 / 日志</em>
-                    </button>
-                    <button
-                      className="menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        navigate('/admin/ai')
-                      }}
-                    >
-                      <ChatLogIcon />
-                      <span>AI 会话</span>
-                      <em className="menu-hint">上下文 / 记忆</em>
-                    </button>
-                    <button
-                      className="menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        navigate('/admin/knowledge')
-                      }}
-                    >
-                      <BookIcon />
-                      <span>知识库</span>
-                      <em className="menu-hint">导入 / 发布 / 检索调试</em>
-                    </button>
-                    <button
-                      className="menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        navigate('/admin/agents')
-                      }}
-                    >
-                      <TuneIcon />
-                      <span>Agent 配置</span>
-                      <em className="menu-hint">能力 / 版本 / 回滚</em>
-                    </button>
-                    <button
-                      className="menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        navigate('/admin/evals')
-                      }}
-                    >
-                      <ChartIcon />
-                      <span>评测与模型</span>
-                      <em className="menu-hint">数据集 / 训练 / 指标</em>
-                    </button>
+                    {ADMIN_MENU.map((item) => (
+                      <button
+                        key={item.path}
+                        className="menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false)
+                          navigate(item.path)
+                        }}
+                      >
+                        {ADMIN_ICONS[item.path]}
+                        <span>{item.label}</span>
+                        <em className="menu-hint">{item.hint}</em>
+                      </button>
+                    ))}
                     <button
                       className="menu-item"
                       role="menuitem"

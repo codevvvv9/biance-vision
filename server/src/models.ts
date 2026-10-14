@@ -53,6 +53,8 @@ export const users = pgTable('users', {
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').notNull().default('user'),
+  /** 用户级聊天管控（jsonb，null = 不禁不限；结构对应 server/src/users.ts 的 ChatPolicy） */
+  chatPolicy: jsonb('chat_policy').$type<{ disabled: boolean; dailyLimit: number | null } | null>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

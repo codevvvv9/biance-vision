@@ -19,6 +19,7 @@ import { loadSnapshotPack } from '../../services/marketSnapshot.js'
 import { handleResearchChat } from './chat.js'
 import { listRunEventsAfter } from './store.js'
 import { createConversation, getConversationForUser, listConversations, listMessages, patchContext, postMessage } from './conversation.js'
+import { assertChatAllowed, recordChatMessage } from '../../chatPolicy.js'
 
 interface RunRouteDeps {
   requireSession: (req: FastifyRequest) => SessionRecord
@@ -126,6 +127,8 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
   app.post('/api/conversations/:id/messages', async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
+    // 用户级聊天管控（禁用/每日上限），鉴权后、业务前拦截
+    assertChatAllowed(session.username)
     const { id } = req.params as { id: string }
     const conv = await getConversationForUser(id, session.username)
     if (conv === null) return reply.code(404).send({ code: 'not_found', message: '会话不存在' })
@@ -133,6 +136,8 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const message = typeof body.message === 'string' ? body.message : ''
     if (message.trim() === '') return badRequest(reply, 'message 不能为空')
     const r = await postMessage(conv, message)
+    // 按交互次数宽松口径：postMessage 的 10s 同内容幂等重放走到这里会重复计数，可接受
+    recordChatMessage(session.username)
     return reply.code(202).send({
       message: { id: r.message.id, role: r.message.role, content: r.message.content, intent: r.message.intent, runId: r.message.runId, card: r.message.card, createdAt: r.message.createdAt.getTime() },
       runId: r.runId,
@@ -159,12 +164,15 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
   app.post('/api/research/chat', async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
+    // 遗留入口同样纳入用户级聊天管控（与对话消息口径一致）
+    assertChatAllowed(session.username)
     const body = (req.body ?? {}) as { message?: unknown; lastRunId?: unknown }
     const message = typeof body.message === 'string' ? body.message : ''
     if (message.trim() === '') return badRequest(reply, 'message 不能为空')
     const lastRunId = typeof body.lastRunId === 'string' ? body.lastRunId : undefined
     try {
       const outcome = await handleResearchChat(session.username, { message, lastRunId })
+      recordChatMessage(session.username)
       return reply.code(202).send(outcome)
     } catch (err) {
       const e = err as { statusCode?: number; message: string }
@@ -175,6 +183,8 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
   app.post('/api/research/runs', async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
+    // 直建 run 也要过用户级管控，堵住绕过对话入口的通道
+    assertChatAllowed(session.username)
     const parsed = ResearchRunCreateSchema.safeParse(req.body ?? {})
     if (!parsed.success) return badRequest(reply, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('；'))
     const input = parsed.data
@@ -200,9 +210,11 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const queued = await enqueueResearchRun(row.id)
     if (!queued) {
       // 队列不可用：显式 503，不静默丢失（行保留 queued，恢复后可重投）
+      // 503 未实际入队，不计交互次数（仅 202 计）
       log.warn('research', '队列不可用，研究运行已建档未投递', kv({ run: row.id.slice(0, 8) }))
       return reply.code(503).send({ code: 'queue_unavailable', message: '队列不可用；运行已保存，稍后由管理员重投', runId: row.id })
     }
+    recordChatMessage(session.username)
     return reply.code(202).send({ runId: row.id, run: runDto(row) })
   })
 

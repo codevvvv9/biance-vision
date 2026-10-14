@@ -21,7 +21,7 @@ import type {
 import type { AlertEntry, AlertRule, RuleType, Settings } from './types.js'
 import type { AuditSessionRecord } from './audit.js'
 import type { StoredConversation, StoredMessage, AiMemoryItem, MemoryKind } from './aiMemory.js'
-import type { UserRecord, UserRole } from './users.js'
+import type { UserRecord, UserRole, ChatPolicy } from './users.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const MIGRATIONS_FOLDER = path.join(__dirname, '..', 'drizzle')
@@ -250,6 +250,7 @@ const rowToUser = (row: {
   username: string
   passwordHash: string
   role: string
+  chatPolicy: ChatPolicy | null
   createdAt: Date
   updatedAt: Date
 }): UserRecord => ({
@@ -257,6 +258,7 @@ const rowToUser = (row: {
   username: row.username,
   passwordHash: row.passwordHash,
   role: row.role as UserRole,
+  chatPolicy: row.chatPolicy ?? undefined,
   createdAt: row.createdAt.getTime(),
   updatedAt: row.updatedAt.getTime(),
 })
@@ -277,6 +279,7 @@ export async function upsertUsersDb(list: UserRecord[]): Promise<void> {
     username: u.username,
     passwordHash: u.passwordHash,
     role: u.role,
+    chatPolicy: u.chatPolicy ?? null,
     createdAt: new Date(u.createdAt),
     updatedAt: new Date(u.updatedAt),
   }))
@@ -285,6 +288,7 @@ export async function upsertUsersDb(list: UserRecord[]): Promise<void> {
     set: {
       passwordHash: sql`excluded.password_hash`,
       role: sql`excluded.role`,
+      chatPolicy: sql`excluded.chat_policy`,
       updatedAt: sql`excluded.updated_at`,
     },
   })

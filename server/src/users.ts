@@ -7,11 +7,19 @@ import { log } from './logger.js'
 
 export type UserRole = 'user' | 'superadmin'
 
+/** 用户级聊天管控（管理端设置）：disabled=禁用 AI 助手；dailyLimit=每日交互上限（null/缺省=不限） */
+export interface ChatPolicy {
+  disabled: boolean
+  dailyLimit: number | null
+}
+
 export interface UserRecord {
   id: string
   username: string
   passwordHash: string
   role: UserRole
+  /** 聊天管控；缺省（旧数据无字段）= 不禁不限 */
+  chatPolicy?: ChatPolicy
   createdAt: number
   updatedAt: number
 }
@@ -192,6 +200,29 @@ export function updatePassword(username: string, password: string): UserRecord {
 
 export function toPublic(u: UserRecord): PublicUser {
   return { username: u.username, role: u.role }
+}
+
+/**
+ * 更新用户聊天管控（管理端）：合并 patch 后双写（JSON 镜像 + 数据库），
+ * 保存即生效无需重启；用户不存在返回 null（调用方据此 404）。
+ */
+export function updateChatPolicy(
+  username: string,
+  patch: { disabled?: boolean; dailyLimit?: number | null },
+): UserRecord | null {
+  const name = String(username ?? '').trim()
+  const list = getUsers()
+  const u = list.find((x) => x.username.toLowerCase() === name.toLowerCase())
+  if (!u) return null
+  const prev = u.chatPolicy ?? { disabled: false, dailyLimit: null }
+  u.chatPolicy = {
+    disabled: patch.disabled ?? prev.disabled,
+    // dailyLimit 显式给 null = 解除上限；undefined = 不改动
+    dailyLimit: patch.dailyLimit === undefined ? prev.dailyLimit : patch.dailyLimit,
+  }
+  u.updatedAt = Date.now()
+  persistUsers([...list])
+  return u
 }
 
 /** 校验用户名密码；统一返回 null 以免区分「用户不存在 / 密码错误」 */
