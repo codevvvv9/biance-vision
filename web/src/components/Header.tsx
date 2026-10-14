@@ -255,7 +255,7 @@ export default function Header(): JSX.Element {
         </button>
         <button
           className={`icon-btn ${soundOn ? 'active' : ''}`}
-          title={soundOn ? '预警提示音：开' : '预警提示音：关'}
+          title={soundOn ? '提示音：开' : '提示音：关'}
           onClick={toggleSound}
         >
           <SoundIcon off={!soundOn} />

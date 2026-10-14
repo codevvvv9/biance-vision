@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import type { Chart, DeepPartial, Styles } from 'klinecharts'
 import { dispose, init, registerStyles } from 'klinecharts'
 import FullscreenButton from './FullscreenButton'
@@ -214,9 +213,6 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
               <span className={`chg ${up ? 'up' : 'down'}`}>{fmtPct(t.changePct)}</span>
             </>
           )}
-          <Link className="btn btn-ghost btn-sm" to={`/alerts?symbol=${symbol}`} title="为该交易对配置预警">
-            ⚡ 设预警
-          </Link>
         </div>
         <div className="panel-head-tools">
           <div className="interval-group" role="tablist">
