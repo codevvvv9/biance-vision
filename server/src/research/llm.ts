@@ -105,10 +105,21 @@ export class OpenAICompatibleLlm implements LlmClient {
 }
 
 /** chat 能力已配置且 baseUrl/model 齐备 → 客户端；否则 null（显式待配置）。
- * frozenCaps：run 冻结配置中的 capabilities（优先于全局——Admin 发布版本决定运行行为） */
+ * frozenCaps：run 冻结配置中的 capabilities。评审三轮-3：调用方显式传入冻结配置时
+ * 严格尊重它——冻结为关闭（{enabled:false}，无 baseUrl）也有效，绝不回退全局实时配置；
+ * 只有完全未传（undefined，历史 run 无冻结能力字段的兼容路径）才读全局生效配置。 */
 export function resolveLlmClient(frozenCaps?: { chat?: { enabled?: boolean; baseUrl?: string; model?: string; secretRef?: string } } | null): OpenAICompatibleLlm | null {
-  const frozen = frozenCaps?.chat
-  const cap = frozen !== undefined && frozen !== null && frozen.baseUrl !== undefined ? frozen : getCapabilities().chat
+  if (frozenCaps !== undefined) {
+    const frozen = frozenCaps?.chat
+    if (frozen === undefined || frozen === null) return null
+    if (frozen.enabled !== true || frozen.baseUrl === undefined || frozen.baseUrl === '' || frozen.model === undefined || frozen.model === '') return null
+    try {
+      return new OpenAICompatibleLlm({ baseUrl: frozen.baseUrl, model: frozen.model, secretRef: frozen.secretRef })
+    } catch {
+      return null
+    }
+  }
+  const cap = getCapabilities().chat
   if (!cap?.enabled || !cap.baseUrl || !cap.model) return null
   try {
     return new OpenAICompatibleLlm({ baseUrl: cap.baseUrl, model: cap.model, secretRef: cap.secretRef })

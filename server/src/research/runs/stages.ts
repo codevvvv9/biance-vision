@@ -41,6 +41,25 @@ import type { AgentCapabilities, ResearchResultV2, SearchCapabilityConfig, Unava
 /** 新闻/消息面/归因类措辞（与 conversation.ts 的 news 意图路由同源） */
 const NEWS_QUERY_RE = /新闻|消息面|为什么涨|为什么跌|归因/
 
+/** 流水线工具域（评审 R4：plan 规划 + 阶段入口代码门控共用同一份定义） */
+const TOOL_DOMAIN = ['market_snapshot', 'brooks_engine', 'knowledge_retrieval', 'web_search'] as const
+type ToolDomain = (typeof TOOL_DOMAIN)[number]
+
+/** 工具白名单代码门控：发布配置 roles[].tools 排除的工具域，对应阶段拒绝执行
+ * （不再是只写提示的展示信息）；未配置角色时 plan 已置工程默认全集，门控通过 */
+function assertToolAllowed(ctx: RunContext, tool: ToolDomain): void {
+  const req = ctx.plan?.requiredTools
+  if (req !== undefined && !req.includes(tool)) {
+    throw new Error(`工具域 ${tool} 不在本 run 的工具白名单（agent 版本 roles 配置排除），阶段拒绝执行`)
+  }
+}
+
+/** 阻断性质量问题判定（评审 R1：门控看完整问题集合，与排序无关）——
+ * insufficient_history 单独存在不阻断（特征门槛另行把关），过期/缺口/参考价异常一律阻断 */
+export function hasBlockingQualityIssue(issues: { code: string }[]): boolean {
+  return issues.some((i) => i.code !== 'insufficient_history')
+}
+
 /** search 能力配置解析：优先 run 冻结配置（raw.capabilities.search），缺失/非法时
  *  回退全局生效配置（与 resolveLlmClient 的 frozen→live 回退一致） */
 function searchConfigFor(ctx: RunContext): SearchCapabilityConfig {
@@ -196,9 +215,9 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
       if (ctx.product === 'perp' && ctx.positionId === null) missingFields.push('未录入/未引用已确认持仓：按一般结构研究处理')
       if (ctx.product === 'event' && ctx.quoteId === null) missingFields.push('未录入/未引用事件报价：EV 不可计算')
       if (ctx.horizon === '1w') missingFields.push('1w 为方向研究期限（非币安事件合约产品期限）')
-      // 工具白名单（九轮修复）：发布配置 roles[].tools 并集与流水线工具域取交集；
-      // 未配置角色时保留工程默认（三件套）。search 能力关闭时 web_search 不可用
-      const TOOL_DOMAIN = ['market_snapshot', 'brooks_engine', 'knowledge_retrieval', 'web_search'] as const
+      // 工具白名单（九轮修复；评审 R4 升级为代码门控）：发布配置 roles[].tools 并集与流水线
+      // 工具域取交集；未配置角色时保留工程默认（三件套）。search 能力关闭时 web_search 不可用。
+      // 被排除的工具域在对应阶段入口由 assertToolAllowed 拒绝执行（不再是仅提示）
       const roles = ((ctx.frozenConfig?.raw as { roles?: { tools?: string[] }[] } | undefined)?.roles ?? [])
       const roleTools = new Set(roles.flatMap((r) => r.tools ?? []))
       const searchEnabled = searchConfigFor(ctx).enabled === true
@@ -207,7 +226,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         : TOOL_DOMAIN.filter((t) => t !== 'web_search')
       ).filter((t) => (t === 'web_search' ? searchEnabled : true))
       for (const t of ['market_snapshot', 'brooks_engine', 'knowledge_retrieval'] as const) {
-        if (!requiredTools.includes(t)) missingFields.push(`工具白名单未启用 ${t}：流水线仍会执行该阶段，但按配置语义视为受限`)
+        if (!requiredTools.includes(t)) missingFields.push(`工具白名单未启用 ${t}：对应阶段将被代码门控拒绝执行`)
       }
       // 新闻/消息面/归因类问题需要 web 搜索证据：能力未启用时显式降级说明（不伪造）；
       // 已启用时 searchNeeded=true，retrieve 阶段执行「搜索 → 原页核验 → 冻结证据」
@@ -230,6 +249,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
   const snapshot: Stage = {
     name: 'snapshot',
     async run(ctx: RunContext): Promise<void> {
+      assertToolAllowed(ctx, 'market_snapshot')
       const frozen = await createFrozenSnapshot({
         symbol: ctx.symbol,
         marketType: ctx.marketType,
@@ -262,6 +282,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
   const structures: Stage = {
     name: 'structures',
     async run(ctx: RunContext): Promise<void> {
+      assertToolAllowed(ctx, 'brooks_engine')
       const execTf = EXEC_TF[ctx.horizon] ?? '15m'
       const bgTf = BACKGROUND_TF[ctx.horizon] ?? '1h'
       const exec = analyzeFromPack(ctx.snapshotPack, execTf)
@@ -350,6 +371,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
   const retrieve: Stage = {
     name: 'retrieve',
     async run(ctx: RunContext): Promise<void> {
+      assertToolAllowed(ctx, 'knowledge_retrieval')
       const queries = ctx.plan?.retrievalQueries ?? [ctx.question ?? ctx.symbol]
       const primary = queries[0] ?? ctx.symbol
       const kvId = ctx.frozenConfig?.knowledgeVersionId ?? ctx.knowledgeVersion
@@ -434,7 +456,9 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         status: 'skipped',
         note: 'plan 未判定需要 web 搜索（searchNeeded=false）',
       }
-      if (ctx.plan?.searchNeeded === true) {
+      if (ctx.plan?.searchNeeded === true && !ctx.plan.requiredTools.includes('web_search')) {
+        webSearch = { status: 'skipped', note: 'web_search 不在本 run 工具白名单（roles 配置排除），跳过搜索' }
+      } else if (ctx.plan?.searchNeeded === true) {
         const searchCap = searchConfigFor(ctx)
         const searchBudget = ctx.frozenConfig?.budgets.maxSearchCalls ?? 2
         const remaining = Math.max(0, searchBudget - ctx.usage.searchCalls)
@@ -527,6 +551,9 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         claims.push({ text: '知识库为空：结构声明无法附 Brooks 理论引用（关联链路不可用，判定回退计数语义）', kind: 'fact', evidenceIds: [] })
       }
       const qualityCode = ctx.qualityIssues[0]?.code as UnavailableCode | undefined
+      // 质量门控看完整问题集合（评审 R1：与问题排序无关）——insufficient_history 之外的
+      // 任何质量问题（行情过期/窗口缺口/参考价异常）都必须阻断概率与参与动作
+      const qualityBlocked = hasBlockingQualityIssue(ctx.qualityIssues)
       const execTf = EXEC_TF[ctx.horizon] ?? '15m'
       const execSeries = ctx.snapshotPack?.candles.find((c) => c.interval === execTf && c.priceType === 'trade')
       const closes = (execSeries?.rows ?? []).map((r) => Number(r.c))
@@ -673,7 +700,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
           const evtBaseInterval = baseIntervalFor(ctx.horizon)
           const idxSeries = ctx.snapshotPack?.candles.find((c) => c.interval === evtBaseInterval && c.priceType === 'index')
           const idxCloses = (idxSeries?.rows ?? []).map((r) => Number(r.c))
-          const blocked = qualityCode !== undefined && qualityCode !== 'insufficient_history'
+          const blocked = qualityBlocked
           if (blocked) {
             probUnavailable = { code: 'stale_market', detail: `快照质量问题：${ctx.qualityIssues.map((q) => q.code).join(',')}` }
           } else if (idxCloses.length < MIN_BARS) {
@@ -737,7 +764,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
           kind: 'direction', horizon: '1w', researchMode: true, quantiles: null, probabilityUp: null,
           unavailableCode: 'model_not_published', unavailableDetail: '',
         }
-        const dirBlocked = qualityCode !== undefined && qualityCode !== 'insufficient_history'
+        const dirBlocked = qualityBlocked
         if (dirBlocked) {
           directionPayload = { ...directionPayload, unavailableCode: 'stale_market', unavailableDetail: `快照质量问题：${ctx.qualityIssues.map((q) => q.code).join(',')}` }
         } else if (dirCloses.length < MIN_BARS) {
@@ -982,6 +1009,11 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         ctx.frozenConfig !== null && persistedRun !== null && persistedRun.frozenConfig !== null
           ? hashFrozenConfig(persistedRun.frozenConfig as NonNullable<RunContext['frozenConfig']>)
           : null
+      // 质量硬条件的独立校验（评审 R1）：存在阻断性质量问题（过期/缺口/参考价异常，与排序无关）
+      // 时不得产出概率块——阶段门控之外的第二道防线
+      if (hasBlockingQualityIssue(ctx.qualityIssues) && v2.probabilityBlock !== null) {
+        throw new ValidationRejected(['quality_gate: 存在阻断性质量问题但已产出概率块'])
+      }
       const result = validateResearch({
         claims: ctx.claims,
         counterClaims: ctx.counterClaims,

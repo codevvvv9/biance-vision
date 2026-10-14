@@ -16,8 +16,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { to: '/', label: '大盘总览', end: true },
-  { to: '/movers', label: '异动榜' },
-  { to: '/alerts', label: '预警中心' },
+  // 异动榜/预警中心入口暂时隐藏（聚焦研究 agent 三场景建议）；路由保留，直达链接仍可用
   { to: '/brooks', label: '价格行为' },
   { to: '/research', label: '研究终端' },
 ]

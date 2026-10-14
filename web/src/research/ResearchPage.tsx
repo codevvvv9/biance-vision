@@ -141,7 +141,7 @@ export default function ResearchPage(): JSX.Element {
     onPositionsChanged: () => void refreshLeft(),
   })
 
-  const { candles, bars, loading: chartLoading, error: chartError } = useResearchCandles(
+  const { candles, bars, loading: chartLoading, error: chartError, source: chartSource, fallbackReason: chartFallback } = useResearchCandles(
     symbol,
     marketType,
     chartInterval,
@@ -485,9 +485,15 @@ export default function ResearchPage(): JSX.Element {
               {chartAsOf !== null && (
                 <>
                   {` · 图表按运行 asOf 冻结（${new Date(chartAsOf).toLocaleString()}）`}
+                  {chartSource === 'snapshot' ? ' · 输入包数据' : ''}
                   <button className="btn btn-sm" onClick={() => setChartAsOf(null)}>回到实时</button>
                 </>
               )}
+            </p>
+          )}
+          {chartAsOf !== null && chartFallback !== null && (
+            <p className="snapshot-line warn-line" role="alert">
+              快照不可复现：{chartFallback}（图表未使用冻结输入包，结论仍有效，图仅作参考）
             </p>
           )}
         </section>
