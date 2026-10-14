@@ -1,7 +1,9 @@
 /**
- * /api/admin/agents/*、/api/admin/evaluations/*、/api/admin/models/* 路由
- * （docs/specs/api-storage.md、admin-security.md、evaluation-deployment.md）。
- * 全部 requireSuperadmin；DB 不可用 503；发布/回滚/训练触发写审计。
+ * /api/admin/* 路由汇总：
+ * - agents / evaluations / models（docs/specs/api-storage.md、admin-security.md、evaluation-deployment.md）
+ * - 核心域：users（含聊天管控）、audit-logs、ai/overview|user|conversations（链路 A 会话全景）、
+ *   conversations（链路 B 研究会话追踪）
+ * 全部 requireSuperadmin；DB 不可用 503；发布/回滚/训练触发/聊天管控写审计。
  * debug-run：用版本配置跑一次轻量校验（能力/知识绑定解析 + 检索冒烟），不产生正式研究结论。
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
@@ -15,8 +17,18 @@ import {
   EvalDatasetKindSchema,
   EvalRunSchema,
 } from 'biance-vision-brooks'
-import { recordAudit } from '../audit.js'
+import { listActiveUsernames, queryAudit, recordAudit } from '../audit.js'
+import { getUsers, updateChatPolicy } from '../users.js'
 import type { SessionRecord } from '../users.js'
+import { getChatUsageToday, normalizeChatPolicy } from '../chatPolicy.js'
+import { buildSystemPrompt, getAiProfilesMasked, resolveAiProfile, resolveAiProfileName } from '../ai.js'
+import {
+  adminAiStats,
+  getConversationAny,
+  listConversations as listAiConversations,
+  listMemories,
+  memoriesPromptBlock,
+} from '../aiMemory.js'
 import { getDb } from '../db.js'
 import { kv, log } from '../logger.js'
 import { evalDatasets, evalRuns, predictionModels } from '../models.js'
@@ -37,6 +49,8 @@ import {
 import { enqueueEvalRun, enqueueTrainJob, pinnedConfigVersion } from './jobs.js'
 import { researchPyHealthy } from '../researchpy.js'
 import { toModelInfo } from '../research/productRoutes.js'
+import { getConversationByIdAdmin, listConversationsWithStats, listMessages } from '../research/runs/conversation.js'
+import { getRun, listRuns, requestCancel } from '../research/runs/store.js'
 
 interface AdminRouteDeps {
   requireSuperadmin: (req: FastifyRequest) => SessionRecord
@@ -478,7 +492,199 @@ function registerModelRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
   })
 }
 
+// ---- 核心域：用户 / 审计 / AI 全景 / 聊天管控 / 研究会话追踪（自 index.ts 收口） ----
+
+/** 研究运行终态集合（与 research/runs/store.ts 口径一致：终态不再取消） */
+const RUN_TERMINAL = new Set(['published', 'failed', 'cancelled'])
+
+function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  /** 系统真实用户列表（AI 档案绑定等场景需精准匹配用户名，不含密码哈希）；
+   * 附带聊天管控与当日用量；online 为活跃近似（5 分钟内有审计动作的进行中会话） */
+  app.get('/api/admin/users', async (req) => {
+    deps.requireSuperadmin(req)
+    const online = listActiveUsernames(5 * 60_000)
+    return {
+      users: getUsers()
+        .map((u) => {
+          const chatPolicy = normalizeChatPolicy(u)
+          return {
+            username: u.username,
+            role: u.role,
+            createdAt: u.createdAt,
+            chatPolicy,
+            chatUsage: { today: getChatUsageToday(u.username), limit: chatPolicy.dailyLimit },
+            online: online.has(u.username),
+          }
+        })
+        .sort((a, b) => a.role.localeCompare(b.role) || a.createdAt - b.createdAt),
+    }
+  })
+
+  app.get('/api/admin/audit-logs', async (req) => {
+    deps.requireSuperadmin(req)
+    const q = req.query as { username?: string; limit?: string }
+    return queryAudit({ username: q.username, limit: parseInt(q.limit ?? '', 10) || 200 })
+  })
+
+  // ---- AI 会话记录全景（链路 A：aiMemory 的 ai_conversations；上下文 / 记忆 / 提示词 / 配置） ----
+
+  /** 各用户 AI 使用统计 + 全部档案（脱敏） */
+  app.get('/api/admin/ai/overview', async (req) => {
+    deps.requireSuperadmin(req)
+    return {
+      stats: adminAiStats().map((s) => ({ ...s, profileName: resolveAiProfileName(s.username) })),
+      profiles: getAiProfilesMasked(),
+    }
+  })
+
+  /** 指定用户 AI 全景：生效档案与配置、会话列表、长期记忆、完整生效提示词 */
+  app.get('/api/admin/ai/user', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    const username = String((req.query as { username?: string }).username ?? '').trim()
+    if (!username) return badRequest(reply, '缺少 username')
+    const profileName = resolveAiProfileName(username)
+    const profile = resolveAiProfile(username)
+    return {
+      username,
+      profileName,
+      profileConfigured: !!profile,
+      profileMasked: getAiProfilesMasked()[profileName] ?? null,
+      prompt: profile ? buildSystemPrompt(profile, memoriesPromptBlock(username)) : '',
+      conversations: listAiConversations(username),
+      memories: listMemories(username),
+    }
+  })
+
+  /** 任意会话的完整消息记录（链路 A，不限归属，管理端查看上下文用） */
+  app.get('/api/admin/ai/conversations/:id', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    const conv = getConversationAny((req.params as { id: string }).id)
+    if (!conv) return badRequest(reply, '会话不存在')
+    return {
+      conversation: {
+        id: conv.id,
+        username: conv.username,
+        title: conv.title || '新对话',
+        createdAt: conv.createdAt,
+        updatedAt: conv.updatedAt,
+        messages: conv.messages.map((m) => ({ role: m.role, content: m.content, at: m.at })),
+      },
+    }
+  })
+
+  // ---- 用户级聊天管控 ----
+
+  /** 更新聊天管控：disabled 禁用/解禁；dailyLimit 正整数上限或 null 解除 */
+  app.put('/api/admin/users/:username/chat-policy', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    const { username } = req.params as { username: string }
+    const body = parseBody(
+      z
+        .object({
+          disabled: z.boolean().optional(),
+          dailyLimit: z.number().int().positive().nullable().optional(),
+        })
+        .refine((v) => v.disabled !== undefined || v.dailyLimit !== undefined, { message: '至少提供 disabled 或 dailyLimit 之一' }),
+      req.body,
+      reply,
+    )
+    if (!body) return reply
+    const user = updateChatPolicy(username, body)
+    if (!user) return reply.code(404).send({ code: 'not_found', message: `用户 ${username} 不存在` })
+    const chatPolicy = normalizeChatPolicy(user)
+    recordAudit(session, {
+      action: 'chat_policy_update',
+      target: user.username,
+      detail: `聊天管控更新：${chatPolicy.disabled ? '禁用' : '启用'}，每日上限 ${chatPolicy.dailyLimit ?? '不限'}`,
+    })
+    log.info('admin', '聊天管控更新', kv({ 操作者: session.username, 目标: user.username, 禁用: chatPolicy.disabled, 每日上限: chatPolicy.dailyLimit ?? '不限' }))
+    return { username: user.username, chatPolicy }
+  })
+
+  /** 一键切断：禁用该用户聊天 + 取消其全部未终态研究运行 */
+  app.post('/api/admin/users/:username/chat-cutoff', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { username } = req.params as { username: string }
+    const user = updateChatPolicy(username, { disabled: true })
+    if (!user) return reply.code(404).send({ code: 'not_found', message: `用户 ${username} 不存在` })
+    const running = (await listRuns(user.username)).filter((r) => !RUN_TERMINAL.has(r.status))
+    const cancelledRuns: string[] = []
+    for (const r of running) {
+      if (await requestCancel(r.id, user.username)) cancelledRuns.push(r.id)
+    }
+    recordAudit(session, {
+      action: 'chat_cutoff',
+      target: user.username,
+      detail: `聊天切断：禁用聊天并取消 ${cancelledRuns.length} 个进行中研究`,
+    })
+    log.warn('admin', '聊天切断', kv({ 操作者: session.username, 目标: user.username, 取消研究: cancelledRuns.length }))
+    return { disabled: true, cancelledRuns }
+  })
+
+  // ---- 研究会话追踪（链路 B：conversations/conversation_messages） ----
+
+  /** 指定用户的会话列表（带消息数统计） */
+  app.get('/api/admin/conversations', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const q = req.query as { username?: string; limit?: string }
+    const username = String(q.username ?? '').trim()
+    if (!username) return badRequest(reply, '缺少 username')
+    const limit = Math.min(Math.max(parseInt(q.limit ?? '', 10) || 50, 1), 200)
+    const rows = await listConversationsWithStats(username, limit)
+    return {
+      conversations: rows.map((c) => ({
+        id: c.id,
+        title: c.title,
+        context: c.context,
+        updatedAt: c.updatedAt.getTime(),
+        messageCount: c.messageCount,
+      })),
+    }
+  })
+
+  /** 会话详情：完整消息 + 引用的研究运行摘要（runId 去重拉取） */
+  app.get('/api/admin/conversations/:id', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const conv = await getConversationByIdAdmin(id)
+    if (!conv) return reply.code(404).send({ code: 'not_found', message: '会话不存在' })
+    const messages = await listMessages(id, undefined, 500)
+    const runIds = [...new Set(messages.map((m) => m.runId).filter((x): x is string => typeof x === 'string' && x !== ''))]
+    const runs: Record<string, { id: string; status: string; product: string; symbol: string; horizon: string; createdAt: number }> = {}
+    for (const runId of runIds) {
+      const run = await getRun(runId)
+      if (run) {
+        runs[run.id] = { id: run.id, status: run.status, product: run.product, symbol: run.symbol, horizon: run.horizon, createdAt: run.createdAt.getTime() }
+      }
+    }
+    return {
+      conversation: {
+        id: conv.id,
+        userId: conv.userId,
+        title: conv.title,
+        context: conv.context,
+        createdAt: conv.createdAt.getTime(),
+        updatedAt: conv.updatedAt.getTime(),
+      },
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        intent: m.intent,
+        content: m.content,
+        card: m.card,
+        runId: m.runId,
+        createdAt: m.createdAt.getTime(),
+      })),
+      runs,
+    }
+  })
+}
+
 export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  registerAdminCoreRoutes(app, deps)
   registerAgentRoutes(app, deps)
   registerEvaluationRoutes(app, deps)
   registerModelRoutes(app, deps)

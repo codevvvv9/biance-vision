@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import { api } from '../api'
+import { cutOffUserChat, fetchAdminUsers, updateChatPolicy, api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { fmtDateTime } from '../utils'
-import type { AdminUser, AuditAction, AuditEntry, AuditRecord } from '../types'
+import type { AdminUserRow, AuditAction, AuditEntry, AuditRecord } from '../types'
 
 const ACTION_META: Record<AuditAction, { label: string; cls: string }> = {
   login: { label: '登录', cls: 'act-auth' },
@@ -14,6 +13,8 @@ const ACTION_META: Record<AuditAction, { label: string; cls: string }> = {
   rule_delete: { label: '删除规则', cls: 'act-rule' },
   settings_update: { label: '修改推送设置', cls: 'act-set' },
   settings_test: { label: '测试推送', cls: 'act-set' },
+  chat_policy_update: { label: '改聊天策略', cls: 'act-set' },
+  chat_cutoff: { label: '掐断聊天', cls: 'act-fail' },
 }
 
 const STATUS_META: Record<NonNullable<AuditRecord['status']>, { label: string; cls: string }> = {
@@ -41,15 +42,67 @@ function Timeline({ actions }: { actions: AuditEntry[] }): JSX.Element {
   )
 }
 
+/** 每日限额输入：空 = 不限（提交 null），Enter 或点「设」提交；非正整数不提交 */
+function LimitInput({
+  limit,
+  busy,
+  onSubmit,
+  onInvalid,
+}: {
+  limit: number | null
+  busy: boolean
+  onSubmit: (dailyLimit: number | null) => void
+  onInvalid: (message: string) => void
+}): JSX.Element {
+  const [val, setVal] = useState(limit === null ? '' : String(limit))
+  const commit = (): void => {
+    const v = val.trim()
+    if (v === '') {
+      if (limit !== null) onSubmit(null)
+      return
+    }
+    const n = Number(v)
+    if (!Number.isInteger(n) || n <= 0) {
+      onInvalid('每日上限需为正整数，留空表示不限')
+      return
+    }
+    if (limit === n) return
+    onSubmit(n)
+  }
+  return (
+    <>
+      <input
+        className="chat-limit-input"
+        type="number"
+        min={1}
+        step={1}
+        value={val}
+        disabled={busy}
+        placeholder="不限"
+        title="每日聊天上限：留空 = 不限，Enter 或点「设」提交"
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+        }}
+      />
+      <button className="btn btn-ghost btn-sm" disabled={busy} onClick={commit} title="提交每日上限（空 = 不限）">
+        设
+      </button>
+    </>
+  )
+}
+
 export default function AdminPage(): JSX.Element {
   const { user } = useAuth()
   const [records, setRecords] = useState<AuditRecord[] | null>(null)
   const [usernames, setUsernames] = useState<string[]>([])
-  const [users, setUsers] = useState<AdminUser[] | null>(null)
+  const [users, setUsers] = useState<AdminUserRow[] | null>(null)
   const [copied, setCopied] = useState('')
   const [username, setUsername] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [error, setError] = useState('')
+  /** 正在执行聊天管控操作的用户名（行内按钮逐个防抖） */
+  const [busyUser, setBusyUser] = useState('')
 
   const load = useCallback((name: string): void => {
     const qs = name ? `?username=${encodeURIComponent(name)}` : ''
@@ -62,13 +115,56 @@ export default function AdminPage(): JSX.Element {
       .catch((e: Error) => setError(e.message))
   }, [])
 
+  const refreshUsers = useCallback((): void => {
+    fetchAdminUsers()
+      .then((d) => {
+        setUsers(d.users)
+        setError('')
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
   useEffect(() => {
     if (user?.role !== 'superadmin') return
     load('')
-    api<{ users: AdminUser[] }>('/admin/users')
-      .then((d) => setUsers(d.users))
+    refreshUsers()
+  }, [load, refreshUsers, user])
+
+  const runUserOp = useCallback(
+    (name: string, op: () => Promise<unknown>): void => {
+      if (busyUser !== '') return
+      setBusyUser(name)
+      op()
+        .then(() => {
+          setError('')
+          refreshUsers()
+        })
+        .catch((e: Error) => setError(e.message))
+        .finally(() => setBusyUser(''))
+    },
+    [busyUser, refreshUsers],
+  )
+
+  const toggleDisabled = (u: AdminUserRow): void => {
+    runUserOp(u.username, () => updateChatPolicy(u.username, { disabled: !u.chatPolicy.disabled }))
+  }
+
+  const commitLimit = (u: AdminUserRow, dailyLimit: number | null): void => {
+    runUserOp(u.username, () => updateChatPolicy(u.username, { dailyLimit }))
+  }
+
+  const cutoff = (u: AdminUserRow): void => {
+    if (!window.confirm(`确认掐断用户「${u.username}」？\n将禁用该用户聊天并取消其全部进行中的研究任务。`)) return
+    setBusyUser(u.username)
+    cutOffUserChat(u.username)
+      .then((r) => {
+        setError('')
+        window.alert(`已禁用「${u.username}」的聊天，并取消 ${r.cancelledRuns.length} 个进行中的研究任务。`)
+        refreshUsers()
+      })
       .catch((e: Error) => setError(e.message))
-  }, [load, user])
+      .finally(() => setBusyUser(''))
+  }
 
   const copyName = (name: string): void => {
     navigator.clipboard
@@ -85,9 +181,6 @@ export default function AdminPage(): JSX.Element {
   // 日志筛选下拉：真实用户在前，已删除但留有日志的用户在后
   const filterNames = [...new Set([...(users ?? []).map((u) => u.username), ...usernames])]
 
-  // 普通用户直接输入 /admin 时跳回首页；接口侧同样有 403 拦截
-  if (user?.role !== 'superadmin') return <Navigate to="/" replace />
-
   return (
     <div className="page">
       <section className="panel">
@@ -96,7 +189,7 @@ export default function AdminPage(): JSX.Element {
             <i className="title-glyph" />
             用户列表
           </h2>
-          <button className="btn btn-ghost" onClick={() => api<{ users: AdminUser[] }>('/admin/users').then((d) => setUsers(d.users))}>
+          <button className="btn btn-ghost" onClick={refreshUsers}>
             刷新
           </button>
         </div>
@@ -106,19 +199,20 @@ export default function AdminPage(): JSX.Element {
               <tr>
                 <th>用户名</th>
                 <th className="col-role">角色</th>
+                <th className="col-chat">聊天</th>
                 <th className="col-time">创建时间</th>
-                <th className="col-copy" />
+                <th className="col-copy">操作</th>
               </tr>
             </thead>
             <tbody>
               {users === null && !error && (
                 <tr className="empty-row">
-                  <td colSpan={4}>加载中…</td>
+                  <td colSpan={5}>加载中…</td>
                 </tr>
               )}
               {users?.length === 0 && (
                 <tr className="empty-row">
-                  <td colSpan={4}>暂无用户</td>
+                  <td colSpan={5}>暂无用户</td>
                 </tr>
               )}
               {(users ?? []).map((u) => (
@@ -131,15 +225,57 @@ export default function AdminPage(): JSX.Element {
                       {u.role === 'superadmin' ? '超级管理员' : '普通用户'}
                     </span>
                   </td>
+                  <td className="col-chat">
+                    <span className="chat-cell">
+                      <span className={`role-tag ${u.chatPolicy.disabled ? 'chat-off' : 'chat-ok'}`}>
+                        {u.chatPolicy.disabled ? '已禁用' : '正常'}
+                      </span>
+                      <span className="chat-usage mono dim" title="今日已用 / 每日上限">
+                        {u.chatUsage.today}/{u.chatUsage.limit === null ? '不限' : u.chatUsage.limit}
+                      </span>
+                      <span
+                        className={`sess-status ${u.online ? 'st-active' : 'st-ended'}`}
+                        title={u.online ? '5 分钟内有操作（在线近似）' : '5 分钟内无操作'}
+                      >
+                        <i />
+                        {u.online ? '在线' : '离线'}
+                      </span>
+                    </span>
+                  </td>
                   <td className="mono dim col-time">{fmtDateTime(u.createdAt)}</td>
                   <td className="col-copy">
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => copyName(u.username)}
-                      title="复制用户名（AI 档案绑定等场景需精准匹配，可直接粘贴）"
-                    >
-                      {copied === u.username ? '✓ 已复制' : '复制'}
-                    </button>
+                    <span className="chat-ops">
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => copyName(u.username)}
+                        title="复制用户名（AI 档案绑定等场景需精准匹配，可直接粘贴）"
+                      >
+                        {copied === u.username ? '✓ 已复制' : '复制'}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={busyUser === u.username}
+                        onClick={() => toggleDisabled(u)}
+                        title={u.chatPolicy.disabled ? '恢复该用户的 AI 聊天' : '禁用该用户的 AI 聊天（不影响登录）'}
+                      >
+                        {u.chatPolicy.disabled ? '启用' : '禁用'}
+                      </button>
+                      <LimitInput
+                        key={`${u.username}:${u.chatPolicy.dailyLimit ?? 'null'}`}
+                        limit={u.chatPolicy.dailyLimit}
+                        busy={busyUser === u.username}
+                        onSubmit={(dailyLimit) => commitLimit(u, dailyLimit)}
+                        onInvalid={setError}
+                      />
+                      <button
+                        className="btn btn-ghost btn-sm danger"
+                        disabled={busyUser === u.username}
+                        onClick={() => cutoff(u)}
+                        title="一键掐断：禁用聊天并取消其全部进行中的研究任务"
+                      >
+                        掐断
+                      </button>
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -147,7 +283,8 @@ export default function AdminPage(): JSX.Element {
           </table>
         </div>
         <p className="form-hint muted audit-hint">
-          AI 配置档案的「绑定用户」需与上述用户名完全一致（区分大小写），可点击「复制」后直接粘贴。
+          AI 配置档案的「绑定用户」需与上述用户名完全一致（区分大小写），可点击「复制」后直接粘贴；
+          「聊天」列展示禁用状态与今日用量（已用/上限），可对单个用户禁用/设每日上限/一键掐断（掐断同时取消其进行中的研究任务）。
         </p>
       </section>
 

@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
 import fastifyWs from '@fastify/websocket'
 import fs from 'node:fs'
+import { STATUS_CODES } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { SocketStream } from '@fastify/websocket'
@@ -30,7 +31,7 @@ import {
   updateRule,
   updateSettings,
 } from './alerts.js'
-import { endSessionAudit, initAudit, queryAudit, recordAudit, recordFailedLogin, startSessionAudit } from './audit.js'
+import { endSessionAudit, initAudit, recordAudit, recordFailedLogin, startSessionAudit } from './audit.js'
 import {
   aiModelName,
   aiProfileByName,
@@ -44,13 +45,11 @@ import {
   listAiModels,
   recordAiUsage,
   resolveAiProfile,
-  resolveAiProfileName,
   resolveApiKey,
   saveAiProfiles,
   testAiConnection,
 } from './ai.js'
 import {
-  adminAiStats,
   appendConversationMessages,
   chatHistoryOf,
   clearMemories,
@@ -58,7 +57,6 @@ import {
   deleteConversation,
   deleteMemory,
   getConversation,
-  getConversationAny,
   initAiMemory,
   listConversations,
   listMemories,
@@ -66,6 +64,7 @@ import {
   memoriesPromptBlock,
   updateMemory,
 } from './aiMemory.js'
+import { assertChatAllowed, recordChatMessage } from './chatPolicy.js'
 import { runSlashCommand, runToolLoop } from './aiTools.js'
 import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage } from './types.js'
 import {
@@ -73,7 +72,6 @@ import {
   createSession,
   destroySession,
   findSession,
-  getUsers,
   initUsers,
   readSessionToken,
   sessionCookie,
@@ -250,6 +248,24 @@ setInterval(() => {
 // Fastify
 // ---------------------------------------------------------------------------
 const app = Fastify({ logger: false, trustProxy: true })
+
+// 统一错误映射：路由内 throw Object.assign(new Error(msg), { statusCode, code? })
+// 转为 { statusCode, error, message, code? }——message 面向最终用户（前端原样展示）；
+// code 为机器可读业务码（如 chat_disabled / chat_limit_exceeded），未携带时不输出。
+// 5xx 不回显内部 message（防泄露），与 fastify 默认错误响应语义一致。
+app.setErrorHandler((err, req, reply) => {
+  const e = err as { statusCode?: number; code?: string; message?: string }
+  const statusCode = typeof e.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600 ? e.statusCode : 500
+  if (statusCode >= 500) log.error('http', '未处理异常', err)
+  const body: Record<string, unknown> = {
+    statusCode,
+    error: STATUS_CODES[statusCode] ?? 'Error',
+    message: statusCode >= 500 ? 'Internal Server Error' : String(e.message ?? ''),
+  }
+  if (typeof e.code === 'string') body.code = e.code
+  void reply.code(statusCode).send(body)
+})
+
 await app.register(cors, { origin: true })
 await app.register(fastifyWs)
 
@@ -698,6 +714,9 @@ app.post('/api/ai/chat', async (req, reply) => {
   const profile = resolveAiProfile(session.username)
   if (!profile) throw badRequest('AI 未配置，或当前用户没有可用的配置档案（请联系超级管理员）')
   checkAiQuota(session.username, profile)
+  // checkAiQuota 为档案级限额（每用户每日 LLM 对话数）；assertChatAllowed 为用户级管控
+  // （管理端禁用/每日交互上限）——两者独立判定、任一超限即拒（取严）
+  assertChatAllowed(session.username)
   const body = (req.body ?? {}) as { conversationId?: unknown; content?: unknown }
   const content = typeof body.content === 'string' ? body.content.trim() : ''
   if (!content) throw badRequest('消息内容不能为空')
@@ -727,6 +746,8 @@ app.post('/api/ai/chat', async (req, reply) => {
       }
       reply.raw.write(delta)
     }, session.username, memories)
+    // 用户级交互计数：成功完成才计（失败不计，与 recordAiUsage 含失败尝试的防刷口径不同）
+    recordChatMessage(session.username)
     if (started) {
       reply.raw.end()
       appendConversationMessages(conv, [{ role: 'assistant', content: full }])
@@ -744,10 +765,13 @@ app.post('/api/ai/chat', async (req, reply) => {
 
 /**
  * 斜杠命令：显式触发的本地能力（/chart /analyze /calc /remember 等），
- * 直接执行不调用大模型、不占每日对话配额；结果与图表同样落入会话历史。
+ * 直接执行不调用大模型、不占档案级每日对话配额（recordAiUsage），
+ * 但计入用户级每日交互上限（chatPolicy）；结果与图表同样落入会话历史。
  */
 app.post('/api/ai/command', async (req) => {
   const session = requireSession(req)
+  // 斜杠命令不调用大模型，但纳入用户级统一管控口径（防绕过禁用/上限）
+  assertChatAllowed(session.username)
   const body = (req.body ?? {}) as { conversationId?: unknown; text?: unknown }
   const text = typeof body.text === 'string' ? body.text.trim() : ''
   if (!text.startsWith('/')) throw badRequest('命令需以 / 开头')
@@ -765,6 +789,7 @@ app.post('/api/ai/command', async (req) => {
     { role: 'user', content: text },
     { role: 'assistant', content: replyWithChart },
   ])
+  recordChatMessage(session.username)
   log.info('ai', '斜杠命令', kv({ 用户: session.username, 命令: text.slice(0, 60) }))
   return { conversationId: conv.id, reply: r.reply, chart: r.chart ?? null }
 })
@@ -827,72 +852,7 @@ app.delete('/api/ai/memories', async (req) => {
   return { ok: true }
 })
 
-// ---- 管理端：用户与操作审计（仅超级管理员） ----
-
-/** 系统真实用户列表（AI 档案绑定等场景需精准匹配用户名，不含密码哈希） */
-app.get('/api/admin/users', async (req) => {
-  requireSuperadmin(req)
-  return {
-    users: getUsers()
-      .map((u) => ({ username: u.username, role: u.role, createdAt: u.createdAt }))
-      .sort((a, b) => a.role.localeCompare(b.role) || a.createdAt - b.createdAt),
-  }
-})
-
-app.get('/api/admin/audit-logs', async (req) => {
-  const session = requireSession(req)
-  if (session.role !== 'superadmin') {
-    throw Object.assign(new Error('仅超级管理员可查看操作日志'), { statusCode: 403 })
-  }
-  const q = req.query as { username?: string; limit?: string }
-  return queryAudit({ username: q.username, limit: parseInt(q.limit ?? '', 10) || 200 })
-})
-
-// ---- 管理端：AI 会话记录全景（仅超级管理员；上下文 / 记忆 / 提示词 / 配置） ----
-
-/** 各用户 AI 使用统计 + 全部档案（脱敏） */
-app.get('/api/admin/ai/overview', async (req) => {
-  requireSuperadmin(req)
-  return {
-    stats: adminAiStats().map((s) => ({ ...s, profileName: resolveAiProfileName(s.username) })),
-    profiles: getAiProfilesMasked(),
-  }
-})
-
-/** 指定用户 AI 全景：生效档案与配置、会话列表、长期记忆、完整生效提示词 */
-app.get('/api/admin/ai/user', async (req) => {
-  requireSuperadmin(req)
-  const username = String((req.query as { username?: string }).username ?? '').trim()
-  if (!username) throw badRequest('缺少 username')
-  const profileName = resolveAiProfileName(username)
-  const profile = resolveAiProfile(username)
-  return {
-    username,
-    profileName,
-    profileConfigured: !!profile,
-    profileMasked: getAiProfilesMasked()[profileName] ?? null,
-    prompt: profile ? buildSystemPrompt(profile, memoriesPromptBlock(username)) : '',
-    conversations: listConversations(username),
-    memories: listMemories(username),
-  }
-})
-
-/** 任意会话的完整消息记录（不限归属，管理端查看上下文用） */
-app.get('/api/admin/ai/conversations/:id', async (req) => {
-  requireSuperadmin(req)
-  const conv = getConversationAny((req.params as { id: string }).id)
-  if (!conv) throw badRequest('会话不存在')
-  return {
-    conversation: {
-      id: conv.id,
-      username: conv.username,
-      title: conv.title || '新对话',
-      createdAt: conv.createdAt,
-      updatedAt: conv.updatedAt,
-      messages: conv.messages.map((m) => ({ role: m.role, content: m.content, at: m.at })),
-    },
-  }
-})
+// ---- 管理端路由已全部收口至 admin/routes.ts（registerAdminRoutes：核心域 + agents/evals/models） ----
 
 // ---- 行情数据基础（/api/market/*，只读；采集在 worker 进程，本进程仅入队） ----
 registerMarketRoutes(app, { requireSession })
@@ -909,7 +869,7 @@ void probeVectorSupport().catch(() => {})
 registerResearchRunRoutes(app, { requireSession })
 registerProductRoutes(app, { requireSession })
 
-// ---- Admin 配置域（/api/admin/agents|evaluations|models，超管） ----
+// ---- Admin 域（/api/admin/*，超管：核心域 + agents/evaluations/models + 聊天管控 + 会话追踪） ----
 registerAdminRoutes(app, { requireSuperadmin })
 
 // pg-boss 队列：app 侧只入队不消费；DB 不可用/启动失败仅告警，不阻断 app 启动

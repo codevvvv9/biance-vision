@@ -18,6 +18,8 @@ export type AuditAction =
   | 'knowledge_import'
   | 'knowledge_publish'
   | 'prediction_confirm'
+  | 'chat_policy_update'
+  | 'chat_cutoff'
 
 /** 会话内单次操作 */
 export interface AuditEntry {
@@ -223,4 +225,20 @@ export async function initAudit(): Promise<void> {
   await mergeMissingAuditRecords(records).catch((e: Error) =>
     log.warn('audit', '数据库回补失败:', e.message),
   )
+}
+
+/**
+ * 在线用户近似（管理端用户列表用）：仍在进行（未登出）且最近 withinMs 内
+ * 有审计动作（登录/业务操作）的会话用户名集合。审计只覆盖 recordAudit 过的
+ * 写操作与登录事件，静默只读浏览不计——作为「在线」的保守近似，加注释说明。
+ */
+export function listActiveUsernames(withinMs: number): Set<string> {
+  const now = Date.now()
+  const out = new Set<string>()
+  for (const r of records) {
+    if (r.kind === 'session' && r.endedAt === null && now - r.lastActiveAt <= withinMs) {
+      out.add(r.username)
+    }
+  }
+  return out
 }

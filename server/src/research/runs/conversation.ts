@@ -6,7 +6,7 @@
  * 追问继承结构化上下文（「换成 1 小时」「改成 20 倍」生成新研究不覆盖已确认持仓）；
  * 自然语言提取的持仓信息先出确认卡，未经确认不落 portfolio。
  */
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import { PositionInputSchema } from 'biance-vision-brooks'
 import { getDb } from '../../db.js'
 import { conversationMessages, conversations, eventQuotes, portfolioPositions } from '../../models.js'
@@ -173,6 +173,39 @@ export async function getConversationForUser(id: string, userId: string): Promis
 
 export async function listConversations(userId: string): Promise<ConversationRow[]> {
   return getDb()!.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt)).limit(50)
+}
+
+/**
+ * 管理端：会话列表 + 消息数统计（单查询聚合，避免逐会话 count 的 N+1）
+ */
+export async function listConversationsWithStats(
+  userId: string,
+  limit = 50,
+): Promise<(ConversationRow & { messageCount: number })[]> {
+  return getDb()!
+    .select({
+      id: conversations.id,
+      userId: conversations.userId,
+      title: conversations.title,
+      context: conversations.context,
+      createdAt: conversations.createdAt,
+      updatedAt: conversations.updatedAt,
+      messageCount: sql<number>`(select count(*)::int from ${conversationMessages} where ${conversationMessages.conversationId} = ${conversations.id})`,
+    })
+    .from(conversations)
+    .where(eq(conversations.userId, userId))
+    .orderBy(desc(conversations.updatedAt))
+    .limit(limit)
+}
+
+/**
+ * 管理端：不限归属读单会话（链路 B 研究会话）。
+ * 与 aiMemory 侧链路 A 的 getConversationAny 命名区分——两条会话体系（ai_conversations
+ * vs conversations）互不相同，管理端两个查看端点各取其一。
+ */
+export async function getConversationByIdAdmin(id: string): Promise<ConversationRow | null> {
+  const rows = await getDb()!.select().from(conversations).where(eq(conversations.id, id)).limit(1)
+  return rows[0] ?? null
 }
 
 export async function listMessages(conversationId: string, after?: string, limit = 50): Promise<ConversationMessageRow[]> {

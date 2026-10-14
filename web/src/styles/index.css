@@ -2,5 +2,8 @@
 @import './base.css';
 @import './components.css';
 @import './pages.css';
+/* admin.css 原为 pages.css 的一部分，保持紧邻其后导入以维持原级联顺序
+   （research.css 的 .admin-page input 群组选择器依赖排在 .admin-row input 之后） */
+@import '../admin/admin.css';
 @import './ai.css';
 @import './research.css';
