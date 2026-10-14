@@ -151,6 +151,53 @@ await db.execute(sql`delete from conversations where user_id = ${USER}`)
 }
 
 
+// ---- 3b) 确认幂等与重确认刷新（评审四轮-2：同指纹不重复建仓 + 重确认刷新 confirmedAt 解除过期） ----
+{
+  const conv2 = await createConversation(USER, 'confirm-refresh')
+  const draft = { symbol: 'BTCUSDT', side: 'long', qty: 0.1, entryPrice: 60000, riskBudget: 200 }
+  const c1 = await patchContext(conv2, { positionDraft: draft, confirm: true })
+  check('首次确认落库', c1.confirmedPositionId !== null)
+  const rows1 = (await getDb()!.execute(
+    sql`select confirmed_at from portfolio_positions where id = ${c1.confirmedPositionId!}`,
+  )) as unknown as { confirmed_at: string }[] | { rows: { confirmed_at: string }[] }
+  const beforeRows = Array.isArray(rows1) ? rows1 : rows1.rows
+  await new Promise((r) => setTimeout(r, 1100))
+  const c2 = await patchContext(conv2, { positionDraft: draft, confirm: true })
+  check('重复确认复用同一持仓（不重复建仓）', c2.confirmedPositionId === c1.confirmedPositionId, `${c2.confirmedPositionId?.slice(0, 8)}`)
+  const rows2 = (await getDb()!.execute(
+    sql`select confirmed_at from portfolio_positions where id = ${c1.confirmedPositionId!}`,
+  )) as unknown as { confirmed_at: string }[] | { rows: { confirmed_at: string }[] }
+  const afterRows = Array.isArray(rows2) ? rows2 : rows2.rows
+  const t1 = Number(beforeRows[0]?.confirmed_at ?? 0)
+  const t2 = Number(afterRows[0]?.confirmed_at ?? 0)
+  check('重确认刷新 confirmedAt（解除过期，不被指纹当作旧重试）', t2 > t1, `${t1} → ${t2}`)
+  const cnt = (await getDb()!.execute(
+    sql`select count(*)::int as n from portfolio_positions where user_id = ${USER} and confirm_fp is not null`,
+  )) as unknown as { n: number }[] | { rows: { n: number }[] }
+  const cntRows = Array.isArray(cnt) ? cnt : cnt.rows
+  check('同指纹持仓库内仅一条', (cntRows[0]?.n ?? 0) === 1, `n=${cntRows[0]?.n}`)
+  // 评审五轮：指纹锚定的记录被编辑成另一持仓后，同草稿再确认必须新建而非复用
+  await getDb()!.execute(
+    sql`update portfolio_positions set side='short', qty='2', entry_price='70000' where id = ${c1.confirmedPositionId!}`,
+  )
+  const c3 = await patchContext(conv2, { positionDraft: draft, confirm: true })
+  check(
+    '指纹记录被编辑成另一持仓后再确认 → 新建持仓而非复用',
+    c3.confirmedPositionId !== null && c3.confirmedPositionId !== c1.confirmedPositionId,
+    `${c3.confirmedPositionId?.slice(0, 8)}（不应等于 ${c1.confirmedPositionId?.slice(0, 8)}）`,
+  )
+  const rows3 = (await getDb()!.execute(
+    sql`select side, confirm_fp from portfolio_positions where id = ${c1.confirmedPositionId!}`,
+  )) as unknown as { side: string; confirm_fp: string | null }[] | { rows: { side: string; confirm_fp: string | null }[] }
+  const editedRow = (Array.isArray(rows3) ? rows3 : rows3.rows)[0]
+  check('被编辑记录保持编辑后内容且旧指纹已清除', editedRow?.side === 'short' && editedRow.confirm_fp === null)
+  const rows4 = (await getDb()!.execute(
+    sql`select side, qty from portfolio_positions where id = ${c3.confirmedPositionId!}`,
+  )) as unknown as { side: string; qty: string }[] | { rows: { side: string; qty: string }[] }
+  const newRow = (Array.isArray(rows4) ? rows4 : rows4.rows)[0]
+  check('新持仓按草稿内容创建（long 0.1）', newRow?.side === 'long' && Number(newRow.qty) === 0.1)
+}
+
 // ---- 4) P1-1 断点恢复：检索完成后崩溃 → 续跑（生产同一路径） ----
 {
   const { runPipeline } = await import('../server/src/research/orchestrator/pipeline.js')

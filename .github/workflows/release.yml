@@ -70,11 +70,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - uses: docker/metadata-action@v5
+        id: meta-py
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-research-py
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
       - uses: docker/build-push-action@v6
         with:
           context: ./research-py
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-research-py:${{ github.ref_name }}
+          tags: ${{ steps.meta-py.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

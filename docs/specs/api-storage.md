@@ -2,6 +2,12 @@
 
 > 状态：partial
 
+> 五轮复审修复（2026-10-14）：确认指纹与持仓编辑的交叉一致性——`PUT /api/portfolio/:id` 改变身份字段（symbol/side/qty/entryPrice/leverage/riskBudget）时清除 `confirm_fp`（编辑即改变持仓身份）；会话确认冲突路径在刷新 confirmedAt 前核对指纹锚定记录的实际字段，不一致则清除其旧指纹并按草稿新建（修复前：编辑过的记录会被旧指纹误锚定，确认草稿可能返回并刷新一条内容已不同的持仓）。集成锚点：`pnpm linkage:smoke` §3b（编辑后同草稿再确认 → 新建持仓、被编辑记录保持编辑内容且指纹清除）。
+
+> 四轮复审修复（2026-10-14）：(1) 时刻解析不再截断表达——「10点半」=10:30、「10点30秒」=10:00:30（秒位不再误读为分）、「10点30分25秒」支持秒。(2) 确认幂等与重确认语义分离：同指纹确认走 `onConflictDoNothing + 回读`，且**刷新 confirmedAt**——重复提交/重试幂等返回同一持仓（不重复建仓），间隔很久的重确认解除过期标记（修复前被指纹快路径当作旧重试跳过，持仓永久过期）。集成锚点：`pnpm linkage:smoke` §3b（同指纹仅一条持仓 + confirmedAt 刷新）。
+
+> 复审修复（2026-10-13，R2/R3/R5）：(R2) 会话写操作并发幂等——postMessage/patchContext 经 `serializeConversation` 按会话串行（先查后写的窗口去重在串行下闭合）；`portfolio_positions` 新增 `confirm_fp` 列 + (user_id, confirm_fp) 部分唯一索引（迁移 0014），确认写入带指纹、23505 冲突回读已落库持仓——并发确认/双击/重试不重复建仓。(R3) 复盘时刻解析：`parseReplayAsOf` 支持「10:00 / 10点30分」（UTC+8 精确到该时刻），非法/未来时刻 invalid，仅日期保持当日 23:59:59 约定。(R5) 快照降级显式化：`useResearchCandles` 返回 source/fallbackReason，冻结视图下输入包不可读时页面显示「非原始输入、不可复现」警告，不再静默换数据源；确认卡「取消」同步清除服务端待补齐草稿（PATCH draft:null）。回归锚点：`pnpm linkage:smoke`、`pnpm research:smoke` 全绿。
+
 > 评审修复（2026-10-13，F3/F6/F10）：(F3) 资金费率 `listFunding` 增加 `asOf` 过滤（历史复盘不泄漏未来费率）；product_analysis 统一消费快照冻结 funding（类型/水化/装载贯通），旧快照缺 funding 时按 asOf 补读；新增 `GET /api/research/runs/:id/candles?interval=&priceType=`——结果图表读冻结输入包（无包返回 snapshot:false，前端回退实时库）。(F6) 会话持仓草稿闭环：待确认草稿持久化于会话上下文，后续消息槽位合并补齐；确认写入改走共享 `PositionInputSchema`（非法方向/非正数量/越界杠杆 400）；确认幂等（草稿指纹重复确认返回已落库持仓，不重复建仓）；会话消息 10s 同内容窗口去重。(F10) `run_events` 持久化按 run 串行化（消除 SELECT max(seq)+1 竞争；主键 (run_id,seq) 冲突重试一次），终态清理串行链；事件仍先落库拿 seq 再推送。回归锚点：`scripts/p1-regression-check.ts` [评审 F6/F7]、`pnpm linkage:smoke`、`pnpm research:smoke`。
 
 > 修复验收（2026-10-09 八轮）：(B2/B3) 研究发布门禁落地——validate 阶段重新 `freezeRunConfig()` 比对 configHash（不一致 → `version_mismatch` 拒绝发布），publish 阶段结果装配后经 `ResearchResultV2Schema` 运行时校验（非法结构 → ValidationRejected，不发布）。(D1) `PUT /api/admin/evaluations/datasets/:id` 落地：原地改名或整体替换 items（itemCount 同步），version 不变——版本递增语义仍由 POST 同名新建承担。新增端点见下表（`/api/predictions/stats`、`/api/event-quotes/:id/confirm`）。

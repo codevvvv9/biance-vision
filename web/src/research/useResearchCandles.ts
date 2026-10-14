@@ -34,6 +34,10 @@ export interface ResearchCandles {
   bars: KlineBar[]
   loading: boolean
   error: string
+  /** 数据来源（评审 R5：区分「已冻结输入包」与「实时库按历史时间重建」，拒绝静默替换） */
+  source: 'snapshot' | 'live' | null
+  /** run 冻结视图下回退实时库的原因（快照包不存在/读取失败/缺该周期） */
+  fallbackReason: string | null
 }
 
 export function useResearchCandles(
@@ -47,6 +51,8 @@ export function useResearchCandles(
   const [candles, setCandles] = useState<ResearchCandle[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [source, setSource] = useState<'snapshot' | 'live' | null>(null)
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -68,22 +74,26 @@ export function useResearchCandles(
       const r = await api<{ candles: CandleRowDto[] }>(`/market/candles?${params.toString()}`)
       return mapRows(r.candles)
     }
-    ;(async () => {
-      // 优先读 run 的冻结输入包（snapshot:true）；无包/无对应周期回退实时库（带 asOf）
+    ;(async (): Promise<{ rows: ResearchCandle[]; source: 'snapshot' | 'live'; fallbackReason: string | null }> => {
+      // 优先读 run 的冻结输入包（snapshot:true）；不可读时回退实时库但必须显式标记来源（评审 R5）
       if (runId !== undefined && runId !== null && runId !== '') {
         try {
           const r = await api<{ snapshot: boolean; candles: CandleRowDto[] }>(
             `/research/runs/${runId}/candles?${new URLSearchParams({ interval, priceType: 'trade' }).toString()}`,
           )
-          if (r.snapshot && r.candles.length > 0) return mapRows(r.candles)
-        } catch {
-          /* 快照包不可读 → 回退实时库 */
+          if (r.snapshot && r.candles.length > 0) return { rows: mapRows(r.candles), source: 'snapshot', fallbackReason: null }
+          return { rows: await fetchLive(), source: 'live', fallbackReason: '冻结输入包不存在或缺该周期（非原始输入，不可复现）' }
+        } catch (e) {
+          return { rows: await fetchLive(), source: 'live', fallbackReason: `冻结输入包读取失败（${(e as Error).message}），当前为实时库重建数据` }
         }
       }
-      return fetchLive()
+      return { rows: await fetchLive(), source: 'live', fallbackReason: null }
     })()
-      .then((rows) => {
-        if (alive) setCandles(rows)
+      .then((out) => {
+        if (!alive) return
+        setCandles(out.rows)
+        setSource(out.source)
+        setFallbackReason(out.fallbackReason)
       })
       .catch((e: Error) => alive && setError(e.message))
       .finally(() => alive && setLoading(false))
@@ -106,5 +116,5 @@ export function useResearchCandles(
     [candles],
   )
 
-  return { candles, bars, loading, error }
+  return { candles, bars, loading, error, source, fallbackReason }
 }

@@ -181,6 +181,23 @@ function registerPortfolioRoutes(app: FastifyInstance, deps: ProductRouteDeps): 
     const { id } = req.params as { id: string }
     const body = parseBody(PositionInputSchema, req.body, reply)
     if (!body) return reply
+    // 评审五轮：编辑改变持仓身份字段（symbol/side/qty/entryPrice/leverage/riskBudget）时
+    // 清除会话确认卡指纹——否则指纹冲突会把「已编辑成另一方向的记录」当作旧草稿的
+    // 重复确认刷新，用户确认的内容与记录实际内容不一致
+    const existing = await getDb()!
+      .select()
+      .from(portfolioPositions)
+      .where(and(eq(portfolioPositions.id, id), eq(portfolioPositions.userId, session.username)))
+      .limit(1)
+    if (existing.length === 0) return reply.code(404).send({ code: 'not_found', message: '持仓不存在' })
+    const e = existing[0]
+    const identityChanged =
+      e.symbol !== body.symbol ||
+      e.side !== body.side ||
+      Number(e.qty) !== Number(body.qty) ||
+      Number(e.entryPrice) !== Number(body.entryPrice) ||
+      e.leverage !== body.leverage ||
+      Number(e.riskBudget) !== Number(body.riskBudget)
     const rows = await getDb()!
       .update(portfolioPositions)
       .set({
@@ -196,6 +213,7 @@ function registerPortfolioRoutes(app: FastifyInstance, deps: ProductRouteDeps): 
         confirmedAt: body.confirmedAt,
         staleAfterHours: body.staleAfterHours,
         updatedAt: new Date(),
+        ...(identityChanged ? { confirmFp: null } : {}),
       })
       .where(and(eq(portfolioPositions.id, id), eq(portfolioPositions.userId, session.username)))
       .returning()

@@ -249,6 +249,10 @@ export function useResearchConversation(options: UseResearchConversationOptions 
           ...prev.map((m, i) => (i === idx && m.card !== undefined ? { ...m, card: { ...m.card, state: 'cancelled' as const } } : m)),
           { role: 'assistant', text: '已取消：该持仓草稿未写入持仓。' },
         ])
+        // 取消同时清除服务端待补齐草稿（评审附注：后续消息的槽位不再合并进已取消草稿）
+        if (convId !== null) {
+          void api(`/conversations/${convId}/context`, { method: 'PATCH', body: { draft: null } }).catch(() => {})
+        }
         return
       }
       if (convId === null) return

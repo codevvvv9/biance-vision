@@ -11,6 +11,7 @@ import type { RunProgressEvent, ResearchRunCreate } from 'biance-vision-brooks'
 import { evidenceItems, researchRuns, runEvents, runSteps } from '../../models.js'
 import type { EvidenceItemRow, ResearchRunRow, RunStepRow } from '../../models.js'
 import { getDb } from '../../db.js'
+import { getCapabilities } from '../../admin/capabilities.js'
 import { latestKnowledgeVersion } from '../../knowledge/store.js'
 import { kv, log } from '../../logger.js'
 import { DEFAULT_PERP_FEES } from '../../services/perpetualAnalyzer.js'
@@ -192,7 +193,13 @@ export async function freezeRunConfig(): Promise<NonNullable<import('../orchestr
     intervalMs: num(perp.fundingIntervalMs, FUNDING_INTERVAL_MS) || FUNDING_INTERVAL_MS,
     graceMs: num(perp.fundingGraceMs, FUNDING_GRACE_MS),
   }
+  // 评审 R4：无发布 Agent 版本时，raw 不能只冻结空对象——capabilities 冻结
+  // 「解析后的有效配置」（app_settings → 环境变量，与 getCapabilities() 解析链一致），
+  // 保证旧 run 与恢复执行使用创建时的有效配置
   const raw = (agent?.config ?? {}) as Record<string, unknown>
+  if (agent === null || raw.capabilities === undefined) {
+    raw.capabilities = getCapabilities()
+  }
   const frozen = { label: agent?.label ?? 'default-v1', budgets, knowledgeVersionId, raw, fees, stepSize, minNotional, fundingWindow }
   return { ...frozen, configHash: hashFrozenConfig(frozen) }
 }

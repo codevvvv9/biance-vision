@@ -2,6 +2,8 @@
 
 > 状态：partial
 
+> 复审修复（2026-10-13 晚，R5/F6 前端）：(1) 冻结视图下快照输入包不可读时，图表下方显示琥珀警告「快照不可复现：…（非原始输入）」（`useResearchCandles` 返回 source/fallbackReason，不再静默回退实时库）；正常读取输入包时快照行标注「输入包数据」。(2) 持仓确认卡字段不齐（card.complete===false）时确认按钮禁用并显示缺失槽位提示，补齐路径为对话内续聊（服务端草稿合并）。
+
 > 追加修复（2026-10-13 下午）：(1) 顶栏「研究场景 + 市场」两个下拉合并为单一「场景」下拉（现货 / USDT 永续 / 事件合约），对齐下方决策行——现货 = teaching 产品 + spot 行情（纯结构研究，无持仓/费用/强平表单），永续/事件固定 usdm_perp 行情；原「教学研究」选项移除（概念与方向研究仍由对话意图路由自动进入 teaching）。(2) 悬浮助手运行气泡补「重新发起（相同标的与期限）」一键重试：以该 run 自身的 product/symbol/marketType/horizon + 会话内最近一条用户消息重新 POST（助手无顶栏上下文，不携带持仓/报价引用）。(3) 服务端 PATCH /conversations/:id/context 清理 confirmPositionDraft 死分支（实际落库路径只有 positionDraft+confirm 一条）。(4) `/research?run=:id` 消费改为监听 searchParams 变化（浏览器实测发现：助手是全局浮层，跳转是同路由参数变化、ResearchPage 不重挂载，原 mount-only 写法在已停留在 /research 时点击「在研究工作台打开」无效）；同一 runId 去重不重开。
 
 > 改版（2026-10-13，对话优先）：(1) 研究工作台右栏改为对话为主——消息流内嵌运行气泡（SSE 步骤/连接徽章/取消/失败重试）、结果卡与持仓确认卡；「发起研究」与持仓/报价录入表单收进弹层（`modal-overlay` + `.research-tools-modal`，默认收起，从对话面板头打开）。(2) 中栏图表从 canvas 版 ResearchChart 切换为 klinecharts 的 `BrooksChart`（`web/src/brooks/BrooksChart.tsx`），扩展指标层支持证据高亮（琥珀竖带 `highlightTime`）与关键价位虚线（`levels`：止损/强平/执行价）。(3) 悬浮 AI 助手删除 three.js 3D 机器人，改为简洁 FAB 图标按钮（保留打开/隐藏交互）；助手链路从 `/api/ai/chat|command|news|memories|tickers` 切换到 `/api/conversations`，与研究工作台共用同一条会话——助手内发消息触发研究时以运行气泡跟踪，并提供「在研究工作台打开」链接（`/research?run=:id`）。(4) 样式治理：`styles.css` 按职责拆分为 `web/src/styles/`（base/components/pages/ai/research + index.css 入口）；`.panel` 玻璃拟态与扁平双定义合并为扁平；按钮命名统一 `btn-primary`/`btn-ghost`（连字符），视觉统一为扁平 cyan-soft；补齐 `--text-1`/`--line-3`/`--blue`/`--on-accent` token 与 `.err-text`，琥珀/紫/蓝色值收敛到 token。状态保持 partial：浏览器验收清单未逐条核对，不得升 verified。
