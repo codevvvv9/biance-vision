@@ -557,6 +557,8 @@ export const portfolioPositions = pgTable(
     /** 用户抄录的精确强平价；未知 null，不得以估算冒充 */
     liquidationPrice: numeric('liquidation_price'),
     confirmedAt: bigint('confirmed_at', { mode: 'number' }).notNull(),
+    /** 会话确认卡草稿指纹（评审 R2 幂等）：同用户同指纹只落一条持仓（部分唯一索引兜底并发/重试）；手工录入为 null */
+    confirmFp: text('confirm_fp'),
     staleAfterHours: integer('stale_after_hours').notNull().default(72),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

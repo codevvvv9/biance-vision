@@ -15,7 +15,7 @@ docker cp biance-vision-postgres:/tmp/biance.dump "$STAGE/biance.dump"
 # 2) MinIO 命名卷整卷打包（含桶元数据，免 S3 逐对象拷贝；
 #    卷名前缀 = compose 项目名，仓库根目录名是 biance-vision）
 echo '[2/3] 打包 minio-data 卷 ...'
-docker run --rm -v biance-vision_minio-data:/data -v "$STAGE":/out alpine \
+docker run --rm -v biance-vision_minio-data:/data -v "$STAGE":/out biance-vision:latest \
   tar czf /out/minio-data.tgz -C /data .
 
 # 3) server/data（ai-config.json / secrets.json / seed-users.json——含密钥，仅走 scp）

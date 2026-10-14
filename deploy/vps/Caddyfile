@@ -1,0 +1,15 @@
+# 部署到 /etc/caddy/Caddyfile（域名替换成自己的），systemctl reload caddy 生效。
+# Caddy 自动签发/续期 Let's Encrypt 证书（需 80/443 放行 + DNS A 记录已指向本机）。
+# SSE（研究运行进度）与 WebSocket（实时行情）：Caddy 反代原生支持；
+# flush_interval -1 关闭响应缓冲，保证 SSE 事件即时推送到浏览器。
+bv.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3200 {
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy no-referrer
+	}
+}

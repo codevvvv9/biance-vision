@@ -58,23 +58,82 @@ const POSITION_FIELD_LABEL: Record<string, string> = {
   riskBudget: '风险预算（最多可亏 USDT）',
 }
 
-/** 复盘消息的显式日期解析（评审 F7）：「2026-10-01 / 2026/10/1 / 2026年10月1日 / 10月1日」，
- * 按 UTC+8 当日 23:59:59 解析（复盘该日全天）；未来日期/非法日期返回 'invalid'，无日期返回 undefined */
+/** 时刻解析（UTC+8 本地钟点）：支持「10:00 / 10:30:25 / 10点30分 / 10时30分」与
+ * 凌晨/早上/上午/中午/下午/晚上 限定词。有限定词但解析不出时刻 → 'invalid'
+ *（显式时间不可解析必须请求补全，评审三轮-2，不得退回日末/当前时刻） */
+function parseTimeOfDay(text: string): { h: number; m: number; s: number } | 'invalid' | null {
+  const qualifier = text.match(/凌晨|早上|上午|中午|下午|晚上|晚间/)?.[0] ?? null
+  const colon = text.match(/(\d{1,2})\s*[:：]\s*(\d{1,2})(?:\s*[:：]\s*(\d{1,2}))?/)
+  // 「10点半 / 10点30分[25秒] / 10点30秒 / 10点30 / 10点」——半=30 分；N秒 不带分（评审四轮-1：
+  // 「10点30秒」是 10:00:30 而非 10:30；秒位误读为分会多纳入请求时点之后的数据）
+  const dian = text.match(/(\d{1,2})\s*[点时]\s*(?:(半)|(\d{1,2})\s*分\s*(?:(\d{1,2})\s*秒)?|(\d{1,2})\s*秒|(\d{1,2}))?/)
+  let h: number
+  let m: number
+  let s = 0
+  if (colon !== null) {
+    h = Number(colon[1])
+    m = Number(colon[2])
+    s = colon[3] !== undefined ? Number(colon[3]) : 0
+  } else if (dian !== null) {
+    h = Number(dian[1])
+    if (dian[2] !== undefined) {
+      m = 30 // 半
+    } else if (dian[3] !== undefined) {
+      m = Number(dian[3])
+      s = dian[4] !== undefined ? Number(dian[4]) : 0
+    } else if (dian[5] !== undefined) {
+      m = 0
+      s = Number(dian[5])
+    } else if (dian[6] !== undefined) {
+      m = Number(dian[6])
+    } else {
+      m = 0
+    }
+  } else {
+    return qualifier !== null ? 'invalid' : null
+  }
+  if (qualifier === '下午' || qualifier === '晚上' || qualifier === '晚间' || qualifier === '中午') {
+    if (h < 12) h += 12
+  } else if (qualifier !== null && h === 12) {
+    h = 0 // 凌晨/早上/上午 12 点 → 00 点
+  }
+  if (h > 23 || m > 59 || s > 59) return 'invalid'
+  return { h, m, s }
+}
+
+/** 复盘消息的历史时点解析（评审 F7/R3/三轮-2）：显式日期「2026-10-01 / 2026/10/1 /
+ * 2026年10月1日 / 10月1日」可选时刻「10:00 / 10点30分 / 下午3点」；相对日「昨天/前天」
+ * 也可带时刻（「昨天10:00」→ 昨日 10:00）。只给日期按约定取当日 23:59:59（UTC+8）；
+ * 给了时刻必须按该时刻解析；裸时刻按今天该时刻（今天未到 → invalid）。
+ * 非法/未来时间返回 'invalid'，无任何时间表达返回 undefined（调用方请求补全） */
 export function parseReplayAsOf(text: string, now = Date.now()): number | 'invalid' | undefined {
-  if (/前天/.test(text)) return now - 48 * 3600_000
-  if (/昨天/.test(text)) return now - 24 * 3600_000
+  const time = parseTimeOfDay(text)
+  if (time === 'invalid') return 'invalid'
+  const rel = /前天/.test(text) ? -2 : /昨天/.test(text) ? -1 : null
+  if (rel !== null) {
+    if (time === null) return now + rel * 86400_000
+    const dayUtc8 = new Date(now + rel * 86400_000 + 8 * 3600_000)
+    return Date.UTC(dayUtc8.getUTCFullYear(), dayUtc8.getUTCMonth(), dayUtc8.getUTCDate(), time.h - 8, time.m, time.s)
+  }
   const dm = text.match(/(?:(\d{4})\s*[-/年]\s*)?(\d{1,2})\s*[-/月]\s*(\d{1,2})\s*日?/)
-  if (dm === null) return undefined
-  const year = dm[1] !== undefined ? Number(dm[1]) : new Date(now).getUTCFullYear()
-  const month = Number(dm[2])
-  const day = Number(dm[3])
-  if (month < 1 || month > 12 || day < 1 || day > 31) return 'invalid'
-  // UTC+8 当日 23:59:59 = UTC 15:59:59
-  const t = Date.UTC(year, month - 1, day, 15, 59, 59)
-  const d = new Date(t)
-  if (d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return 'invalid'
-  if (t > now) return 'invalid'
-  return t
+  if (dm !== null) {
+    const year = dm[1] !== undefined ? Number(dm[1]) : new Date(now).getUTCFullYear()
+    const month = Number(dm[2])
+    const day = Number(dm[3])
+    if (month < 1 || month > 12 || day < 1 || day > 31) return 'invalid'
+    // 日期合法性检查（2 月 30 日等进位）：对日期部分单独规范化验证，避免时区换算干扰
+    const norm = new Date(Date.UTC(year, month - 1, day))
+    if (norm.getUTCFullYear() !== year || norm.getUTCMonth() !== month - 1 || norm.getUTCDate() !== day) return 'invalid'
+    const t = time === null ? Date.UTC(year, month - 1, day, 15, 59, 59) : Date.UTC(year, month - 1, day, time.h - 8, time.m, time.s)
+    if (t > now) return 'invalid'
+    return t
+  }
+  if (time !== null) {
+    const todayUtc8 = new Date(now + 8 * 3600_000)
+    const t = Date.UTC(todayUtc8.getUTCFullYear(), todayUtc8.getUTCMonth(), todayUtc8.getUTCDate(), time.h - 8, time.m, time.s)
+    return t <= now ? t : 'invalid'
+  }
+  return undefined
 }
 /** 持仓草稿提取（简单槽位；未经确认不落库） */
 export interface PositionDraft {
@@ -152,7 +211,7 @@ async function appendMessage(input: {
 }
 
 /** PATCH /api/conversations/:id/context：保存用户确认的上下文（含确认卡落库持仓） */
-export async function patchContext(
+async function patchContextInner(
   conv: ConversationRow,
   patch: Record<string, unknown>,
 ): Promise<{ context: Record<string, unknown>; confirmedPositionId: string | null }> {
@@ -182,40 +241,82 @@ export async function patchContext(
   if (typeof draftRaw === 'object' && draftRaw !== null && patch.confirm === true) {
     const d = draftRaw as { symbol?: string; side?: string; qty?: number; entryPrice?: number; leverage?: number; riskBudget?: number }
     const fp = JSON.stringify([d.symbol ?? null, d.side ?? null, d.qty ?? null, d.entryPrice ?? null, d.riskBudget ?? null, d.leverage ?? null])
-    const prevCtx = conv.context as { confirmedDraftFp?: string; positionId?: string | null }
-    if (prevCtx.confirmedDraftFp === fp && typeof prevCtx.positionId === 'string' && prevCtx.positionId !== '') {
-      confirmedPositionId = prevCtx.positionId
-    } else {
-      const parsed = PositionInputSchema.safeParse({
-        symbol: d.symbol,
-        side: d.side,
-        qty: d.qty === undefined ? undefined : String(d.qty),
-        entryPrice: d.entryPrice === undefined ? undefined : String(d.entryPrice),
-        leverage: d.leverage ?? 10,
-        marginMode: 'isolated',
-        riskBudget: d.riskBudget === undefined ? undefined : String(d.riskBudget),
-        confirmedAt: Date.now(),
-      })
-      if (parsed.success) {
-        const rows = await getDb()!
-          .insert(portfolioPositions)
-          .values({
-            userId: conv.userId,
-            symbol: parsed.data.symbol,
-            side: parsed.data.side,
-            qty: parsed.data.qty,
-            entryPrice: parsed.data.entryPrice,
-            leverage: parsed.data.leverage,
-            marginMode: parsed.data.marginMode,
-            riskBudget: parsed.data.riskBudget,
-            confirmedAt: parsed.data.confirmedAt,
-          })
-          .returning()
-        confirmedPositionId = rows[0].id
-        ctx.positionId = confirmedPositionId
-        ctx.confirmedDraftFp = fp
-        ctx.draft = null
+    const parsed = PositionInputSchema.safeParse({
+      symbol: d.symbol,
+      side: d.side,
+      qty: d.qty === undefined ? undefined : String(d.qty),
+      entryPrice: d.entryPrice === undefined ? undefined : String(d.entryPrice),
+      leverage: d.leverage ?? 10,
+      marginMode: 'isolated',
+      riskBudget: d.riskBudget === undefined ? undefined : String(d.riskBudget),
+      confirmedAt: Date.now(),
+    })
+    if (parsed.success) {
+      // onConflictDoNothing + 回读（评审三轮-4）；同一指纹已落库 = 复用记录并刷新确认时刻
+      // （评审四轮-2：写操作即一次用户确认——重复提交/重试幂等返回同一持仓，
+      // 间隔很久的重确认更新 confirmedAt、解除过期标记，不再被指纹当作旧重试跳过）
+      const insertValues = {
+        userId: conv.userId,
+        symbol: parsed.data.symbol,
+        side: parsed.data.side,
+        qty: parsed.data.qty,
+        entryPrice: parsed.data.entryPrice,
+        leverage: parsed.data.leverage,
+        marginMode: parsed.data.marginMode,
+        riskBudget: parsed.data.riskBudget,
+        confirmedAt: parsed.data.confirmedAt,
+        confirmFp: fp,
       }
+      const rows = await getDb()!
+        .insert(portfolioPositions)
+        .values(insertValues)
+        .onConflictDoNothing()
+        .returning()
+      if (rows.length > 0) {
+        confirmedPositionId = rows[0].id
+      } else {
+        // 评审五轮防御：刷新确认前核对指纹锚定记录的实际字段——
+        // 记录被编辑成另一持仓后，指纹不得再锚定它（清除旧指纹，按草稿新建）
+        const resolveConflict = async (): Promise<string> => {
+          const findByFp = async () =>
+            (
+              await getDb()!
+                .select()
+                .from(portfolioPositions)
+                .where(and(eq(portfolioPositions.userId, conv.userId), eq(portfolioPositions.confirmFp, fp)))
+                .limit(1)
+            )[0]
+          let row = await findByFp()
+          if (row === undefined) throw Object.assign(new Error('持仓确认冲突回读失败'), { statusCode: 500 })
+          const match =
+            row.symbol === parsed.data.symbol &&
+            row.side === parsed.data.side &&
+            Number(row.qty) === Number(parsed.data.qty) &&
+            Number(row.entryPrice) === Number(parsed.data.entryPrice) &&
+            row.leverage === parsed.data.leverage &&
+            Number(row.riskBudget) === Number(parsed.data.riskBudget)
+          if (!match) {
+            await getDb()!
+              .update(portfolioPositions)
+              .set({ confirmFp: null, updatedAt: new Date() })
+              .where(and(eq(portfolioPositions.id, row.id), eq(portfolioPositions.userId, conv.userId)))
+            const retry = await getDb()!.insert(portfolioPositions).values(insertValues).onConflictDoNothing().returning()
+            if (retry.length > 0) return retry[0].id
+            row = await findByFp()
+            if (row === undefined) throw Object.assign(new Error('持仓确认冲突回读失败'), { statusCode: 500 })
+          }
+          // 复用记录并刷新确认时刻（重确认解除过期；重试幂等返回同一持仓）
+          await getDb()!
+            .update(portfolioPositions)
+            .set({ confirmedAt: Date.now(), updatedAt: new Date() })
+            .where(and(eq(portfolioPositions.id, row.id), eq(portfolioPositions.userId, conv.userId)))
+          return row.id
+        }
+        confirmedPositionId = await resolveConflict()
+      }
+      ctx.positionId = confirmedPositionId
+      ctx.confirmedDraftFp = fp
+      ctx.draft = null
     }
   }
   for (const k of ['positionId', 'quoteId']) {
@@ -225,14 +326,54 @@ export async function patchContext(
   return { context: ctx, confirmedPositionId }
 }
 
+/** PATCH /api/conversations/:id/context（评审三轮-1：串行临界区内重读会话行——
+ * 排队前读到的 context 可能已被前一个请求改写，旧对象合并会覆盖字段/漏掉草稿） */
+export async function patchContext(
+  conv: ConversationRow,
+  patch: Record<string, unknown>,
+): Promise<{ context: Record<string, unknown>; confirmedPositionId: string | null }> {
+  return serializeConversation(conv.id, async () => {
+    const fresh = await getConversationForUser(conv.id, conv.userId)
+    if (fresh === null) throw Object.assign(new Error('会话不存在'), { statusCode: 404 })
+    return patchContextInner(fresh, patch)
+  })
+}
+
 export interface ConversationReply {
   message: ConversationMessageRow
   runId: string | null
   needCompletion: string[]
 }
 
+// 同会话写操作串行化（评审 R2）：先查后写的幂等检查在并发下需要互斥；
+// 会话写 API 只在 app 进程服务，进程内按会话串行即消除竞争（confirm_fp 唯一约束作 DB 兜底）
+const convChains = new Map<string, Promise<unknown>>()
+
+function serializeConversation<T>(convId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = convChains.get(convId) ?? Promise.resolve()
+  const task = prev.then(fn)
+  const tail: Promise<unknown> = task.then(
+    () => undefined,
+    () => undefined,
+  )
+  convChains.set(convId, tail)
+  void tail.then(() => {
+    if (convChains.get(convId) === tail) convChains.delete(convId)
+  })
+  return task
+}
+
 /** POST /api/conversations/:id/messages：意图路由 → 创建研究（继承上下文）或直接回复 */
 export async function postMessage(conv: ConversationRow, content: string): Promise<ConversationReply> {
+  // 评审三轮-1：串行临界区内重读会话行（草稿/上下文以最新提交为准）
+  return serializeConversation(conv.id, async () => {
+    const fresh = await getConversationForUser(conv.id, conv.userId)
+    if (fresh === null) throw Object.assign(new Error('会话不存在'), { statusCode: 404 })
+    return postMessageInner(fresh, content)
+  })
+}
+
+async function postMessageInner(conv: ConversationRow, content: string): Promise<ConversationReply> {
   const text = content.trim()
   // 幂等（评审 F6）：同会话 10s 内同内容重复提交（双击/网络重试）复用原回复，不重复建档研究
   const lastRows = await getDb()!
