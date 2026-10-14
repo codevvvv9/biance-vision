@@ -14,7 +14,16 @@ export type ValidationCode =
   | 'event_action_violation'
   | 'direction_logic'
 
-const FABRICATED_PROB_RE = /(概率|胜率|probability|win rate)\s*[==:：是]?\s*\d+(?:\.\d+)?\s*%/i
+/** 概率红线（评审三轮-5 改共现规则）：概率词与数字（%/小数）在同一文本内共现即拒绝——
+ * 与措辞/语序/连接词无关（「胜率约90%」「上涨概率达到90%」「胜率超过80%」「90% 的胜率」全覆盖）。
+ * fact 声明由代码模板装配数值，豁免；LLM 文本（反证/解释）任何情况不得含概率数字。 */
+const PROB_WORD_RE = /概率|胜率|胜算|probability|win\s*rate|winrate/i
+const PCT_NUM_RE = /\d+(?:\.\d+)?\s*%/
+const DECIMAL_PROB_RE = /(?<![\d.])0?\.\d+(?![\d.])/
+
+function hasFabricatedProb(text: string): boolean {
+  return PROB_WORD_RE.test(text) && (PCT_NUM_RE.test(text) || DECIMAL_PROB_RE.test(text))
+}
 
 export interface ClaimLike {
   text: string
@@ -62,19 +71,17 @@ export function validateResearch(input: ValidateInput): { ok: true } | { ok: fal
     }
   }
 
-  // 2) 概率红线：概率唯一来自统计模块，LLM 产出文本（反证审查结论 counterClaims）
-  // 在任何情况下都不得含概率/胜率百分比（modelVersion 存在不代表文本数字来自模型）；
-  // modelVersion 为空时，claims 中的解释类（非 fact）声明同样受限
+  // 2) 概率红线（评审 R6 收紧）：概率唯一来自统计模块——LLM 产出文本（反证 counterClaims）
+  // 与一切非 fact 声明（解释类）在任何情况下都不得含概率/胜率数字（modelVersion 存在不代表
+  // 文本数字来自模型）；fact 声明由代码模板装配，豁免。覆盖百分比/小数/倒装形态。
   for (const c of input.counterClaims) {
-    if (FABRICATED_PROB_RE.test(c.text)) {
+    if (hasFabricatedProb(c.text)) {
       issues.push({ code: 'fabricated_number', detail: `反证声明含未经统计模块的概率表述：${c.text.slice(0, 80)}` })
     }
   }
-  if (input.modelVersion === null) {
-    for (const c of input.claims) {
-      if (c.kind !== 'fact' && FABRICATED_PROB_RE.test(c.text)) {
-        issues.push({ code: 'fabricated_number', detail: `声明含未经统计模块的概率表述：${c.text.slice(0, 80)}` })
-      }
+  for (const c of input.claims) {
+    if (c.kind !== 'fact' && hasFabricatedProb(c.text)) {
+      issues.push({ code: 'fabricated_number', detail: `声明含未经统计模块的概率表述：${c.text.slice(0, 80)}` })
     }
   }
 

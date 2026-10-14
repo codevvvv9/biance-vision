@@ -16,10 +16,11 @@ import { validateResearch } from '../server/src/services/validator.js'
 import { analyzeEvent } from '../server/src/services/eventAnalyzer.js'
 import { featuresAt, MIN_BARS } from '../server/src/research/features.js'
 import { missingPositionFields, parseReplayAsOf } from '../server/src/research/runs/conversation.js'
+import { resolveLlmClient } from '../server/src/research/llm.js'
 import { PositionInputSchema } from '../shared/src/contract/portfolio.js'
 import { baseIntervalFor, featureVersionFor } from '../server/src/research/features.js'
 import { classifyIntent } from '../server/src/research/runs/conversation.js'
-import { resolveRolePrompt } from '../server/src/research/runs/stages.js'
+import { resolveRolePrompt, hasBlockingQualityIssue } from '../server/src/research/runs/stages.js'
 import { hashFrozenConfig } from '../server/src/research/runs/store.js'
 import { runPipeline } from '../server/src/research/orchestrator/pipeline.js'
 import { LeaseLostError } from '../server/src/research/orchestrator/types.js'
@@ -546,6 +547,100 @@ console.log('\n[评审 F6] 持仓草稿：必填槽位检测 + 共享 PositionIn
   assert(!PositionInputSchema.safeParse({ symbol: 'BTCUSDT', side: 'north', qty: '0.1', entryPrice: '60000', leverage: 10, marginMode: 'isolated', riskBudget: '200', confirmedAt: 1 }).success, '非法方向被 schema 拒绝')
   assert(!PositionInputSchema.safeParse({ symbol: 'BTCUSDT', side: 'long', qty: '-0.1', entryPrice: '60000', leverage: 10, marginMode: 'isolated', riskBudget: '200', confirmedAt: 1 }).success, '非正数量被 schema 拒绝')
   assert(!PositionInputSchema.safeParse({ symbol: 'BTCUSDT', side: 'long', qty: '0.1', entryPrice: '60000', leverage: 200, marginMode: 'isolated', riskBudget: '200', confirmedAt: 1 }).success, '越界杠杆被 schema 拒绝')
+}
+
+console.log('\n[复审 R1] 质量门控看完整问题集合（与排序无关）')
+{
+  assert(hasBlockingQualityIssue([{ code: 'insufficient_history' }, { code: 'stale_market' }]), '[insufficient_history, stale_market] → 阻断（修复前只看第一项会放行）')
+  assert(hasBlockingQualityIssue([{ code: 'stale_market' }, { code: 'insufficient_history' }]), '[stale_market, insufficient_history] → 阻断')
+  assert(hasBlockingQualityIssue([{ code: 'insufficient_history' }, { code: 'window_gap' }, { code: 'stale_reference_price' }]), '缺口/参考价异常 → 阻断')
+  assert(!hasBlockingQualityIssue([{ code: 'insufficient_history' }]), '仅 insufficient_history → 不阻断（特征门槛另行把关）')
+  assert(!hasBlockingQualityIssue([]), '无问题 → 不阻断')
+}
+
+console.log('\n[复审 R3] 复盘具体时刻按该时刻解析（不再一律日末）')
+{
+  const t1 = parseReplayAsOf('复盘 2026-10-01 10:00 的 BTCUSDT')
+  assert(typeof t1 === 'number' && new Date(t1).toISOString() === '2026-10-01T02:00:00.000Z', '2026-10-01 10:00（UTC+8）→ 02:00Z')
+  const t2 = parseReplayAsOf('复盘 2026-10-01 20:00 的 BTCUSDT')
+  assert(typeof t2 === 'number' && new Date(t2).toISOString() === '2026-10-01T12:00:00.000Z', '2026-10-01 20:00 → 12:00Z（不同时刻结果不同）')
+  const t3 = parseReplayAsOf('复盘 2026-10-01 10点30分')
+  assert(typeof t3 === 'number' && new Date(t3).toISOString() === '2026-10-01T02:30:00.000Z', '「10点30分」→ 02:30Z')
+  assert(parseReplayAsOf('复盘 2026-10-01 25:00') === 'invalid', '非法时刻 25:00 → invalid')
+  const t0 = parseReplayAsOf('复盘 2026-10-01 的 BTC')
+  assert(typeof t0 === 'number' && new Date(t0).toISOString().startsWith('2026-10-01T15:59'), '仅日期 → 当日 23:59:59（约定保留）')
+}
+
+console.log('\n[复审 R6] 概率文本绕过形态全部拒绝')
+{
+  const phrases = ['胜率约90%', '获胜概率为0.9', '90% 的胜率', 'win rate: 90%', '概率高达 99%']
+  for (const p of phrases) {
+    const r = validateResearch({
+      claims: [], counterClaims: [{ text: p, evidenceIds: [] }],
+      knownEvidenceIds: new Set(), modelVersion: 'fv-evt-r-1h', frozenConfigHash: null, runtimeConfigHash: null,
+    })
+    assert(!r.ok && r.issues.some((i) => i.code === 'fabricated_number'), `反证「${p}」→ 拒绝`)
+  }
+  const interp = validateResearch({
+    claims: [{ text: '解释：胜率：99%', kind: 'interpretation' as const, evidenceIds: [] }], counterClaims: [],
+    knownEvidenceIds: new Set(), modelVersion: 'fv-evt-r-1h', frozenConfigHash: null, runtimeConfigHash: null,
+  })
+  assert(!interp.ok && interp.issues.some((i) => i.code === 'fabricated_number'), 'modelVersion 存在时解释 claim 含概率 → 拒绝（不再豁免）')
+}
+
+console.log('\n[三轮-2] 复盘时刻：限定词/相对日带时刻/裸时刻/不可解析补全')
+{
+  const t1 = parseReplayAsOf('复盘 2026-10-01 下午3点')
+  assert(typeof t1 === 'number' && new Date(t1).toISOString() === '2026-10-01T07:00:00.000Z', '下午3点 → 15:00（UTC+8）= 07:00Z')
+  const t2 = parseReplayAsOf('复盘 2026-10-01 10时30分')
+  assert(typeof t2 === 'number' && new Date(t2).toISOString() === '2026-10-01T02:30:00.000Z', '「10时30分」→ 02:30Z（时=点别名）')
+  const fixedNow = Date.UTC(2026, 9, 13, 8, 0) // 2026-10-13 16:00（UTC+8）
+  const t3 = parseReplayAsOf('复盘昨天10:00', fixedNow)
+  assert(typeof t3 === 'number' && new Date(t3).toISOString() === '2026-10-12T02:00:00.000Z', '昨天10:00 → 昨日 10:00（修复前=昨日 16:00 混入后续数据）')
+  assert(parseReplayAsOf('复盘 2026-10-01 下午') === 'invalid', '有限定词无时刻 → invalid（请求补全，不退回日末）')
+  const t5 = parseReplayAsOf('复盘 10:00', fixedNow)
+  assert(typeof t5 === 'number' && new Date(t5).toISOString() === '2026-10-13T02:00:00.000Z', '裸时刻 → 今天该时刻')
+  assert(parseReplayAsOf('复盘 23:00', fixedNow) === 'invalid', '裸时刻今天未到 → invalid')
+}
+
+console.log('\n[三轮-3] resolveLlmClient：显式传入冻结配置时严格尊重（含关闭），不回退全局')
+{
+  assert(resolveLlmClient({ chat: { enabled: false } }) === null, '冻结 chat.enabled=false（无 baseUrl）→ null（修复前回退全局配置）')
+  assert(resolveLlmClient(null) === null, '冻结 capabilities=null → null')
+  assert(resolveLlmClient({ chat: { enabled: true, baseUrl: 'http://127.0.0.1:9', model: 'm' } }) !== null, '冻结 chat 完整 → 用冻结值构造')
+}
+
+console.log('\n[三轮-5] 概率红线共现规则：措辞/语序无关')
+{
+  for (const p of ['胜率大约为90%', '上涨概率达到90%', '胜率超过80%']) {
+    const r = validateResearch({
+      claims: [], counterClaims: [{ text: p, evidenceIds: [] }],
+      knownEvidenceIds: new Set(), modelVersion: null, frozenConfigHash: null, runtimeConfigHash: null,
+    })
+    assert(!r.ok && r.issues.some((i) => i.code === 'fabricated_number'), `「${p}」→ 拒绝`)
+  }
+  const ok1 = validateResearch({
+    claims: [], counterClaims: [{ text: '该结构近期涨幅约 5%，未见反转信号', evidenceIds: [] }],
+    knownEvidenceIds: new Set(), modelVersion: null, frozenConfigHash: null, runtimeConfigHash: null,
+  })
+  assert(ok1.ok, '无概率词的百分比（涨幅 5%）→ 不误伤')
+  const ok2 = validateResearch({
+    claims: [], counterClaims: [{ text: '形态概率无法从现有证据估计', evidenceIds: [] }],
+    knownEvidenceIds: new Set(), modelVersion: null, frozenConfigHash: null, runtimeConfigHash: null,
+  })
+  assert(ok2.ok, '概率词无数字 → 不误伤')
+}
+
+console.log('\n[四轮-1] 时刻解析不截断表达：「半」=30 分；「N秒」不带分')
+{
+  const t1 = parseReplayAsOf('复盘 2026-10-01 10点半')
+  assert(typeof t1 === 'number' && new Date(t1).toISOString() === '2026-10-01T02:30:00.000Z', '10点半 → 10:30（修复前半被忽略成 10:00）')
+  const t2 = parseReplayAsOf('复盘 2026-10-01 10点30秒')
+  assert(typeof t2 === 'number' && new Date(t2).toISOString() === '2026-10-01T02:00:30.000Z', '10点30秒 → 10:00:30（修复前误读为 10:30，多纳入 29 分 30 秒数据）')
+  const t3 = parseReplayAsOf('复盘 2026-10-01 10点30分25秒')
+  assert(typeof t3 === 'number' && new Date(t3).toISOString() === '2026-10-01T02:30:25.000Z', '10点30分25秒 → 10:30:25')
+  const t4 = parseReplayAsOf('复盘 2026-10-01 10点30分')
+  assert(typeof t4 === 'number' && new Date(t4).toISOString() === '2026-10-01T02:30:00.000Z', '10点30分 → 10:30（不回归）')
 }
 
 console.log(`\n结果：${passed} 通过 / ${failed} 失败`)

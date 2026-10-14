@@ -282,6 +282,10 @@
   font-size: 11px;
 }
 
+.warn-line {
+  color: var(--amber);
+}
+
 .run-launcher textarea,
 .research-form input,
 .research-form select,
