@@ -23,8 +23,7 @@ function CoinCard({ symbol }: { symbol: string }): JSX.Element {
 }
 
 export default function StatCards(): JSX.Element {
-  const { stats, order, alertsHistory } = useMarket()
-  const todayCount = alertsHistory.filter((a) => Date.now() - a.triggeredAt < 86400e3).length
+  const { stats, order } = useMarket()
   const up = stats?.up ?? 0
   const down = stats?.down ?? 0
   const total = up + down
@@ -62,7 +61,7 @@ export default function StatCards(): JSX.Element {
         <div className="stat-value mono">{stats ? `$${fmtVol(stats.totalQuoteVolume)}` : '--'}</div>
         <div className="stat-sub">
           <span className="muted">
-            监控 {order.length} 交易对 · 今日触发预警 {todayCount} 次
+            监控 {order.length} 交易对
           </span>
         </div>
       </div>
