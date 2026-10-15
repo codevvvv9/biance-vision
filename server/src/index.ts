@@ -251,8 +251,9 @@ const app = Fastify({ logger: false, trustProxy: true })
 
 // 统一错误映射：路由内 throw Object.assign(new Error(msg), { statusCode, code? })
 // 转为 { statusCode, error, message, code? }——message 面向最终用户（前端原样展示）；
-// code 为机器可读业务码（如 chat_disabled / chat_limit_exceeded），未携带时不输出。
-// 5xx 不回显内部 message（防泄露），与 fastify 默认错误响应语义一致。
+// code 为机器可读业务码（如 chat_disabled / chat_limit_exceeded），仅 4xx 透传——
+// 5xx 不回显内部 message 也不透 code（防泄露 PG SQLSTATE / 系统错误码等内部细节），
+// 与 fastify 默认错误响应语义一致。
 app.setErrorHandler((err, req, reply) => {
   const e = err as { statusCode?: number; code?: string; message?: string }
   const statusCode = typeof e.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600 ? e.statusCode : 500
@@ -262,7 +263,7 @@ app.setErrorHandler((err, req, reply) => {
     error: STATUS_CODES[statusCode] ?? 'Error',
     message: statusCode >= 500 ? 'Internal Server Error' : String(e.message ?? ''),
   }
-  if (typeof e.code === 'string') body.code = e.code
+  if (statusCode < 500 && typeof e.code === 'string') body.code = e.code
   void reply.code(statusCode).send(body)
 })
 
@@ -711,12 +712,13 @@ app.get('/api/ai/models', async (req) => {
 
 app.post('/api/ai/chat', async (req, reply) => {
   const session = requireSession(req) // 所有登录用户可用，配置仅超管
+  // 用户级管控先行：被管理端禁用/超限的用户恒定收到 403 chat_disabled / 429 chat_limit_exceeded，
+  // 不被「AI 未配置」或档案级配额错误掩盖（其余四个挂载点同为策略先行）
+  assertChatAllowed(session.username)
   const profile = resolveAiProfile(session.username)
   if (!profile) throw badRequest('AI 未配置，或当前用户没有可用的配置档案（请联系超级管理员）')
+  // checkAiQuota 为档案级限额（每用户每日 LLM 对话数）；两者独立判定、任一超限即拒（取严）
   checkAiQuota(session.username, profile)
-  // checkAiQuota 为档案级限额（每用户每日 LLM 对话数）；assertChatAllowed 为用户级管控
-  // （管理端禁用/每日交互上限）——两者独立判定、任一超限即拒（取严）
-  assertChatAllowed(session.username)
   const body = (req.body ?? {}) as { conversationId?: unknown; content?: unknown }
   const content = typeof body.content === 'string' ? body.content.trim() : ''
   if (!content) throw badRequest('消息内容不能为空')

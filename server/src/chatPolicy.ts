@@ -7,6 +7,10 @@
  * 计数口径：按「成功完成的交互」计数，失败不计（区别于 recordAiUsage 含失败
  * 尝试的防刷口径）。存储 server/data/chat-usage.json，结构同 ai-usage.json
  * （{ date, counts }），按北京时间自然日计，跨天整体重置。
+ *
+ * 并发口径：assert 与 record 之间存在 await 窗口（业务流程在其间执行），
+ * 并发请求可同时通过检查，日限可少量超发——本模块是管理端管控口径的非硬控制
+ * （与 ai.ts 档案级配额同口径），不做并发互斥。
  */
 import { loadJson, saveJson } from './store.js'
 import { getUsers } from './users.js'
@@ -46,22 +50,29 @@ export function getChatUsageToday(username: string): number {
 }
 
 /**
- * 交互前检查（挂点在鉴权之后、业务之前）：
+ * 纯决策（抽出以便 scripts/chat-policy-check.ts 直接自测，不依赖用户/存储）：
  * 禁用 → 403 chat_disabled；达当日上限 → 429 chat_limit_exceeded。
  * message 面向最终用户，前端原样展示。
  */
-export function assertChatAllowed(username: string): void {
-  const policy = policyOf(username)
+export function checkChatAllowed(policy: ChatPolicy, usedToday: number): void {
   if (policy.disabled) {
     throw Object.assign(new Error('聊天已被管理员禁用'), { statusCode: 403, code: 'chat_disabled' })
   }
   const limit = policy.dailyLimit
-  if (limit !== null && limit > 0 && getChatUsageToday(username) >= limit) {
+  if (limit !== null && limit > 0 && usedToday >= limit) {
     throw Object.assign(new Error(`今日 AI 助手交互次数已达上限（${limit} 次/天）`), {
       statusCode: 429,
       code: 'chat_limit_exceeded',
     })
   }
+}
+
+/**
+ * 交互前检查（挂点在鉴权之后、业务之前）：读取该用户生效策略与当日计数，
+ * 委托 checkChatAllowed 判定。
+ */
+export function assertChatAllowed(username: string): void {
+  checkChatAllowed(policyOf(username), getChatUsageToday(username))
 }
 
 /**

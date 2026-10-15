@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary'
 import Header from './components/Header'
 import TickerTape from './components/TickerTape'
 import Toasts from './components/Toasts'
@@ -35,15 +36,17 @@ function AuthedApp(): JSX.Element {
             <Route
               path="/admin/*"
               element={
-                <Suspense
-                  fallback={
-                    <div className="auth-wrap">
-                      <div className="auth-loading">正在加载管理后台…</div>
-                    </div>
-                  }
-                >
-                  <AdminApp />
-                </Suspense>
+                <ErrorBoundary>
+                  <Suspense
+                    fallback={
+                      <div className="auth-wrap">
+                        <div className="auth-loading">正在加载管理后台…</div>
+                      </div>
+                    }
+                  >
+                    <AdminApp />
+                  </Suspense>
+                </ErrorBoundary>
               }
             />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -90,8 +93,10 @@ function Shell(): JSX.Element {
 
 export default function App(): JSX.Element {
   return (
-    <AuthProvider>
-      <Shell />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }

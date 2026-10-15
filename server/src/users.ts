@@ -105,8 +105,9 @@ export function getUsers(): UserRecord[] {
 }
 
 function persistUsers(list: UserRecord[]): void {
-  usersCache = list
+  // 先落盘再换缓存：saveJson 抛错时内存保持旧值，避免内存/磁盘不一致
   saveJson('users.json', list)
+  usersCache = list
   try {
     usersMtime = fs.statSync(USERS_FILE).mtimeMs
   } catch {
@@ -191,11 +192,12 @@ export function updatePassword(username: string, password: string): UserRecord {
   const list = getUsers()
   const u = list.find((x) => x.username.toLowerCase() === name.toLowerCase())
   if (!u) throw badRequest(`用户 ${name} 不存在`)
-  u.passwordHash = hashPassword(pw)
-  u.updatedAt = Date.now()
-  persistUsers([...list])
+  // 先构造不可变新记录并整体持久化（persistUsers 成功才换缓存）：
+  // 原地改缓存再保存，saveJson 抛错会造成内存/磁盘不一致
+  const updated: UserRecord = { ...u, passwordHash: hashPassword(pw), updatedAt: Date.now() }
+  persistUsers(list.map((x) => (x === u ? updated : x)))
   destroySessionsFor(u.username)
-  return u
+  return updated
 }
 
 export function toPublic(u: UserRecord): PublicUser {
@@ -215,14 +217,18 @@ export function updateChatPolicy(
   const u = list.find((x) => x.username.toLowerCase() === name.toLowerCase())
   if (!u) return null
   const prev = u.chatPolicy ?? { disabled: false, dailyLimit: null }
-  u.chatPolicy = {
-    disabled: patch.disabled ?? prev.disabled,
-    // dailyLimit 显式给 null = 解除上限；undefined = 不改动
-    dailyLimit: patch.dailyLimit === undefined ? prev.dailyLimit : patch.dailyLimit,
+  // 同 updatePassword：先构造新记录，persistUsers 成功后缓存才更新
+  const updated: UserRecord = {
+    ...u,
+    chatPolicy: {
+      disabled: patch.disabled ?? prev.disabled,
+      // dailyLimit 显式给 null = 解除上限；undefined = 不改动
+      dailyLimit: patch.dailyLimit === undefined ? prev.dailyLimit : patch.dailyLimit,
+    },
+    updatedAt: Date.now(),
   }
-  u.updatedAt = Date.now()
-  persistUsers([...list])
-  return u
+  persistUsers(list.map((x) => (x === u ? updated : x)))
+  return updated
 }
 
 /** 校验用户名密码；统一返回 null 以免区分「用户不存在 / 密码错误」 */
