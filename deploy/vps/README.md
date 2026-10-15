@@ -45,7 +45,8 @@ echo $GHCR_PAT | docker login ghcr.io -u codevvvv9 --password-stdin
 git clone https://github.com/codevvvv9/biance-vision.git && cd biance-vision
 
 # 4) 起栈（镜像来自 tag 发版：本地 pnpm release:gate → git tag v0.2.x → push）
-BV_VERSION=v0.2.x docker compose \
+# 注意：GHCR 镜像 tag 由 docker/metadata-action 生成，不带 v 前缀（git tag v0.6.1 → 镜像 :0.6.1）
+BV_VERSION=0.2.x docker compose \
   -f docker-compose.yml -f deploy/vps/compose.override.yml up -d
 curl -s http://127.0.0.1:3200/api/health   # 验证
 ```
@@ -71,7 +72,7 @@ bash deploy/vps/migrate-remote.sh
 
 ## 5. 日常运维
 
-- **升级**：本地过 `pnpm release:gate` → 打 tag → 服务器 `BV_VERSION=v0.2.y docker compose -f docker-compose.yml -f deploy/vps/compose.override.yml pull && ... up -d`。
+- **升级**：本地过 `pnpm release:gate` → 打 tag → 服务器 `BV_VERSION=0.2.y docker compose -f docker-compose.yml -f deploy/vps/compose.override.yml pull && ... up -d`（镜像 tag 不带 v 前缀）。
 - **备份**：cron 每周 `docker exec biance-vision-postgres pg_dump -U postgres -d biance_vision -Fc | gzip > /var/backups/biance-$(date +%F).dump.gz`；轻量套餐自带快照功能，换机/重装前先打一张。
 - **到期与流量**：轻量套餐到期停机（记得续费）；流量超额按量计费，偶尔看一眼用量页。
 - **embedding 服务**（101.237.37.116:8001，国内 IP）从香港/日本访问可达，延迟约 50–100ms，只影响知识入库/检索；行情链路不经它。
