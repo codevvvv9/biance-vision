@@ -6,7 +6,7 @@
 import { EventEmitter } from 'node:events'
 import { createHash } from 'node:crypto'
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, gt, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, notInArray, sql } from 'drizzle-orm'
 import type { RunProgressEvent, ResearchRunCreate } from 'biance-vision-brooks'
 import { evidenceItems, researchRuns, runEvents, runSteps } from '../../models.js'
 import type { EvidenceItemRow, ResearchRunRow, RunStepRow } from '../../models.js'
@@ -102,6 +102,9 @@ export class StoreUnavailableError extends Error {
     this.name = 'StoreUnavailableError'
   }
 }
+
+/** 研究运行终态集合：终态后不再取消（acquireRunLease / requestCancel / chat-cutoff 共用口径） */
+export const RUN_TERMINAL = new Set(['published', 'failed', 'cancelled'])
 
 function db() {
   const d = getDb()
@@ -256,6 +259,15 @@ export async function listRuns(userId: string, limit = 50): Promise<ResearchRunR
     .limit(limit)
 }
 
+/** 全部未终态运行（不按 listRuns 的 50 条截断）：chat-cutoff 全量取消等管控场景用 */
+export async function listActiveRuns(userId: string): Promise<ResearchRunRow[]> {
+  return db()
+    .select()
+    .from(researchRuns)
+    .where(and(eq(researchRuns.userId, userId), notInArray(researchRuns.status, [...RUN_TERMINAL])))
+    .orderBy(desc(researchRuns.createdAt))
+}
+
 export async function getSteps(runId: string): Promise<RunStepRow[]> {
   return db().select().from(runSteps).where(eq(runSteps.runId, runId)).orderBy(runSteps.startedAt)
 }
@@ -288,12 +300,13 @@ export async function freezeEvidence(
   return rows.map((r) => r.id)
 }
 
-/** 取消：置 cancelRequested；流水线在下一step边界检查并放弃后续写入 */
+/** 取消：置 cancelRequested；流水线在下一step边界检查并放弃后续写入。
+ * where 排除终态（消除「检查后取消」竞态：已终态 run 返回 false，不置标记也不发取消事件） */
 export async function requestCancel(id: string, userId: string): Promise<boolean> {
   const rows = await db()
     .update(researchRuns)
     .set({ cancelRequested: true, updatedAt: new Date() })
-    .where(and(eq(researchRuns.id, id), eq(researchRuns.userId, userId)))
+    .where(and(eq(researchRuns.id, id), eq(researchRuns.userId, userId), notInArray(researchRuns.status, [...RUN_TERMINAL])))
     .returning()
   if (rows.length > 0) {
     runBus.emit(id, { type: 'run_cancelled', runId: id, at: Date.now() })

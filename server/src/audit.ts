@@ -228,9 +228,10 @@ export async function initAudit(): Promise<void> {
 }
 
 /**
- * 在线用户近似（管理端用户列表用）：仍在进行（未登出）且最近 withinMs 内
- * 有审计动作（登录/业务操作）的会话用户名集合。审计只覆盖 recordAudit 过的
- * 写操作与登录事件，静默只读浏览不计——作为「在线」的保守近似，加注释说明。
+ * 近期活跃用户近似（管理端用户列表的 activeRecently 字段用）：仍在进行（未登出）
+ * 且最近 withinMs 内有审计动作（登录/业务操作）的会话用户名集合。审计只覆盖
+ * recordAudit 过的写操作与登录事件，静默只读浏览不计——是「近期活跃」的保守近似，
+ * 不是实时在线，API 字段名 activeRecently 即为此意。
  */
 export function listActiveUsernames(withinMs: number): Set<string> {
   const now = Date.now()

@@ -51,8 +51,8 @@ export function updateChatPolicy(
   return api(`/admin/users/${encodeURIComponent(username)}/chat-policy`, { method: 'PUT', body: patch })
 }
 
-/** POST /api/admin/users/:username/chat-cutoff：一键禁用聊天并取消其全部进行中研究运行 */
-export function cutOffUserChat(username: string): Promise<{ disabled: boolean; cancelledRuns: string[] }> {
+/** POST /api/admin/users/:username/chat-cutoff：一键禁用聊天并取消其全部进行中研究运行；cancelDeferred=true 表示取消被延迟（数据库暂不可用） */
+export function cutOffUserChat(username: string): Promise<{ disabled: boolean; cancelledRuns: string[]; cancelDeferred?: boolean }> {
   return api(`/admin/users/${encodeURIComponent(username)}/chat-cutoff`, { method: 'POST' })
 }
 

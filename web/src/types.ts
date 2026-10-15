@@ -1,5 +1,7 @@
 /** 前后端共享的数据结构（与服务端 server/src/types.ts 对应） */
 
+import type { ConversationMessage, ResearchRunStatus } from 'biance-vision-brooks'
+
 export type RuleType = 'price_above' | 'price_below' | 'change_above' | 'change_below'
 
 export interface Ticker {
@@ -76,11 +78,11 @@ export interface ChatPolicy {
   dailyLimit: number | null
 }
 
-/** 管理端用户列表行（GET /api/admin/users）：附带聊天管控、当日用量与在线近似（5 分钟内有操作） */
+/** 管理端用户列表行（GET /api/admin/users）：附带聊天管控、当日用量与活跃近似（5 分钟内有审计写动作） */
 export interface AdminUserRow extends AdminUser {
   chatPolicy: ChatPolicy
   chatUsage: { today: number; limit: number | null }
-  online: boolean
+  activeRecently: boolean
 }
 
 export interface Settings {
@@ -207,8 +209,8 @@ export interface AdminConversationSummary {
   messageCount: number
 }
 
-/** 消息意图（与服务端 Intent 一致） */
-export type ChatIntent = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system'
+/** 消息意图（从 shared ConversationMessage['intent'] 同源提取；值集与 server Intent 一致，避免双源漂移） */
+export type ChatIntent = NonNullable<ConversationMessage['intent']>
 
 /** 会话内联卡片：confirm_position 持仓确认卡 / completion */
 export interface AdminMessageCard {
@@ -218,7 +220,11 @@ export interface AdminMessageCard {
   complete?: boolean
 }
 
-/** 研究会话消息（GET /api/admin/conversations/:id） */
+/**
+ * 研究会话消息（GET /api/admin/conversations/:id）。
+ * 与 shared ConversationMessage 的实质差异（故保留本地定义）：admin 详情接口不返回 conversationId；
+ * card 为 DB 原样结构，多 missingFields/complete 两个字段（shared schema 未覆盖）
+ */
 export interface AdminConversationMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -229,7 +235,8 @@ export interface AdminConversationMessage {
   createdAt: number
 }
 
-export type ResearchRunStatus = 'queued' | 'running' | 'validating' | 'published' | 'failed' | 'cancelled'
+/** 研究运行状态：re-export shared/contract/research.ts 的同源定义，避免双源漂移 */
+export type { ResearchRunStatus }
 
 /** 会话引用的研究运行摘要（按 runId 去重后随详情返回） */
 export interface AdminRunRef {

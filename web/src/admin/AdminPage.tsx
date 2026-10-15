@@ -101,7 +101,7 @@ export default function AdminPage(): JSX.Element {
   const [username, setUsername] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [error, setError] = useState('')
-  /** 正在执行聊天管控操作的用户名（行内按钮逐个防抖） */
+  /** 正在执行聊天管控操作的用户名；非空时全部行的管控按钮禁用（全局互斥，避免并发管控写） */
   const [busyUser, setBusyUser] = useState('')
 
   const load = useCallback((name: string): void => {
@@ -155,15 +155,13 @@ export default function AdminPage(): JSX.Element {
 
   const cutoff = (u: AdminUserRow): void => {
     if (!window.confirm(`确认掐断用户「${u.username}」？\n将禁用该用户聊天并取消其全部进行中的研究任务。`)) return
-    setBusyUser(u.username)
-    cutOffUserChat(u.username)
-      .then((r) => {
-        setError('')
-        window.alert(`已禁用「${u.username}」的聊天，并取消 ${r.cancelledRuns.length} 个进行中的研究任务。`)
-        refreshUsers()
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setBusyUser(''))
+    runUserOp(u.username, async () => {
+      const r = await cutOffUserChat(u.username)
+      window.alert(
+        `已禁用「${u.username}」的聊天，并取消 ${r.cancelledRuns.length} 个进行中的研究任务。` +
+          (r.cancelDeferred === true ? '\n研究取消被延迟（数据库暂不可用），稍后可在 AI 会话页的研究会话追踪中复查。' : ''),
+      )
+    })
   }
 
   const copyName = (name: string): void => {
@@ -205,6 +203,11 @@ export default function AdminPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
+              {error !== '' && users === null && (
+                <tr className="empty-row">
+                  <td colSpan={5}>加载失败：{error}</td>
+                </tr>
+              )}
               {users === null && !error && (
                 <tr className="empty-row">
                   <td colSpan={5}>加载中…</td>
@@ -234,11 +237,11 @@ export default function AdminPage(): JSX.Element {
                         {u.chatUsage.today}/{u.chatUsage.limit === null ? '不限' : u.chatUsage.limit}
                       </span>
                       <span
-                        className={`sess-status ${u.online ? 'st-active' : 'st-ended'}`}
-                        title={u.online ? '5 分钟内有操作（在线近似）' : '5 分钟内无操作'}
+                        className={`sess-status ${u.activeRecently ? 'st-active' : 'st-ended'}`}
+                        title={u.activeRecently ? '5 分钟内有操作（活跃近似）' : '5 分钟内无操作'}
                       >
                         <i />
-                        {u.online ? '在线' : '离线'}
+                        {u.activeRecently ? '在线' : '离线'}
                       </span>
                     </span>
                   </td>
@@ -254,7 +257,7 @@ export default function AdminPage(): JSX.Element {
                       </button>
                       <button
                         className="btn btn-ghost btn-sm"
-                        disabled={busyUser === u.username}
+                        disabled={busyUser !== ''}
                         onClick={() => toggleDisabled(u)}
                         title={u.chatPolicy.disabled ? '恢复该用户的 AI 聊天' : '禁用该用户的 AI 聊天（不影响登录）'}
                       >
@@ -263,13 +266,13 @@ export default function AdminPage(): JSX.Element {
                       <LimitInput
                         key={`${u.username}:${u.chatPolicy.dailyLimit ?? 'null'}`}
                         limit={u.chatPolicy.dailyLimit}
-                        busy={busyUser === u.username}
+                        busy={busyUser !== ''}
                         onSubmit={(dailyLimit) => commitLimit(u, dailyLimit)}
                         onInvalid={setError}
                       />
                       <button
                         className="btn btn-ghost btn-sm danger"
-                        disabled={busyUser === u.username}
+                        disabled={busyUser !== ''}
                         onClick={() => cutoff(u)}
                         title="一键掐断：禁用聊天并取消其全部进行中的研究任务"
                       >

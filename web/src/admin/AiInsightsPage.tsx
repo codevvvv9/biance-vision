@@ -171,6 +171,8 @@ export default function AiInsightsPage(): JSX.Element {
   const [rOpenId, setROpenId] = useState<string | null>(null)
   const [rDetail, setRDetail] = useState<AdminConversationDetail | null>(null)
   const [rError, setRError] = useState('')
+  /** 展开详情的加载错误（行内展示，不顶掉会话列表；与列表加载错误 rError 分离） */
+  const [rDetailError, setRDetailError] = useState('')
 
   const loadOverview = useCallback((): void => {
     api<{ stats: AiUserStat[] }>('/admin/ai/overview')
@@ -202,6 +204,7 @@ export default function AiInsightsPage(): JSX.Element {
     setRUser(username)
     setROpenId(null)
     setRDetail(null)
+    setRDetailError('')
     if (username === '') {
       setRConvs(null)
       return
@@ -214,16 +217,18 @@ export default function AiInsightsPage(): JSX.Element {
     if (rOpenId === id) {
       setROpenId(null)
       setRDetail(null)
+      setRDetailError('')
       return
     }
     setROpenId(id)
     setRDetail(null)
+    setRDetailError('')
     fetchAdminConversation(id)
       .then((d) => {
         setRDetail(d)
-        setRError('')
+        setRDetailError('')
       })
-      .catch((e: Error) => setRError(e.message))
+      .catch((e: Error) => setRDetailError(e.message))
   }
 
   const pickUser = (username: string): void => {
@@ -323,6 +328,10 @@ export default function AiInsightsPage(): JSX.Element {
                           <td colSpan={4}>
                             {rDetail !== null && rDetail.conversation.id === c.id ? (
                               <ResearchConversationDetail detail={rDetail} />
+                            ) : rDetailError !== '' ? (
+                              <p className="form-hint muted" style={{ padding: '10px 16px' }}>
+                                加载失败：{rDetailError}
+                              </p>
                             ) : (
                               <p className="form-hint muted" style={{ padding: '10px 16px' }}>
                                 加载中…
@@ -485,8 +494,8 @@ export default function AiInsightsPage(): JSX.Element {
                   {pano.conversations.map((c) => {
                     const open = openConv?.id === c.id
                     return (
-                      <>
-                        <tr key={c.id} className={open ? 'row-open' : ''} onClick={() => toggleConv(c.id)}>
+                      <Fragment key={c.id}>
+                        <tr className={open ? 'row-open' : ''} onClick={() => toggleConv(c.id)}>
                           <td className="col-title">
                             <b>{c.title}</b>
                           </td>
@@ -504,7 +513,7 @@ export default function AiInsightsPage(): JSX.Element {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     )
                   })}
                 </tbody>

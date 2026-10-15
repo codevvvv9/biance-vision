@@ -23,6 +23,7 @@
     "typecheck": "pnpm --filter biance-vision-brooks run build && tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "start": "pnpm --filter biance-vision-server run start",
     "brooks:causality": "tsx scripts/causality-check.ts",
+    "chat:policy-check": "tsx scripts/chat-policy-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
     "research:p1-check": "tsx scripts/p1-regression-check.ts",
     "knowledge:smoke": "tsx scripts/knowledge-smoke.ts",
