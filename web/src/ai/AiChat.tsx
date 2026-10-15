@@ -13,6 +13,7 @@ import { useResearchConversation } from '../research/useResearchConversation'
 import { useResearchRun } from '../research/useResearchRun'
 import { PositionConfirmCard } from '../research/PositionConfirmCard'
 import { RunBubble } from '../research/RunBubble'
+import MiniMarkdown from '../components/MiniMarkdown'
 
 interface Props {
   onClose: () => void
@@ -195,7 +196,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
       <div className="ai-msgs" ref={listRef} onClick={() => panel !== null && setPanel(null)}>
         {conv.messages.map((m, i) => (
           <div key={i} className={`ai-bubble ${m.role === 'user' ? 'me' : 'bot'}`}>
-            {m.text}
+            {m.role === 'user' ? m.text : <MiniMarkdown text={m.text} />}
             {m.card !== undefined && (
               <PositionConfirmCard card={m.card} busy={conv.cardBusy === i} onResolve={(confirm) => void conv.resolveCard(i, confirm)} />
             )}
