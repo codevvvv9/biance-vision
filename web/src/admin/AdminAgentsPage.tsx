@@ -2,9 +2,10 @@
  * /admin/agents Agent 配置域（超管）：
  * 五类能力配置（密钥仅引用名）+ 版本流（草稿→发布不可变→回滚）+ 调试运行。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { AgentCapabilities, AgentVersion } from 'biance-vision-brooks'
+import { useSpotlight } from '../components/fx/useSpotlight'
 
 const CAP_LABEL: Record<keyof AgentCapabilities, string> = {
   chat: '对话生成',
@@ -12,6 +13,21 @@ const CAP_LABEL: Record<keyof AgentCapabilities, string> = {
   rerank: '精排',
   vision: '图示理解',
   search: '网页搜索',
+}
+
+const CAP_DESC: Record<keyof AgentCapabilities, string> = {
+  chat: '研究/聊天使用的 LLM（OpenAI 兼容接口）',
+  embedding: '知识切块向量化（维度需与库列一致）',
+  rerank: '检索精排（未配置时流水线自动跳过）',
+  vision: '书中图示理解（多模态模型）',
+  search: '反证/新闻检索与原页抓取',
+}
+
+/** 能力卡状态灯：启用未配 model/baseUrl 视为配置不全（琥珀），齐备为绿，停用为灰 */
+function capLight(c: { enabled: boolean; model?: string; baseUrl?: string }): 'off' | 'warn' | 'ok' {
+  if (!c.enabled) return 'off'
+  if ((c.model ?? '') === '' ) return 'warn'
+  return 'ok'
 }
 
 const DEFAULT_CONFIG = {
@@ -34,6 +50,8 @@ interface CapTestResult {
 }
 
 export default function AdminAgentsPage(): JSX.Element {
+  const capsRef = useRef<HTMLDivElement>(null)
+  useSpotlight(capsRef)
   const [versions, setVersions] = useState<AgentVersion[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [caps, setCaps] = useState<AgentCapabilities | null>(null)
@@ -155,62 +173,70 @@ export default function AdminAgentsPage(): JSX.Element {
       <div className="panel">
         <h4>能力配置（来源：{capsSource === 'agent_version' ? '当前发布 Agent 版本' : '全局 app_settings'}）</h4>
         {caps !== null && (
-          <div className="caps-grid">
+          <div className="caps-grid" ref={capsRef}>
             {(Object.keys(CAP_LABEL) as (keyof AgentCapabilities)[]).map((k) => {
               const c = caps[k]
+              const light = capLight(c)
               return (
-                <div key={k} className="cap-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={c.enabled}
-                      onChange={(e) => setCaps({ ...caps, [k]: { ...c, enabled: e.target.checked } })}
-                    />
-                    <strong>{CAP_LABEL[k]}</strong>
-                  </label>
-                  <input value={c.baseUrl ?? ''} placeholder="baseUrl" onChange={(e) => setCaps({ ...caps, [k]: { ...c, baseUrl: e.target.value } })} />
-                  <input value={c.model ?? ''} placeholder="model" onChange={(e) => setCaps({ ...caps, [k]: { ...c, model: e.target.value } })} />
-                  <input value={c.secretRef ?? ''} placeholder="密钥引用名（secrets.json）" onChange={(e) => setCaps({ ...caps, [k]: { ...c, secretRef: e.target.value } })} />
-                  {k === 'embedding' && (
-                    <input
-                      type="number"
-                      value={c.dims ?? 1536}
-                      placeholder="维度（默认 1536，需与库列一致）"
-                      onChange={(e) => setCaps({ ...caps, [k]: { ...c, dims: Number(e.target.value) || undefined } })}
-                    />
-                  )}
-                  {k === 'search' && (
-                    <>
+                <div key={k} className={`cap-item fx-spot ${c.enabled ? 'on' : ''} light-${light}`}>
+                  <div className="cap-head">
+                    <label className="cap-switch">
                       <input
-                        value={searchDomains ?? (caps.search.allowedDomains ?? []).join(',')}
-                        placeholder="抓取白名单域名（逗号分隔；留空不限制）"
-                        onChange={(e) => {
-                          setSearchDomains(e.target.value)
-                          const list = e.target.value.split(/[,，]/).map((s) => s.trim()).filter((s) => s !== '')
-                          // 留空 → undefined（不限制）；空数组语义为「不允许任何抓取」，仅 JSON 版本配置可设
-                          setCaps({ ...caps, search: { ...caps.search, allowedDomains: list.length > 0 ? list : undefined } })
-                        }}
+                        type="checkbox"
+                        checked={c.enabled}
+                        onChange={(e) => setCaps({ ...caps, [k]: { ...c, enabled: e.target.checked } })}
                       />
+                      <span className="cap-track" aria-hidden><span className="cap-knob" /></span>
+                      <strong>{CAP_LABEL[k]}</strong>
+                    </label>
+                    <span className={`cap-light lt-${light}`} title={light === 'ok' ? '已启用且配置齐备' : light === 'warn' ? '已启用但 model 未填' : '未启用'} />
+                  </div>
+                  <p className="cap-desc">{CAP_DESC[k]}</p>
+                  <div className="cap-fields">
+                    <input value={c.baseUrl ?? ''} placeholder="baseUrl" onChange={(e) => setCaps({ ...caps, [k]: { ...c, baseUrl: e.target.value } })} />
+                    <input value={c.model ?? ''} placeholder="model" onChange={(e) => setCaps({ ...caps, [k]: { ...c, model: e.target.value } })} />
+                    <input value={c.secretRef ?? ''} placeholder="密钥引用名（secrets.json）" onChange={(e) => setCaps({ ...caps, [k]: { ...c, secretRef: e.target.value } })} />
+                    {k === 'embedding' && (
                       <input
                         type="number"
-                        value={caps.search.timeoutMs ?? ''}
-                        placeholder="搜索/抓取超时 ms（默认 30000）"
-                        onChange={(e) => setCaps({ ...caps, search: { ...caps.search, timeoutMs: Number(e.target.value) || undefined } })}
+                        value={c.dims ?? 1536}
+                        placeholder="维度（默认 1536，需与库列一致）"
+                        onChange={(e) => setCaps({ ...caps, [k]: { ...c, dims: Number(e.target.value) || undefined } })}
                       />
-                      <input
-                        type="number"
-                        value={caps.search.maxBytes ?? ''}
-                        placeholder="原页体积上限字节（默认 1048576）"
-                        onChange={(e) => setCaps({ ...caps, search: { ...caps.search, maxBytes: Number(e.target.value) || undefined } })}
-                      />
-                      <input
-                        type="number"
-                        value={caps.search.maxResults ?? ''}
-                        placeholder="单查询结果数（默认 5）"
-                        onChange={(e) => setCaps({ ...caps, search: { ...caps.search, maxResults: Number(e.target.value) || undefined } })}
-                      />
-                    </>
-                  )}
+                    )}
+                    {k === 'search' && (
+                      <>
+                        <input
+                          value={searchDomains ?? (caps.search.allowedDomains ?? []).join(',')}
+                          placeholder="抓取白名单域名（逗号分隔；留空不限制）"
+                          onChange={(e) => {
+                            setSearchDomains(e.target.value)
+                            const list = e.target.value.split(/[,，]/).map((s) => s.trim()).filter((s) => s !== '')
+                            // 留空 → undefined（不限制）；空数组语义为「不允许任何抓取」，仅 JSON 版本配置可设
+                            setCaps({ ...caps, search: { ...caps.search, allowedDomains: list.length > 0 ? list : undefined } })
+                          }}
+                        />
+                        <input
+                          type="number"
+                          value={caps.search.timeoutMs ?? ''}
+                          placeholder="搜索/抓取超时 ms（默认 30000）"
+                          onChange={(e) => setCaps({ ...caps, search: { ...caps.search, timeoutMs: Number(e.target.value) || undefined } })}
+                        />
+                        <input
+                          type="number"
+                          value={caps.search.maxBytes ?? ''}
+                          placeholder="原页体积上限字节（默认 1048576）"
+                          onChange={(e) => setCaps({ ...caps, search: { ...caps.search, maxBytes: Number(e.target.value) || undefined } })}
+                        />
+                        <input
+                          type="number"
+                          value={caps.search.maxResults ?? ''}
+                          placeholder="单查询结果数（默认 5）"
+                          onChange={(e) => setCaps({ ...caps, search: { ...caps.search, maxResults: Number(e.target.value) || undefined } })}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             })}

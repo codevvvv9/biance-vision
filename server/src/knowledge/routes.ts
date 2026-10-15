@@ -44,6 +44,7 @@ import {
   upsertManifestEntries,
   workingVersionId,
 } from './store.js'
+import { getBlobStore } from './blobstore.js'
 import { vectorStatus } from './vector.js'
 
 interface KnowledgeRouteDeps {
@@ -270,6 +271,31 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
       chunks: previews,
       vector: vectorStatus(),
     }
+  })
+
+  // ---- 原始文件回读（管理端预览：PDF/HTML 走浏览器原生渲染，TXT/MD 前端按 md 展示） ----
+  app.get('/api/admin/knowledge/documents/:id/file', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const doc = await getDocument(id)
+    if (!doc || doc.blobKey === null || doc.blobKey === '')
+      return reply.code(404).send({ code: 'not_found', message: '原始文件不存在（URL/manifest 导入无本地文件）' })
+    const buf = await getBlobStore().get(doc.blobKey)
+    if (buf === null) return reply.code(404).send({ code: 'not_found', message: '原始文件已丢失（blob 缺失）' })
+    const ext = (doc.fileName.split('.').pop() ?? '').toLowerCase()
+    const ct: Record<string, string> = {
+      pdf: 'application/pdf',
+      html: 'text/html; charset=utf-8',
+      htm: 'text/html; charset=utf-8',
+      txt: 'text/plain; charset=utf-8',
+      md: 'text/markdown; charset=utf-8',
+      markdown: 'text/markdown; charset=utf-8',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }
+    reply.header('content-type', ct[ext] ?? 'application/octet-stream')
+    reply.header('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.fileName || doc.title)}`)
+    return reply.send(buf)
   })
 
   // ---- 重解析 / 发布 ----

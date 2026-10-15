@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { ResearchResult } from 'biance-vision-brooks'
+import MiniMarkdown from '../components/MiniMarkdown'
 
 const DECISION_LABEL: Record<string, string> = {
   wait: '等待',
@@ -96,7 +97,7 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
   const pp = r2?.payload ?? {}
   const DECISION_LABEL_V2: Record<string, string> = { ...DECISION_LABEL, request_reconfirm: '请重新确认持仓', monitor: '监控订单', await_settlement: '等待结算', settled: '已结算' }
   return (
-    <div className="result-card">
+    <div className="result-card fx-in">
       <div className="result-head">
         <span className={`decision-badge d-${result.decision}`}>{(DECISION_LABEL_V2[result.decision] ?? DECISION_LABEL[result.decision]) ?? result.decision}{r2?.side !== null && r2?.side !== undefined && r2.decision === 'conditional_entry' ? `（${r2.side === 'long' ? '多' : '空'}）` : ''}</span>
         <span className={`quality q-${result.evidenceQuality}`}>
@@ -145,14 +146,16 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
                   </button>
                   {openEvidence === `${i}:${eid}` && ev !== undefined && (
                     <span className="cite-popover" role="note">
-                      <span className={`stance s-${ev.stance}`}>{ev.stance === 'support' ? '支持' : '反证'}</span>
-                      <span className="loc">
-                        {ev.docTitle !== '' && ev.docTitle !== undefined ? `${ev.docTitle}` : ev.kind === 'knowledge_chunk' ? '知识片段' : ev.kind}
-                        {ev.pageNo !== null ? ` · 第 ${ev.pageNo} 页` : ''}
-                        {ev.figureId !== null ? ` · 图 ${ev.figureId.slice(0, 8)}` : ''}
-                        {ev.sourceTier !== null ? ` · ${ev.sourceTier}` : ''}
+                      <span className="cite-pop-head">
+                        <span className={`stance s-${ev.stance}`}>{ev.stance === 'support' ? '支持' : '反证'}</span>
+                        <span className="loc">
+                          {ev.docTitle !== '' && ev.docTitle !== undefined ? `${ev.docTitle}` : ev.kind === 'knowledge_chunk' ? '知识片段' : ev.kind}
+                          {ev.pageNo !== null ? ` · 第 ${ev.pageNo} 页` : ''}
+                          {ev.figureId !== null ? ` · 图 ${ev.figureId.slice(0, 8)}` : ''}
+                          {ev.sourceTier !== null ? ` · ${ev.sourceTier}` : ''}
+                        </span>
                       </span>
-                      <pre className="evidence-text">{ev.text}</pre>
+                      <MiniMarkdown text={ev.text} className="evidence-md" />
                     </span>
                   )}
                 </span>
@@ -292,13 +295,17 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar }: { runId: s
             <button className="evidence-toggle" onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
               <span className={`stance s-${e.stance}`}>{e.stance === 'support' ? '支持' : '反证'}</span>
               <span className="loc">
-                {e.kind === 'knowledge_chunk' ? '知识片段' : e.kind}
+                {e.docTitle !== undefined && e.docTitle !== '' ? e.docTitle : e.kind === 'knowledge_chunk' ? '知识片段' : e.kind}
                 {e.pageNo !== null ? ` · 第 ${e.pageNo} 页` : ''}
                 {e.figureId !== null ? ` · 图 ${e.figureId.slice(0, 8)}` : ''}
                 {e.sourceTier !== null ? ` · ${e.sourceTier}` : ''}
               </span>
             </button>
-            {expanded === e.id && <pre className="evidence-text">{e.text}</pre>}
+            {expanded === e.id && (
+              <div className="evidence-card-body">
+                <MiniMarkdown text={e.text} className="evidence-md" />
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -323,7 +330,11 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar }: { runId: s
                     {s.knownAtTime !== null ? `（确认于 ${new Date(s.knownAtTime).toLocaleTimeString()}）` : ''}
                   </span>
                 </button>
-                {s.note !== '' && <pre className="evidence-text">{s.note}</pre>}
+                {s.note !== '' && (
+                  <div className="evidence-card-body">
+                    <MiniMarkdown text={s.note} className="evidence-md" />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

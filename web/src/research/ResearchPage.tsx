@@ -21,6 +21,7 @@ import { useResearchConversation } from './useResearchConversation'
 import { useResearchCandles } from './useResearchCandles'
 import { PositionConfirmCard } from './PositionConfirmCard'
 import { RunBubble } from './RunBubble'
+import MiniMarkdown from '../components/MiniMarkdown'
 
 type Product = 'perp' | 'event' | 'teaching'
 type MarketType = 'spot' | 'usdm_perp'
@@ -509,7 +510,7 @@ export default function ResearchPage(): JSX.Element {
             <div className="chat-messages" role="log" aria-live="polite">
               {conv.messages.map((m, i) => (
                 <div key={i} className={`chat-msg ${m.role}`}>
-                  {m.text}
+                  {m.role === 'user' ? m.text : <MiniMarkdown text={m.text} />}
                   {m.card !== undefined && (
                     <PositionConfirmCard card={m.card} busy={conv.cardBusy === i} onResolve={(confirm) => void conv.resolveCard(i, confirm)} />
                   )}
