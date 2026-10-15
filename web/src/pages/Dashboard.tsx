@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import KlineChart from '../components/KlineChart'
 import MarketTable from '../components/MarketTable'
 import StatCards from '../components/StatCards'
+import CursorFx from '../components/fx/CursorFx'
 
 export default function Dashboard(): JSX.Element {
   const [sp] = useSearchParams()
@@ -14,6 +15,7 @@ export default function Dashboard(): JSX.Element {
 
   return (
     <div className="page">
+      <CursorFx />
       <StatCards />
       <div className="dash-grid">
         <KlineChart symbol={symbol} interval={interval} onIntervalChange={setIntervalState} />

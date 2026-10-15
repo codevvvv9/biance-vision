@@ -1,0 +1,187 @@
+/* ============================================================
+   fx 动效层（React Bits 风格的零依赖实现，token 接入现有设计系统）
+   纪律：
+   - 只动 transform / opacity（fxChBlur 为短一次性入场例外）
+   - 持续型动画只用于小面积元素（描边环/微光），绝不铺全屏数据页
+   - prefers-reduced-motion 时全部退化为静态（见文件末尾）
+   ============================================================ */
+
+/* ---- 入场渐显上浮：--fx-i 为同类列表的 stagger 序号（55ms 步进） ---- */
+.fx-in {
+  animation: fxIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--fx-i, 0) * 55ms);
+}
+@keyframes fxIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- 文字逐字入场（SplitText 组件）：rise / blur 两种效果 ---- */
+.fx-split .fx-ch {
+  display: inline-block;
+  opacity: 0;
+  animation: fxChRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.fx-split.fx-blur .fx-ch {
+  animation-name: fxChBlur;
+}
+@keyframes fxChRise {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* 一次性短入场，允许 filter（600ms 后不再发生） */
+@keyframes fxChBlur {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(0.3em);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+/* ---- 流动描边（BorderBeam / .fx-beam）：@property 驱动 conic 角度旋转 ---- */
+@property --fx-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.fx-beam {
+  position: relative;
+  isolation: isolate;
+}
+.fx-beam::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--fx-beam-w, 1.5px);
+  background: conic-gradient(
+    from var(--fx-angle),
+    transparent 0deg,
+    var(--fx-beam-c, var(--cyan)) 45deg,
+    color-mix(in srgb, var(--fx-beam-c2, var(--purple)) 85%, white) 85deg,
+    transparent 145deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: fxBeamSpin var(--fx-beam-t, 5s) linear infinite;
+  pointer-events: none;
+}
+@keyframes fxBeamSpin {
+  to {
+    --fx-angle: 360deg;
+  }
+}
+/* 不支持 @property 的浏览器：静态渐变环（无旋转） */
+
+/* ---- 磁吸（Magnet / .fx-magnet）：transform 走 CSS vars，离开回弹 ---- */
+.fx-magnet {
+  transform: translate(var(--fx-tx, 0px), var(--fx-ty, 0px));
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---- 聚光（Spotlight / .fx-spot）：跟随光标的径向微光，坐标由 useSpotlight 写入 ---- */
+.fx-spot {
+  position: relative;
+}
+.fx-spot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    360px circle at var(--fx-mx, 50%) var(--fx-my, 50%),
+    rgba(0, 229, 255, 0.09),
+    rgba(0, 229, 255, 0.03) 40%,
+    transparent 65%
+  );
+}
+.fx-spot:hover::after {
+  opacity: 1;
+}
+
+/* ---- 运行中顶部扫光（.fx-pulse-line）：细线从左到右往返 ---- */
+.fx-pulse-line {
+  position: relative;
+  overflow: hidden;
+}
+.fx-pulse-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: fxSweep 1.8s ease-in-out infinite;
+}
+@keyframes fxSweep {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+
+/* ---- 全局降级：系统偏好减少动效时，fx 层全部退化为静态 ----
+   （登录页 .auth-fx 内的旧动效由 components.css 的同名降级块接管） */
+@media (prefers-reduced-motion: reduce) {
+  .fx-in,
+  .fx-split .fx-ch,
+  .fx-beam::before,
+  .fx-magnet,
+  .fx-pulse-line::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+  .fx-split .fx-ch {
+    opacity: 1;
+  }
+  .fx-spot::after {
+    transition: none;
+  }
+}
+
+/* ---- 极光背景（AuroraBg）：低分辨率 canvas 拉伸自然平滑，挂在 .bg-fx 内（z-index -1 层） ---- */
+.fx-aurora {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: translateZ(0);
+}
+
+/* ---- 鼠标粒子（CursorFx）：内容之上、Header(50) 之下，不挡交互 ---- */
+.fx-cursor {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}

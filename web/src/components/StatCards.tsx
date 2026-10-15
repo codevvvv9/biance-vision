@@ -1,12 +1,14 @@
+import { useRef } from 'react'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice, fmtVol } from '../utils'
+import { useSpotlight } from './fx/useSpotlight'
 
 function CoinCard({ symbol }: { symbol: string }): JSX.Element {
   const { tickers } = useMarket()
   const t = tickers[symbol]
   const up = (t?.changePct ?? 0) >= 0
   return (
-    <div className="stat-card">
+    <div className="stat-card fx-spot">
       <div className="stat-label">
         <i className="sym-dot" />
         {symbol.replace('USDT', '')} <em>/ USDT</em>
@@ -23,6 +25,8 @@ function CoinCard({ symbol }: { symbol: string }): JSX.Element {
 }
 
 export default function StatCards(): JSX.Element {
+  const gridRef = useRef<HTMLDivElement>(null)
+  useSpotlight(gridRef)
   const { stats, order } = useMarket()
   const up = stats?.up ?? 0
   const down = stats?.down ?? 0
@@ -30,11 +34,11 @@ export default function StatCards(): JSX.Element {
   const upPct = total ? Math.round((up / total) * 100) : 50
 
   return (
-    <div className="stat-grid">
+    <div className="stat-grid" ref={gridRef}>
       <CoinCard symbol="BTCUSDT" />
       <CoinCard symbol="ETHUSDT" />
 
-      <div className="stat-card">
+      <div className="stat-card fx-spot">
         <div className="stat-label">
           <i className="sym-dot teal" />
           市场情绪 <em>USDT 交易对</em>
@@ -53,7 +57,7 @@ export default function StatCards(): JSX.Element {
         </div>
       </div>
 
-      <div className="stat-card">
+      <div className="stat-card fx-spot">
         <div className="stat-label">
           <i className="sym-dot purple" />
           24h 总成交额 <em>USDT</em>

@@ -1,6 +1,8 @@
 /* 样式入口：按职责拆分，顺序即级联顺序（后者覆盖前者） */
 @import './base.css';
 @import './components.css';
+/* fx 动效层紧随通用组件（类名 .fx-*；.fx-glow/.fx-stars/.fx-canvas 归 components.css 的登录背景） */
+@import '../components/fx/fx.css';
 @import './pages.css';
 /* admin.css 原为 pages.css 的一部分，保持紧邻其后导入以维持原级联顺序
    （research.css 的 .admin-page input 群组选择器依赖排在 .admin-row input 之后） */

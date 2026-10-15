@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
+import Magnet from '../components/fx/Magnet'
+import SplitText from '../components/fx/SplitText'
 
 /** 登录页：未开放自助注册，账号由超级管理员通过脚本开通 */
 export default function LoginPage(): JSX.Element {
@@ -38,16 +40,18 @@ export default function LoginPage(): JSX.Element {
   return (
     <div className="auth-wrap">
       <AuthFx />
-      <div className="auth-card">
-        <div className="auth-brand">
+      <div className="auth-card fx-beam" style={{ '--fx-beam-t': '5.2s' } as CSSProperties}>
+        <div className="auth-brand fx-in">
           <Logo />
           <div className="auth-brand-text">
-            <span className="auth-title">BIANCE VISION</span>
-            <span className="auth-sub">币安大盘监控终端</span>
+            <span className="auth-title">
+              <SplitText text="BIANCE VISION" delay={0.12} gradient={['#00e5ff', '#a78bfa']} />
+            </span>
+            <span className="auth-sub fx-in" style={{ '--fx-i': 8 } as CSSProperties}>币安大盘监控终端</span>
           </div>
         </div>
 
-        <form className="auth-form" onSubmit={(e) => void submit(e)}>
+        <form className="auth-form fx-in" style={{ '--fx-i': 3 } as CSSProperties} onSubmit={(e) => void submit(e)}>
           <label className="auth-field">
             <span>用户名</span>
             <input
@@ -69,11 +73,13 @@ export default function LoginPage(): JSX.Element {
             />
           </label>
 
-          {error && <p className="auth-error">{error}</p>}
+          {error && <p className="auth-error fx-in">{error}</p>}
 
-          <button className="btn btn-primary auth-submit" disabled={busy} type="submit">
-            {busy ? '登录中…' : '登 录'}
-          </button>
+          <Magnet className="auth-submit-wrap">
+            <button className="btn btn-primary auth-submit" disabled={busy} type="submit">
+              {busy ? '登录中…' : '登 录'}
+            </button>
+          </Magnet>
         </form>
 
         <div className="auth-foot">
