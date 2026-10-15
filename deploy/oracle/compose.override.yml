@@ -1,5 +1,6 @@
 # 云服务器（Oracle 免费层等）部署覆盖层，与根 docker-compose.yml 叠加使用：
-#   BV_VERSION=v0.2.1 docker compose -f docker-compose.yml -f deploy/oracle/compose.override.yml up -d
+#   BV_VERSION=0.2.1 docker compose -f docker-compose.yml -f deploy/oracle/compose.override.yml up -d
+#   （镜像 tag 不带 v 前缀：git tag v0.6.1 → 镜像 :0.6.1）
 # - 镜像来自 tag 触发的 GHCR（.github/workflows/release.yml；先本地过 pnpm release:gate 再打 tag）
 # - 需 Docker Compose v2.24+（!reset 语法）；BV_VERSION 缺省 latest
 services:

@@ -56,7 +56,7 @@ git clone https://github.com/codevvvv9/biance-vision.git && cd biance-vision
 # 本机侧：先过发版门槛再打 tag（CI 会推 ghcr.io/codevvvv9/biance-vision 与 -research-py）
 # 本地：pnpm release:gate && git tag v0.2.x && git push origin v0.2.x
 
-BV_VERSION=v0.2.x docker compose \
+BV_VERSION=0.2.x docker compose \
   -f docker-compose.yml -f deploy/oracle/compose.override.yml up -d
 curl -s http://127.0.0.1:3200/api/health   # 验证
 ```
@@ -82,7 +82,7 @@ bash deploy/oracle/migrate-remote.sh                     # 恢复三个包并拉
 
 ## 7. 日常运维
 
-- **升级**：本地 `pnpm release:gate` → 打 tag → 服务器 `BV_VERSION=v0.2.y docker compose -f docker-compose.yml -f deploy/oracle/compose.override.yml pull && ... up -d`。
+- **升级**：本地 `pnpm release:gate` → 打 tag → 服务器 `BV_VERSION=0.2.y docker compose -f docker-compose.yml -f deploy/oracle/compose.override.yml pull && ... up -d`（镜像 tag 不带 v 前缀）。
 - **备份**：cron 每周 `docker exec biance-vision-postgres pg_dump -U postgres -d biance_vision -Fc | gzip > /var/backups/biance-$(date +%F).dump.gz`，另传一份到异机/对象存储。
 - **空闲回收**：Oracle 会回收连续 7 天 CPU<20% 的免费 A1 实例——本项目 worker 常驻采集，天然不满足回收条件，无需额外处理。
 - **embedding 服务**（内部embedding代理，国内 IP）从日韩区访问可达，延迟约 50–100ms，只影响知识入库/检索；行情链路不经它。长期境外化可考虑把 embedding 一并迁移。
