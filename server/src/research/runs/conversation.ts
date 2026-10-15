@@ -190,7 +190,10 @@ export async function listConversationsWithStats(
       context: conversations.context,
       createdAt: conversations.createdAt,
       updatedAt: conversations.updatedAt,
-      messageCount: sql<number>`(select count(*)::int from ${conversationMessages} where ${conversationMessages.conversationId} = ${conversations.id})`,
+      // 注意：相关子查询里的外层引用必须显式写全限定表名——${conversations.id}
+      // 在 select 字段位置会被 drizzle 渲染成不带表前缀的 "id"，在子查询内会错误解析成
+      // conversation_messages.id 自比较（恒 0）。此处用 sql.raw 固定外层限定名。
+      messageCount: sql<number>`(select count(*)::int from ${conversationMessages} where ${conversationMessages.conversationId} = ${sql.raw('"conversations"."id"')})`,
     })
     .from(conversations)
     .where(eq(conversations.userId, userId))
