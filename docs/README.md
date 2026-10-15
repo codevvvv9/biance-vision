@@ -2,6 +2,13 @@
 
 本目录收录 Brooks 金融研究 Agent 的全部文档。**规范性内容以 `docs/specs/` 为准**；历史文档保留调研价值，但与 spec 冲突时以 spec 为准。
 
+## 用户文档
+
+| 文档 | 说明 |
+| --- | --- |
+| [user-manual.md](user-manual.md) | 最终用户使用手册：登录上手、现货/永续/事件合约三场景操作步骤、AI Brooks 原理联动、异常状态与 FAQ |
+| [admin-manual.md](admin-manual.md) | 管理后台操作手册（超管）：用户与聊天管控、知识库导入/发布/检索调试、Agent 能力与版本流、评测与模型训练、故障排查 |
+
 ## specs（正式规格）
 
 每份 spec 顶部带状态标记（`planned` / `partial` / `implemented` / `verified`），结构与流转规则见 [specs/README.md](specs/README.md)。状态以 [specs/README.md](specs/README.md) 索引为权威源，本表与其保持一致。
