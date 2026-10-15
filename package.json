@@ -31,7 +31,8 @@
     "vector:smoke": "tsx scripts/vector-smoke.ts",
     "release:gate": "tsx scripts/release-gate.ts",
     "linkage:smoke": "tsx scripts/linkage-smoke.ts",
-    "web:smoke": "tsx scripts/web-search-smoke.ts"
+    "web:smoke": "tsx scripts/web-search-smoke.ts",
+    "geo:update": "tsx scripts/update-cn-ip-list.ts"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",

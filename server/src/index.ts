@@ -80,6 +80,7 @@ import {
 } from './users.js'
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
+import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { startQueue } from './queue.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
@@ -104,6 +105,8 @@ await initStorage()
 await initUsers()
 await initAudit()
 await initAiMemory()
+// 地域封锁（默认屏蔽中国大陆来源 IP；名单缺失时 fail-open 并告警，详见 geoblock.ts）
+initGeoBlock()
 
 interface BadRequestError extends Error {
   statusCode: number
@@ -347,6 +350,9 @@ function clientIp(req: FastifyRequest): string {
   return String(req.ip ?? '')
 }
 
+// 地域封锁钩子：onRequest 阶段执行，早于鉴权与所有路由（与限速/审计同用 clientIp 口径）
+registerGeoBlock(app, clientIp)
+
 // ---------------------------------------------------------------------------
 // 登录限速（公网爆破防线，进程内计数，重启即清）：
 // 每 IP 每分钟最多 5 次尝试；累计失败 10 次锁定 15 分钟（成功登录即清零）
@@ -503,6 +509,7 @@ app.get('/api/health', async () => ({
   symbols: tickerCache.size,
   clients: clients.size,
   storage: storageMode(),
+  geoBlock: geoBlockStatus(),
   uptime: Math.floor(process.uptime()),
   lastTickerAt,
   tickerAgeMs: lastTickerAt === 0 ? null : Date.now() - lastTickerAt,
@@ -879,6 +886,11 @@ await startQueue()
 
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
 app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {
+  // 地域封锁兜底：WS 升级请求未必都经过全局 onRequest 钩子（依赖插件版本行为），此处显式再判一次
+  if (isRegionBlocked(clientIp(req))) {
+    connection.socket.close(4003, 'region_blocked')
+    return
+  }
   const session = findSession(readSessionToken(req.headers.cookie))
   if (!session) {
     log.warn('ws', '未登录连接被拒', kv({ ip: clientIp(req), 客户端: briefUa(String(req.headers['user-agent'] ?? '')) }))
