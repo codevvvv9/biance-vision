@@ -102,6 +102,13 @@ pnpm user:passwd <用户名> [新密码]        # 改密码；省略则生成随
 - 配好后右侧出现 3D 悬浮机器人（three.js）：**点击**对话、**拖拽**移动（位置记忆）、**右键**隐藏（菜单可再唤起）
 - 聊天窗支持流式输出；每次对话服务端实时注入行情快照（BTC/ETH、成交额前 15、涨跌幅前 6、市场情绪）+ 金融行业规范的系统提示词（结论先行 / 数据引用 / 风险与失效条件 / 免责），可在设置中 ❗ 查看当前生效提示词；欢迎页聚合 Decrypt / Cointelegraph 最新要闻（10 分钟缓存）
 
+### 6. 地域封锁（面向海外运营，默认屏蔽中国大陆）
+- 应用层 GeoIP：命中中国大陆 IPv4 名单的请求一律 403（浏览器为中英双语提示页），WS 升级同样拦截；登录/限速/审计口径一致取 XFF 末段防伪造
+- 名单：`server/data/cn-ip-list.txt`（17mon 源，约 7400 条 CIDR，不入库），`pnpm geo:update` 拉取/更新；进程每 60s 检测 mtime 自动热加载
+- 名单缺失时 fail-open 放行并告警，`/api/health` 的 `geoBlock` 字段可观察实际状态（`active:true` 且 `ranges>0` 才算在拦）
+- 环境变量：`GEO_BLOCK_CN=off` 关闭；`GEO_BLOCK_ALLOW=ip,cidr,...` 白名单；`GEO_BLOCK_CN_LIST=` 路径覆盖
+- 部署要点与月度更新 cron 见 `deploy/vps/README.md` / `deploy/oracle/README.md` 的「地域封锁」一节
+
 ## 存储架构（PostgreSQL 主 + JSON 镜像）
 
 预警规则、触发历史、Webhook 设置、登录用户均采用双写存储：
