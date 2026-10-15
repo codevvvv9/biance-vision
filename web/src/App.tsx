@@ -7,17 +7,30 @@ import Toasts from './components/Toasts'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { MarketProvider } from './market/MarketContext'
 import { AiProvider } from './ai/AiContext'
-import AiAssistant from './ai/AiAssistant'
-import AlertsPage from './pages/AlertsPage'
-import BrooksPage from './pages/BrooksPage'
+import AuroraBg from './components/fx/AuroraBg'
 import Dashboard from './pages/Dashboard'
+// 登录/注册是未登录用户的第一屏，保持静态 import（不进懒加载列表）
 import LoginPage from './pages/LoginPage'
-import MoversPage from './pages/MoversPage'
 import RegisterPage from './pages/RegisterPage'
-import ResearchPage from './research/ResearchPage'
 
-// 管理后台整体懒加载：独立 chunk，守卫集中在 admin/AdminLayout
+// 重页面全部懒加载：登录后的首屏只有大盘，K 线/研究/价格行为按需取 chunk
 const AdminApp = lazy(() => import('./admin'))
+const AlertsPage = lazy(() => import('./pages/AlertsPage'))
+const BrooksPage = lazy(() => import('./pages/BrooksPage'))
+const MoversPage = lazy(() => import('./pages/MoversPage'))
+const ResearchPage = lazy(() => import('./research/ResearchPage'))
+// 悬浮 AI 助手懒加载：它经 RunBubble→MiniMarkdown 拉进 react-markdown/katex 全家桶，
+// 静态挂载会把 433KB 的 markdown chunk 拖进首屏关键路径；后台异步加载即可
+const AiAssistant = lazy(() => import('./ai/AiAssistant'))
+
+/** 页面级懒加载兜底（图表/研究台首挂拉 chunk 的间隙） */
+function PageFallback(): JSX.Element {
+  return (
+    <div className="page-loading" role="status" aria-label="页面加载中">
+      <span className="page-loading-bar" />
+    </div>
+  )
+}
 
 /** 登录后才挂载行情应用（WebSocket / 行情接口都要求会话） */
 function AuthedApp(): JSX.Element {
@@ -29,10 +42,46 @@ function AuthedApp(): JSX.Element {
         <main className="main">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/movers" element={<MoversPage />} />
-            <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/brooks" element={<BrooksPage />} />
-            <Route path="/research" element={<ResearchPage />} />
+            <Route
+              path="/movers"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<PageFallback />}>
+                    <MoversPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/alerts"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<PageFallback />}>
+                    <AlertsPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/brooks"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<PageFallback />}>
+                    <BrooksPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/research"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<PageFallback />}>
+                    <ResearchPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
             <Route
               path="/admin/*"
               element={
@@ -56,7 +105,9 @@ function AuthedApp(): JSX.Element {
           数据来源：Binance 公开行情接口（REST + WebSocket，1s 推送） · 本工具仅供学习研究，不构成投资建议
         </footer>
         <Toasts />
-        <AiAssistant />
+        <Suspense fallback={null}>
+          <AiAssistant />
+        </Suspense>
       </AiProvider>
     </MarketProvider>
   )
@@ -69,6 +120,7 @@ function Shell(): JSX.Element {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="bg-fx" aria-hidden>
         <div className="bg-grid" />
+        {user ? <AuroraBg /> : null}
         <div className="bg-glow glow-a" />
         <div className="bg-glow glow-b" />
       </div>
