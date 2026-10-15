@@ -24,7 +24,11 @@ interface Props {
 export function RunBubble({ run, steps, result, sseError, sseConn, onCancel, onRetry, footer }: Props): JSX.Element {
   const active = run.status !== 'published' && run.status !== 'failed' && run.status !== 'cancelled'
   return (
-    <div className={`run-bubble rb-${run.status}`} role="status" aria-label={`研究运行 ${run.id.slice(0, 8)} 状态 ${run.status}`}>
+    <div
+      className={`run-bubble rb-${run.status}${active ? ' fx-beam fx-pulse-line' : ''}`}
+      role="status"
+      aria-label={`研究运行 ${run.id.slice(0, 8)} 状态 ${run.status}`}
+    >
       <div className="run-bubble-head">
         <strong>运行 {run.id.slice(0, 8)}</strong>
         <span className={`run-status st-${run.status}`}>{run.status}</span>
