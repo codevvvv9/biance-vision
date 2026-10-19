@@ -790,3 +790,113 @@
 .cb { position: relative; display: inline-flex; max-width: 100%; }
 .cb input { width: 100%; min-width: 0; }
 .cb .dd-list { min-width: 120px; }
+
+/* ===== P1 前端补齐：过程播报/安全横幅/场景徽章/综合解释/追问/上下文卡/免责 ===== */
+
+/* P1-7 step_detail 过程播报子步骤行（真实状态/计数；文案不出现「思维链」） */
+.step-detail-list {
+  margin: 6px 0 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.step-detail-list li { display: flex; gap: 6px; align-items: baseline; }
+.step-detail-list li.sd-finished { color: var(--up); }
+.step-detail-list li.sd-started { color: var(--cyan); }
+
+/* P1-7 security_interrupt 安全中断横幅（仅 version_mismatch 硬中断；醒目红） */
+.security-banner {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--down);
+  border-radius: 6px;
+  color: var(--down);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* P1-1 任务场景徽章（运行气泡头部） */
+.scene-badge {
+  font-size: 11px;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* P1-2 受约束综合解释块（回应你的问题；置顶于理由之前） */
+.synthesis-block {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--cyan);
+  border-radius: 6px;
+  background: var(--bg-2);
+}
+.synthesis-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  font-size: 12px; color: var(--muted); margin-bottom: 4px;
+}
+.synthesis-head > span:first-child { color: var(--cyan); font-weight: 600; }
+.synthesis-src { font-size: 11px; }
+.synthesis-md p { margin: 0 0 6px; }
+.synthesis-md p:last-child { margin-bottom: 0; }
+
+/* P1-3 结构化追问动作 chips（结果卡底部；点击分发动作，不转聊天消息） */
+.follow-up-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 10px 0 0;
+}
+.follow-up-chip {
+  font: inherit; font-size: 12px;
+  color: var(--cyan);
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.follow-up-chip:hover { border-color: var(--cyan); }
+
+/* P1-8 免责行（服务端下发文案，结果卡末尾） */
+.disclaimer-line {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* P1-4 上下文卡（当前分析对象三态 + 有效期徽章 + 画像快捷编辑） */
+.context-card {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--bg-2);
+  font-size: 12.5px;
+}
+.context-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.context-obj { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-badge {
+  font-size: 11px; border-radius: 4px; padding: 0 5px; border: 1px solid;
+  white-space: nowrap;
+}
+.ctx-fresh { color: var(--up); border-color: var(--up); }
+.ctx-stale { color: var(--amber); border-color: var(--amber); }
+.context-more {
+  margin-left: auto;
+  font: inherit; font-size: 12px;
+  color: var(--muted); background: none; border: none; cursor: pointer;
+}
+.context-more:hover { color: var(--cyan); }
+.context-profile {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line-2);
+}
+.context-profile label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.context-profile-note { flex-basis: 100%; margin: 0; font-size: 11px; color: var(--muted); line-height: 1.5; }

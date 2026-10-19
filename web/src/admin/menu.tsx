@@ -55,10 +55,20 @@ function ChartIcon(): JSX.Element {
   )
 }
 
+function PromptIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 5h16M4 12h10M4 19h7" />
+      <path d="M17.5 14.5 21 18l-3.5 3.5" />
+    </svg>
+  )
+}
+
 export const ADMIN_MENU: AdminMenuItem[] = [
   { path: '/admin', label: '管理面板', hint: '用户 / 日志', icon: <LogIcon /> },
   { path: '/admin/ai', label: 'AI 会话', hint: '上下文 / 记忆', icon: <ChatLogIcon /> },
   { path: '/admin/knowledge', label: '知识库', hint: '导入 / 发布 / 检索调试', icon: <BookIcon /> },
   { path: '/admin/agents', label: 'Agent 配置', hint: '能力 / 版本 / 回滚', icon: <TuneIcon /> },
+  { path: '/admin/prompts', label: '提示词与文案', hint: '模板版本 / 免责 / 输入配置', icon: <PromptIcon /> },
   { path: '/admin/evals', label: '评测与模型', hint: '数据集 / 训练 / 指标', icon: <ChartIcon /> },
 ]
