@@ -203,9 +203,13 @@ export async function freezeRunConfig(userId?: string): Promise<NonNullable<impo
   }
   // 评审 R4：无发布 Agent 版本时，raw 不能只冻结空对象——capabilities 冻结
   // 「解析后的有效配置」（app_settings → 环境变量，与 getCapabilities() 解析链一致），
-  // 保证旧 run 与恢复执行使用创建时的有效配置
+  // 保证旧 run 与恢复执行使用创建时的有效配置。
+  // 冷缓存修正（f6 实证 2026-10-19）：getCapabilities() 首调同步返回全关默认并
+  // fire-and-forget 异步刷新——新进程第一个 run 会冻结错误的能力快照；先显式刷新再取
   const raw = (agent?.config ?? {}) as Record<string, unknown>
   if (agent === null || raw.capabilities === undefined) {
+    const { refreshCapabilities } = await import('../../admin/capabilities.js')
+    await refreshCapabilities()
     raw.capabilities = getCapabilities()
   }
   // P0-6 提示词终解析：五个模板全文冻结进 raw.prompts（{name,templateId,version,content,source}）；

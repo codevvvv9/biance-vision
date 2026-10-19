@@ -216,8 +216,9 @@ console.log('\n[五轮 P1] ROE 单位一致 / 租约丢失不写状态 / 发布�
   const quietBus = { emit() { /* 隔离测试不推送 */ } }
   let leaseThrown = false
   try {
-    // 八阶段齐全（只缺阶段集合会触发行首完整性检查）；plan 一执行完 completeStage 即丢租约
-    const allStages = ['plan', 'snapshot', 'structures', 'retrieve', 'product_analysis', 'countercase', 'validate', 'publish'].map(
+    // 九阶段齐全（P1-2 起含 synthesis；只缺阶段集合会触发行首完整性检查）；
+    // plan 一执行完 completeStage 即丢租约
+    const allStages = ['plan', 'snapshot', 'structures', 'retrieve', 'product_analysis', 'countercase', 'synthesis', 'validate', 'publish'].map(
       (name) => ({ name: name as StageName, async run() {} }),
     )
     await runPipeline(mkCtx(), allStages, leaseStore, quietBus, { leaseOwner: 'w-old' })

@@ -48,18 +48,26 @@ if (db !== null) {
   const seedNames = new Set(seeds.map((s) => s.name))
   assert(
     PROMPT_NAMES.every((n) => seedNames.has(n)),
-    `种子：五个 published v1 就位（${seeds.length} 行：${[...seedNames].join(',')}）`,
+    `种子：全部 published v1 就位（${PROMPT_NAMES.length} 个模板，${seeds.length} 行：${[...seedNames].join(',')}）`,
   )
   const ptrRows = await db.execute(sql`select count(*)::int as n from prompt_template_pointers`)
   const ptrCount = ((Array.isArray(ptrRows) ? ptrRows : (ptrRows as { rows: unknown[] }).rows) as { n: number }[])[0]?.n ?? 0
-  assert(ptrCount >= 5, `指针：≥5 条（实际 ${ptrCount}）`)
+  assert(ptrCount >= PROMPT_NAMES.length, `指针：≥${PROMPT_NAMES.length} 条（实际 ${ptrCount}）`)
 
-  // 3) freezeRunConfig 冻结 prompts（P0-6 核心验收）
+  // 2b) P1 迁移（0020/0022/0023）：scene_code 列 + trader_profiles + research_memories
+  const sceneCols = await db.execute(sql`select table_name, column_name from information_schema.columns where column_name = 'scene_code' and table_name in ('conversation_messages','research_runs')`)
+  const sceneColRows = (Array.isArray(sceneCols) ? sceneCols : (sceneCols as { rows: unknown[] }).rows) as { table_name: string }[]
+  assert(sceneColRows.length === 2, `迁移 0020：scene_code 列就位（${sceneColRows.map((r) => r.table_name).join(',')}）`)
+  const p1Tbls = await db.execute(sql`select table_name from information_schema.tables where table_name in ('trader_profiles','research_memories')`)
+  const p1TblRows = (Array.isArray(p1Tbls) ? p1Tbls : (p1Tbls as { rows: unknown[] }).rows) as { table_name: string }[]
+  assert(p1TblRows.length === 2, `迁移 0022/0023：trader_profiles + research_memories 表存在（${p1TblRows.map((r) => r.table_name).join(',')}）`)
+
+  // 3) freezeRunConfig 冻结 prompts（P0-6 核心验收；P1-2 起 synthesis-writer 同入冻结集）
   const frozen = await freezeRunConfig()
   const prompts = (frozen.raw as { prompts?: Record<string, { content?: string; version?: number | null; templateId?: string | null }> }).prompts
   assert(prompts !== undefined, 'frozenConfig.raw.prompts 存在')
   if (prompts !== undefined) {
-    for (const name of ['counter-reviewer', 'query-rewrite'] as const) {
+    for (const name of ['counter-reviewer', 'query-rewrite', 'synthesis-writer', 'memory-extraction'] as const) {
       const p = prompts[name]
       assert(
         p !== undefined && typeof p.content === 'string' && p.content.length > 50 && typeof p.version === 'number' && typeof p.templateId === 'string',
