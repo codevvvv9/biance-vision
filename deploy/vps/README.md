@@ -93,7 +93,7 @@ bash deploy/vps/migrate-remote.sh
 - **升级**：本地过 `pnpm release:gate` → 打 tag → 服务器 `BV_VERSION=0.2.y docker compose -f docker-compose.yml -f deploy/vps/compose.override.yml pull && ... up -d`（镜像 tag 不带 v 前缀）。
 - **备份**：cron 每周 `docker exec biance-vision-postgres pg_dump -U postgres -d biance_vision -Fc | gzip > /var/backups/biance-$(date +%F).dump.gz`；轻量套餐自带快照功能，换机/重装前先打一张。
 - **到期与流量**：轻量套餐到期停机（记得续费）；流量超额按量计费，偶尔看一眼用量页。
-- **embedding 服务**（内部embedding代理，国内 IP）从香港/日本访问可达，延迟约 50–100ms，只影响知识入库/检索；行情链路不经它。
+- **embedding 服务**（内部 embedding 代理，国内 IP）从香港/日本访问可达，延迟约 50–100ms，只影响知识入库/检索；行情链路不经它。
 
 ## 7. 与 Oracle 免费层怎么选
 
