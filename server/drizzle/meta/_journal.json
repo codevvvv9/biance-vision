@@ -141,6 +141,34 @@
       "when": 1792386600000,
       "tag": "0019_publication_events",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792472000000,
+      "tag": "0020_scene_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792472060000,
+      "tag": "0021_prompt_seeds_p1",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792472120000,
+      "tag": "0022_trader_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792472180000,
+      "tag": "0023_research_memories",
+      "breakpoints": true
     }
   ]
 }

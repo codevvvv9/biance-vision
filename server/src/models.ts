@@ -448,6 +448,8 @@ export const researchRuns = pgTable(
     status: text('status').notNull().default('queued'),
     /** perp | event | teaching */
     product: text('product').notNull(),
+    /** P1-1 任务场景（resolveScene 推导或创建时显式传入） */
+    sceneCode: text('scene_code'),
     symbol: text('symbol').notNull(),
     marketType: text('market_type').notNull(),
     horizon: text('horizon').notNull(),
@@ -797,6 +799,8 @@ export const conversationMessages = pgTable(
     content: text('content').notNull(),
     /** concept | structure | perp | event | replay | news | system */
     intent: text('intent'),
+    /** P1-1 任务场景（resolveScene 推导；与 intent 分离的任务维度） */
+    sceneCode: text('scene_code'),
     runId: text('run_id'),
     /** 确认卡/补全卡：{ kind:'confirm_position'|'completion', draft } */
     card: jsonb('card').$type<Record<string, unknown>>(),
@@ -968,6 +972,55 @@ export const promptTemplatePointers = pgTable(
 export type PromptTemplateRow = typeof promptTemplates.$inferSelect
 export type NewPromptTemplateRow = typeof promptTemplates.$inferInsert
 export type PromptTemplatePointerRow = typeof promptTemplatePointers.$inferSelect
+
+// ---------------------------------------------------------------------------
+// P1-4 用户画像（§4.D 第一层）：长期研究偏好。独立 PG 表（红线 #6：不挂 users JSON
+// 镜像）；run 创建时快照进 frozenConfig.raw.traderProfile（画像变更不影响历史 run）。
+// leverageHabitMax 是描述性字段（历史持仓最大杠杆），不是授权上限。
+// ---------------------------------------------------------------------------
+
+export const traderProfiles = pgTable('trader_profiles', {
+  userId: text('user_id').primaryKey(),
+  /** conservative | balanced | aggressive | null（未确认） */
+  riskProfile: text('risk_profile'),
+  /** novice | intermediate | pro | null */
+  experienceLevel: text('experience_level'),
+  /** 历史持仓最大杠杆（描述性习惯；1-125） */
+  leverageHabitMax: integer('leverage_habit_max'),
+  disclaimerAck: boolean('disclaimer_ack').notNull().default(false),
+  /** 用户最后确认时刻（毫秒）；null = 从未确认 */
+  confirmedAt: bigint('confirmed_at', { mode: 'number' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export type TraderProfileRow = typeof traderProfiles.$inferSelect
+export type NewTraderProfileRow = typeof traderProfiles.$inferInsert
+
+// ---------------------------------------------------------------------------
+// P1-5 研究记忆（§6 P1-5）：链路 B 的纯 PG 记忆（收编自 aiMemory 的提取协议，
+// 不写 JSON 镜像）。每用户上限 40（超出删最旧）；提取水位记在
+// conversations.context.memoryExtractedCount。
+// ---------------------------------------------------------------------------
+
+export const researchMemories = pgTable(
+  'research_memories',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    userId: text('user_id').notNull(),
+    /** preference | fact | interest | habit */
+    kind: text('kind').notNull(),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('research_memories_user_idx').on(table.userId, table.createdAt)],
+)
+
+export type ResearchMemoryRow = typeof researchMemories.$inferSelect
+export type NewResearchMemoryRow = typeof researchMemories.$inferInsert
 export type NewRuleCardRow = typeof ruleCards.$inferInsert
 export type CaseWindowRow = typeof caseWindows.$inferSelect
 export type NewCaseWindowRow = typeof caseWindows.$inferInsert

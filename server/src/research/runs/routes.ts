@@ -8,7 +8,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { and, eq } from 'drizzle-orm'
-import { ResearchRunCreateSchema } from 'biance-vision-brooks'
+import { ResearchRunCreateSchema, TraderProfilePatchSchema } from 'biance-vision-brooks'
 import { getDb } from '../../db.js'
 import { eventQuotes, knowledgeDocuments, portfolioPositions, structureEvents } from '../../models.js'
 import { kv, log } from '../../logger.js'
@@ -45,6 +45,7 @@ function runDto(row: {
   marketType: string
   horizon: string
   asOf: number
+  sceneCode: string | null
   snapshotId: string | null
   configVersion: string | null
   knowledgeVersion: string | null
@@ -62,6 +63,7 @@ function runDto(row: {
     marketType: row.marketType,
     horizon: row.horizon,
     asOf: row.asOf,
+    sceneCode: row.sceneCode ?? undefined,
     snapshotId: row.snapshotId ?? undefined,
     configVersion: row.configVersion ?? undefined,
     knowledgeVersion: row.knowledgeVersion ?? undefined,
@@ -119,7 +121,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     return {
       messages: rows.map((m) => ({
         id: m.id, conversationId: m.conversationId, role: m.role, content: m.content,
-        intent: m.intent, runId: m.runId, card: m.card, createdAt: m.createdAt.getTime(),
+        intent: m.intent, sceneCode: m.sceneCode ?? undefined, runId: m.runId, card: m.card, createdAt: m.createdAt.getTime(),
       })),
     }
   })
@@ -157,6 +159,31 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       return badRequest(reply, '持仓草稿字段不完整（需 symbol/side/qty/entryPrice/riskBudget）')
     }
     return { context: r.context, confirmedPositionId: r.confirmedPositionId }
+  })
+
+  // ---- P1-4 用户画像：长期研究偏好（独立 PG 表；leverageHabitMax 为描述性字段非授权上限） ----
+  app.get('/api/users/me/profile', async (req, reply) => {
+    const session = deps.requireSession(req)
+    if (!ensureStorage(reply)) return reply
+    const { loadTraderProfile } = await import('../profile.js')
+    return { profile: await loadTraderProfile(session.username) }
+  })
+
+  app.patch('/api/users/me/profile', async (req, reply) => {
+    const session = deps.requireSession(req)
+    if (!ensureStorage(reply)) return reply
+    const parsed = TraderProfilePatchSchema.safeParse(req.body ?? {})
+    if (!parsed.success) return badRequest(reply, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('；'))
+    const { saveTraderProfile } = await import('../profile.js')
+    const profile = await saveTraderProfile(session.username, parsed.data)
+    return { profile }
+  })
+
+  // ---- P1-8 服务端下发配置（红线 #10：免责文案前端只渲染不内置）。
+  // 会话可选：仅公开文案与输入面板配置，不含敏感信息；未登录前端回退内置占位。
+  app.get('/api/config/research-ui', async (_req, _reply) => {
+    const { getDisclaimers, getChatInputConfig } = await import('../../admin/settingsStore.js')
+    return { disclaimers: await getDisclaimers(), chatInput: await getChatInputConfig() }
   })
 
 

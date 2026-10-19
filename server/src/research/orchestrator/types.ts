@@ -22,6 +22,9 @@ export const STAGE_NAMES = [
   'retrieve',
   'product_analysis',
   'countercase',
+  // P1-2 受约束综合解释（countercase 之后、validate 之前：产出进修复环，
+  // validate 对其执行引用/支持/数字校验；publish 装配进结果）
+  'synthesis',
   'validate',
   'publish',
 ] as const
@@ -38,6 +41,8 @@ export interface RunContext {
   marketType: MarketType
   horizon: ResearchHorizon
   question: string | null
+  /** P1-1 任务场景（创建时由 resolveScene 推导或显式传入） */
+  sceneCode: string | null
   /** 持仓/报价引用（product=perp/event 时） */
   positionId: string | null
   quoteId: string | null
@@ -97,6 +102,8 @@ export interface RunContext {
   claims: { text: string; kind: 'fact' | 'interpretation'; evidenceIds: string[] }[]
   /** origin（P0-5）：'llm'=LLM 反证归纳产出（降级发布时剔除）；'template'=代码/规则拼装（保留） */
   counterClaims: { text: string; evidenceIds: string[]; origin?: 'template' | 'llm' }[]
+  /** P1-2 受约束综合解释（synthesis 阶段产出；publish 装配进 result.synthesis） */
+  synthesis: { text: string; source: 'llm' | 'template'; degraded?: boolean } | null
   /** 校验与发布 */
   decision: ResearchDecision | null
   result: ResearchResult | null

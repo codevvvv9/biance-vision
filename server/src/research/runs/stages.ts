@@ -22,9 +22,12 @@ import { resolveLlmClient, parseClaimLines, estimateLlmCostUsd, estimateMaxLlmCa
 import { ValidationRejected } from '../orchestrator/pipeline.js'
 import type { Stage } from '../orchestrator/types.js'
 import type { RunContext } from '../orchestrator/types.js'
-import { freezeEvidence, getRun, hashFrozenConfig, pinRunVersions } from './store.js'
+import { freezeEvidence, getRun, hashFrozenConfig, pinRunVersions, runBus } from './store.js'
 import { bindCounterEvidence, stripCiteMarkers } from './countercaseParse.js'
-import { frozenPrompt, DEFAULT_PROMPTS } from '../prompts.js'
+import { buildSynthesis, templateSynthesis } from './synthesis.js'
+import { buildFollowUpActions, defaultSceneForProduct } from '../scenes.js'
+import { frozenPrompt, DEFAULT_PROMPTS, renderPrompt } from '../prompts.js'
+import { traderProfileLine } from '../profile.js'
 import { MIN_BARS, baseIntervalFor } from '../features.js'
 import { createFrozenSnapshot, EXEC_TF, BACKGROUND_TF } from '../../services/marketSnapshot.js'
 import { predictForTarget } from '../../services/prediction.js'
@@ -117,6 +120,38 @@ interface V2Ctx {
   knowledgeEmpty: boolean
 }
 const v2of = (ctx: RunContext): V2Ctx => ctx as unknown as V2Ctx
+
+/** 条件情景模板（产品固定；synthesis 与 publish 共用同一份，避免两处漂移） */
+function scenariosFor(ctx: RunContext): { condition: string; response: string; invalidation: string }[] {
+  if (ctx.product === 'perp') {
+    return [
+      { condition: '结构支持持仓方向', response: '按计划持有；加仓需重算风险预算', invalidation: '执行周期方向翻转或已确认反转结构' },
+      { condition: '周期冲突', response: '不调整持仓，等待冲突解除', invalidation: '单一周期重新主导' },
+    ]
+  }
+  if (ctx.product === 'event') {
+    return [{ condition: 'EV>0 且五门槛通过', response: '可按事件风险预算参与', invalidation: '报价过期/剩余期限出界/EV 转负' }]
+  }
+  return []
+}
+
+/** step_detail 过程播报（P1-7，红线 #5：真实阶段/工具状态/计数，无正文，不称思维链） */
+function emitDetail(runId: string, step: string, payload: { kind: 'llm_call' | 'retrieval_variant' | 'repair_loop' | 'evidence_frozen' | 'structure_claim' | 'synthesis'; label: string; status: 'started' | 'finished'; count?: number; round?: number }): void {
+  runBus.emit(runId, {
+    type: 'step_detail',
+    runId,
+    step,
+    at: Date.now(),
+    payload: { step, kind: payload.kind, label: payload.label, status: payload.status, detail: { ...(payload.count !== undefined ? { count: payload.count } : {}), ...(payload.round !== undefined ? { round: payload.round } : {}) } },
+  })
+}
+
+/** 产品差异化段落（{{vertical}} 占位符注入文本） */
+function verticalLine(product: RunContext['product']): string {
+  if (product === 'perp') return '本研究为 USDT 永续持仓/风险研究：一切数值（盈亏、费用、仓位上限）均由代码计算，你只做归纳表述。'
+  if (product === 'event') return '本研究为事件合约报价评估：EV 与概率只来自统计模块，你只做归纳表述。'
+  return '本研究为价格行为结构研究：结论只引用已计算结构事实与知识证据。'
+}
 
 function loadPosition(userId: string, positionId: string | null, symbol?: string): Promise<PortfolioPositionRow | null> {
   if (!positionId) return Promise.resolve(null)
@@ -522,6 +557,13 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         webEvidenceIds,
         webSearch,
       }
+      // P1-7 过程播报：证据冻结计数（真实计数，无正文）
+      emitDetail(ctx.runId, 'retrieve', {
+        kind: 'evidence_frozen',
+        label: '证据冻结完成',
+        status: 'finished',
+        count: ctx.retrieval.supportEvidenceIds.length + ctx.retrieval.counterEvidenceIds.length + webEvidenceIds.length,
+      })
     },
   }
 
@@ -871,6 +913,19 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         v2.decision = { action: evidenceSufficient ? 'wait' : 'insufficient_evidence', side: null, reasons: [], conditions: [] }
       }
       ctx.claims = claims
+      // P1-7 过程播报：结构声明装配计数（真实计数，无正文）
+      emitDetail(ctx.runId, 'product_analysis', { kind: 'structure_claim', label: '结构声明装配完成', status: 'finished', count: claims.length })
+      // P1-4 过期持仓触发补问（task_degraded → ask_user，红线 #11：可用性问题是任务级
+      // 受控降级不是安全中断）：不静默使用过期确认，个性化数值已降级为一般结构研究
+      if (v2.positionStale === true) {
+        runBus.emit(ctx.runId, {
+          type: 'task_degraded',
+          runId: ctx.runId,
+          step: 'product_analysis',
+          at: Date.now(),
+          payload: { code: 'data_stale', handling: 'ask_user', reason: '持仓已过期需重新确认：个性化盈亏/减仓/增量数值已降级为一般结构研究（重新确认后恢复）', at: Date.now() },
+        })
+      }
     },
   }
 
@@ -937,8 +992,9 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
           const costCap = ctx.frozenConfig?.budgets.maxCostUsd
           if (costCap !== undefined && estCost !== null && ctx.usage.costUsd + estCost > costCap) {
             counterClaims.push({ text: `LLM 调用费用预估 $${estCost.toFixed(4)} 将超出预算上限 $${costCap}（已用 $${ctx.usage.costUsd.toFixed(4)}）：保留规则反证`, evidenceIds: [], origin: 'template' })
-          } else {
-        try {
+        } else {
+          try {
+          emitDetail(ctx.runId, 'countercase', { kind: 'llm_call', label: '反证归纳调用中', status: 'started' })
           const rows = await getDb()!
             .select()
             .from(evidenceItems)
@@ -967,6 +1023,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
             }
             counterClaims.push({ text: cleanLine, evidenceIds: bound.evidenceIds, origin: 'llm' })
           }
+          emitDetail(ctx.runId, 'countercase', { kind: 'llm_call', label: '反证归纳完成', status: 'finished', count: ctx.usage.llmCalls })
         } catch (err) {
           counterClaims.push({ text: `（LLM 反证归纳失败，保留规则反证：${(err as Error).message.slice(0, 120)}）`, evidenceIds: [], origin: 'template' })
         }
@@ -988,6 +1045,81 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         }) as typeof v2.decision
       }
       ctx.counterClaims = counterClaims
+    },
+  }
+
+  // P1-2 受约束综合解释（第 6 个 LLM 调用点，countercase 之后 validate 之前）：
+  // 对用户原问题做一次综合——只引用 claims/fact、适用/失效条件与冻结证据；产出经
+  // 句级校验（[k] 有效+锚定支持+数字白名单+概率红线，synthesis.ts）；失败回退模板。
+  // 预算护栏与反证同口径：调用前检查 llmCalls/剩余时长；ruleParams.synthesis.enabled=false
+  // 或 chat 能力不可用 → 直接模板装配（不发起调用）；降级发布（恢复路径）同样只走模板。
+  const synthesis: Stage = {
+    name: 'synthesis',
+    async run(ctx: RunContext): Promise<void> {
+      const v2 = v2of(ctx)
+      if (v2.ruleLinks === undefined) v2.ruleLinks = []
+      if (v2.knowledgeEmpty === undefined) v2.knowledgeEmpty = false
+      const d = v2.decision ?? { action: 'insufficient_evidence' as const, side: null, reasons: ['决策缺失（异常）'], conditions: [] }
+      const scenarios = scenariosFor(ctx)
+      const raw = (ctx.frozenConfig?.raw ?? {}) as {
+        ruleParams?: { synthesis?: { enabled?: boolean } }
+        capabilities?: Parameters<typeof resolveLlmClient>[0]
+        traderProfile?: unknown
+      }
+      const synthesisOff = raw.ruleParams?.synthesis?.enabled === false
+      const degraded = ctx.degradedPublish !== undefined
+      let llm = !synthesisOff && !degraded ? resolveLlmClient(raw.capabilities) : null
+      const budget = ctx.frozenConfig?.budgets.maxLlmCalls ?? DEFAULT_MAX_LLM_CALLS
+      if (llm !== null && ctx.usage.llmCalls >= budget) {
+        log.warn('research', '综合解释预算不足，回退模板', kv({ run: ctx.runId.slice(0, 8), 已用: ctx.usage.llmCalls, 上限: budget }))
+        llm = null
+      }
+      const runtimeBudget = ctx.frozenConfig?.budgets.maxRuntimeMs
+      const remainingMs = runtimeBudget !== undefined ? runtimeBudget - (Date.now() - ctx.runStartedAt) : undefined
+      if (llm !== null && remainingMs !== undefined && remainingMs < 10_000) llm = null
+      // 冻结证据正文（[1..N] 编号；插入序）——支撑锚定校验与数字白名单
+      const evidenceRows = await getDb()!
+        .select({ id: evidenceItems.id, text: evidenceItems.text })
+        .from(evidenceItems)
+        .where(eq(evidenceItems.runId, ctx.runId))
+        .orderBy(evidenceItems.createdAt)
+        .limit(12)
+      const evidenceTexts = evidenceRows.map((e) => e.text)
+      // 提示词：只读冻结集（红线 #2；旧检查点恢复回退工程默认）
+      const frozenSyn = frozenPrompt(ctx.frozenConfig?.raw as Parameters<typeof frozenPrompt>[0], 'synthesis-writer')
+      const systemBase = frozenSyn?.content ?? DEFAULT_PROMPTS['synthesis-writer']
+      // 占位符统一拼装（§4.B）：{{vertical}}/{{traderProfile}}/{{memory}}/{{knowledgeVersion}}
+      let memory = ''
+      try {
+        const { memoryBlock } = await import('../memory.js')
+        memory = await memoryBlock(ctx.userId)
+      } catch {
+        /* 记忆读取失败不阻塞综合解释 */
+      }
+      const system = renderPrompt(systemBase, {
+        vertical: verticalLine(ctx.product),
+        traderProfile: traderProfileLine((raw.traderProfile as Parameters<typeof traderProfileLine>[0]) ?? null),
+        memory: memory !== '' ? `\n用户长期记忆（供措辞参考，不得引入记忆中的数字）：\n${memory}` : '',
+        knowledgeVersion: ctx.knowledgeVersion ?? '',
+      })
+      if (llm !== null) emitDetail(ctx.runId, 'synthesis', { kind: 'synthesis', label: '综合解释生成中', status: 'started' })
+      const result = await buildSynthesis(
+        {
+          question: ctx.question,
+          symbol: ctx.symbol,
+          horizon: ctx.horizon,
+          decision: d,
+          claims: ctx.claims,
+          counterClaims: ctx.counterClaims,
+          scenarios,
+          evidenceTexts,
+        },
+        { llm: llm !== null ? (i) => llm!.complete(i) : null, system, timeoutMs: remainingMs },
+      )
+      if (result.didCallLlm) ctx.usage.llmCalls += 1
+      if (result.checkNotes.length > 0) log.info('research', '综合解释校验注记', kv({ run: ctx.runId.slice(0, 8), 注记: result.checkNotes.join(';').slice(0, 160) }))
+      emitDetail(ctx.runId, 'synthesis', { kind: 'synthesis', label: '综合解释完成', status: 'finished', count: result.text.length })
+      ctx.synthesis = { text: result.text, source: result.source, ...(result.degraded ? { degraded: true } : {}) }
     },
   }
 
@@ -1051,10 +1183,18 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
       if (hasBlockingQualityIssue(ctx.qualityIssues) && v2.probabilityBlock !== null) {
         throw new ValidationRejected(['quality_gate: 存在阻断性质量问题但已产出概率块'])
       }
+      // P1 语义支持检查输入：冻结证据正文（id → text）。旧 run 恢复等读不到时映射为空——
+      // validator 对无文本的证据退回存在性语义（不误拒）
+      const evidenceTextRows = await getDb()!
+        .select({ id: evidenceItems.id, text: evidenceItems.text })
+        .from(evidenceItems)
+        .where(eq(evidenceItems.runId, ctx.runId))
+      const evidenceTexts = new Map(evidenceTextRows.map((r) => [r.id, r.text]))
       const result = validateResearch({
         claims: ctx.claims,
         counterClaims: ctx.counterClaims,
         knownEvidenceIds: known,
+        evidenceTexts,
         modelVersion: v2.probabilityBlock !== null ? (v2.probabilityBlock.modelVersion as string) : null,
         event:
           v2.eventAnalysis !== null && ctx.product === 'event'
@@ -1065,6 +1205,18 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         runtimeConfigHash: runtimeHash,
       })
       if (!result.ok || unlinkedIssues.length > 0) {
+        // P1-7 事件二分（红线 #11）：version_mismatch 是硬中断安全场景——先发
+        // security_interrupt 再走终态（修复环/阻断由 pipeline 决定），其余问题保持
+        // ValidationRejected（任务级修复/降级语义）
+        if (!result.ok && result.issues.some((i) => i.code === 'version_mismatch')) {
+          runBus.emit(ctx.runId, {
+            type: 'security_interrupt',
+            runId: ctx.runId,
+            step: 'validate',
+            at: Date.now(),
+            payload: { code: 'version_mismatch', reason: '运行中配置哈希与冻结值不一致（配置被篡改或版本漂移）', at: Date.now() },
+          })
+        }
         throw new ValidationRejected([
           ...unlinkedIssues,
           ...(result.ok ? [] : result.issues.map((i) => `${i.code}: ${i.detail}`)),
@@ -1118,6 +1270,30 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
       if (v2.positionStale === true && !missingInputs.some((m) => m.includes('持仓已过期'))) {
         missingInputs.push('持仓已过期需重新确认：个性化盈亏/减仓/增量数值已降级为一般结构研究')
       }
+      // P1-2 综合解释装配：降级发布时 LLM 叙述不可信——以剔除后的反证集合重装配模板
+      // （source='template'）；正常发布透传 synthesis 阶段产出（含 degraded 句级剔除标记）
+      const scenarios = scenariosFor(ctx)
+      const synthesisBlock =
+        ctx.degradedPublish !== undefined
+          ? { text: templateSynthesis({ question: ctx.question, symbol: ctx.symbol, horizon: ctx.horizon, decision: d, claims: ctx.claims, counterClaims: ctx.counterClaims, scenarios, evidenceTexts: [] }), source: 'template' as const, degraded: true as const }
+          : (ctx.synthesis ?? null)
+      // P1-3 结构化追问动作集：按场景确定性模板生成；prerequisites 服务端门控
+      // （counter_search 需 search 能力；open_rule_card 需规则卡证据；switch_context 需持仓过期）
+      const evidenceRefRows = await getDb()!
+        .select({ refId: evidenceItems.refId })
+        .from(evidenceItems)
+        .where(eq(evidenceItems.runId, ctx.runId))
+      const followUpActions = buildFollowUpActions({
+        scene: (ctx.sceneCode !== null && ctx.sceneCode !== ''
+          ? (ctx.sceneCode as Parameters<typeof buildFollowUpActions>[0]['scene'])
+          : defaultSceneForProduct(ctx.product, { positionId: ctx.positionId, quoteId: ctx.quoteId })),
+        product: ctx.product,
+        runId: ctx.runId,
+        evidenceRefIds: evidenceRefRows.map((r) => r.refId),
+        searchEnabled: searchConfigFor(ctx).enabled === true,
+        positionStale: v2.positionStale === true,
+        eventDirectionSemantics: 'above',
+      })
       const result: ResearchResultV2 = {
         schemaVersion: 2,
         decision,
@@ -1125,19 +1301,13 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         reasons,
         conditions,
         claims: ctx.claims,
-        scenarios:
-          ctx.product === 'perp'
-            ? [
-                { condition: '结构支持持仓方向', response: '按计划持有；加仓需重算风险预算', invalidation: '执行周期方向翻转或已确认反转结构' },
-                { condition: '周期冲突', response: '不调整持仓，等待冲突解除', invalidation: '单一周期重新主导' },
-              ]
-            : ctx.product === 'event'
-              ? [{ condition: 'EV>0 且五门槛通过', response: '可按事件风险预算参与', invalidation: '报价过期/剩余期限出界/EV 转负' }]
-              : [],
+        scenarios,
         evidenceQuality,
         probability: (v2.probabilityBlock as ResearchResultV2['probability']) ?? null,
         unavailableCode,
         missingInputs,
+        ...(synthesisBlock !== null ? { synthesis: synthesisBlock } : {}),
+        followUpActions,
         ...(ctx.degradedPublish !== undefined
           ? { degraded: true as const, degradedReasons: ctx.degradedPublish.reasons.slice(0, 10) }
           : {}),
@@ -1153,5 +1323,5 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
     },
   }
 
-  return [plan, snapshot, structures, retrieve, productAnalysis, countercase, validate, publish]
+  return [plan, snapshot, structures, retrieve, productAnalysis, countercase, synthesis, validate, publish]
 }

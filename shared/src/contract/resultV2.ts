@@ -7,7 +7,7 @@
 import { z } from 'zod'
 import { MarketTypeSchema, ResearchHorizonSchema, SymbolSchema } from '../market.js'
 import { IdSchema } from './common.js'
-import { ResearchClaimSchema, ResearchScenarioSchema } from './research.js'
+import { ResearchClaimSchema, ResearchScenarioSchema, FollowUpActionSchema } from './research.js'
 
 /** 稳定不可用代码（前端/报告按码呈现，不解析自然语言） */
 export const UnavailableCodeSchema = z.enum([
@@ -173,6 +173,19 @@ export const ResearchResultV2Schema = z.object({
    * 正常发布缺省无此二字段（旧结果兼容） */
   degraded: z.boolean().optional(),
   degradedReasons: z.array(z.string()).optional(),
+  /** P1-2 受约束综合解释：回应原问题的叙述（只引用已计算事实/适用失效条件/冻结证据；
+   * source=template 为代码装配回退）。旧结果无此字段（兼容）。 */
+  synthesis: z
+    .object({
+      text: z.string(),
+      source: z.enum(['llm', 'template']),
+      /** true = LLM 输出被校验拒绝/剔除后回退模板 */
+      degraded: z.boolean().optional(),
+    })
+    .nullable()
+    .optional(),
+  /** P1-3 结构化追问动作集（按场景确定性模板生成；未就绪动作不返回）。旧结果无此字段。 */
+  followUpActions: z.array(FollowUpActionSchema).optional(),
   payload: ProductPayloadV2Schema,
 })
 export type ResearchResultV2 = z.infer<typeof ResearchResultV2Schema>

@@ -163,8 +163,10 @@ export function hashFrozenConfig(
     .digest('hex')
 }
 
-/** 冻结运行配置：发布版本全文 + 预算 + 知识版本 + 永续费率/步进/名义下限/funding 时效 + 内容哈希（运行中不受新发布影响） */
-export async function freezeRunConfig(): Promise<NonNullable<import('../orchestrator/types.js').RunContext['frozenConfig']>> {
+/** 冻结运行配置：发布版本全文 + 预算 + 知识版本 + 永续费率/步进/名义下限/funding 时效 + 内容哈希（运行中不受新发布影响）。
+ * userId（可选）：P1-4 画像快照——创建 run 时把用户长期偏好冻结进 raw.traderProfile
+ * （画像此后变更不影响本 run；f6 评测无 userId 调用保持确定性）。 */
+export async function freezeRunConfig(userId?: string): Promise<NonNullable<import('../orchestrator/types.js').RunContext['frozenConfig']>> {
   const { currentAgentConfig } = await import('../../admin/agentVersions.js')
   const agent = await currentAgentConfig()
   // 配置预算完整冻结（maxToolCalls/maxRuntimeMs/maxCostUsd 都落实到 pipeline 执行控制；
@@ -210,6 +212,24 @@ export async function freezeRunConfig(): Promise<NonNullable<import('../orchestr
   // 执行阶段只读冻结内容，不再解析发布指针（红线 #2）。注册表清空时回退工程默认+日志。
   const { freezePromptSet } = await import('../prompts.js')
   raw.prompts = await freezePromptSet(raw as { roles?: { name?: string; promptRef?: string }[] })
+  // P1-2 综合解释预算：ruleParams.synthesis 未显式关闭且 chat 能力可用时 +1
+  // （DEFAULT 6→7；BudgetSchema 无 maxLlmCalls 键，工程默认即权威，不做 per-agent 覆盖）
+  const synthesisOff = (raw.ruleParams as { synthesis?: { enabled?: boolean } } | undefined)?.synthesis?.enabled === false
+  const chatOn =
+    (raw.capabilities as { chat?: { enabled?: boolean; baseUrl?: string; model?: string } } | undefined)?.chat?.enabled === true
+  if (!synthesisOff && chatOn) {
+    budgets.maxLlmCalls = DEFAULT_RUN_BUDGETS.maxLlmCalls + 1
+  }
+  // P1-4 画像快照：用户长期偏好冻结进 raw.traderProfile（变更不影响历史 run）
+  if (userId !== undefined && userId !== '') {
+    try {
+      const { loadTraderProfile } = await import('../profile.js')
+      const profile = await loadTraderProfile(userId)
+      if (profile !== null) raw.traderProfile = profile as unknown as Record<string, unknown>
+    } catch {
+      /* 画像读取失败不阻塞 run 创建（快照缺省为空） */
+    }
+  }
   const frozen = { label: agent?.label ?? 'default-v1', budgets, knowledgeVersionId, raw, fees, stepSize, minNotional, fundingWindow }
   return { ...frozen, configHash: hashFrozenConfig(frozen) }
 }
@@ -220,7 +240,15 @@ export async function createRun(input: {
   conversationId?: string
 }): Promise<ResearchRunRow> {
   const asOf = input.create.asOf ?? Date.now()
-  const frozen = await freezeRunConfig()
+  const frozen = await freezeRunConfig(input.userId)
+  // P1-1 场景：显式传入优先；缺省按产品+引用推导（历史复盘 asOf 早于创建时刻 → replay-analysis）
+  const sceneCode =
+    input.create.sceneCode ??
+    (await import('../scenes.js')).defaultSceneForProduct(input.create.product, {
+      positionId: input.create.positionId ?? null,
+      quoteId: input.create.quoteId ?? null,
+      asOfIsHistorical: input.create.asOf !== undefined && input.create.asOf < Date.now() - 60_000,
+    })
   const rows = await db()
     .insert(researchRuns)
     .values({
@@ -228,6 +256,7 @@ export async function createRun(input: {
       userId: input.userId,
       status: 'queued',
       product: input.create.product,
+      sceneCode,
       symbol: input.create.symbol,
       marketType: input.create.marketType,
       horizon: input.create.horizon,
