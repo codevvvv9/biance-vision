@@ -23,6 +23,8 @@ import { ValidationRejected } from '../orchestrator/pipeline.js'
 import type { Stage } from '../orchestrator/types.js'
 import type { RunContext } from '../orchestrator/types.js'
 import { freezeEvidence, getRun, hashFrozenConfig, pinRunVersions } from './store.js'
+import { bindCounterEvidence, stripCiteMarkers } from './countercaseParse.js'
+import { frozenPrompt, DEFAULT_PROMPTS } from '../prompts.js'
 import { MIN_BARS, baseIntervalFor } from '../features.js'
 import { createFrozenSnapshot, EXEC_TF, BACKGROUND_TF } from '../../services/marketSnapshot.js'
 import { predictForTarget } from '../../services/prediction.js'
@@ -52,6 +54,11 @@ function assertToolAllowed(ctx: RunContext, tool: ToolDomain): void {
   if (req !== undefined && !req.includes(tool)) {
     throw new Error(`工具域 ${tool} 不在本 run 的工具白名单（agent 版本 roles 配置排除），阶段拒绝执行`)
   }
+}
+
+/** 持仓过期判定（P0-1 评测接缝：单一实现，对话/阶段/评测共用同一口径） */
+export function isPositionStale(confirmedAt: number, staleAfterHours: number, now = Date.now()): boolean {
+  return now - confirmedAt > staleAfterHours * 3600_000
 }
 
 /** 阻断性质量问题判定（评审 R1：门控看完整问题集合，与排序无关）——
@@ -390,8 +397,10 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         : resolveLlmClient() !== null
       const llmBudgetLeft = (ctx.frozenConfig?.budgets.maxLlmCalls ?? DEFAULT_MAX_LLM_CALLS) - ctx.usage.llmCalls
       const variantsOn = variantCap > 0 && chatCapOn && llmBudgetLeft >= 2
-      const support = await searchHybrid(primary, { finalLimit: supportLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? variantCap : 0, caps: frozenCaps })
-      const counter = await searchHybrid(`${primary} failure invalidation risk`, { mode: 'counter', finalLimit: counterLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? 1 : 0, caps: frozenCaps })
+      // P0-6：run 内改写提示词只读冻结全文（红线 #2：执行阶段不再解析发布指针）
+      const frozenRewritePrompt = frozenPrompt(ctx.frozenConfig?.raw as Parameters<typeof frozenPrompt>[0], 'query-rewrite')?.content
+      const support = await searchHybrid(primary, { finalLimit: supportLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? variantCap : 0, caps: frozenCaps, frozenQueryRewritePrompt: frozenRewritePrompt ?? undefined })
+      const counter = await searchHybrid(`${primary} failure invalidation risk`, { mode: 'counter', finalLimit: counterLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? 1 : 0, caps: frozenCaps, frozenQueryRewritePrompt: frozenRewritePrompt ?? undefined })
       if (variantsOn) ctx.usage.llmCalls += 2
       const freeze = async (stance: 'support' | 'counter', hits: typeof support.hits): Promise<string[]> =>
         freezeEvidence(
@@ -586,7 +595,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
             incremental: null,
           }
         } else {
-          const isStale = Date.now() - position.confirmedAt > position.staleAfterHours * 3600_000
+          const isStale = isPositionStale(position.confirmedAt, position.staleAfterHours)
           v2.positionStale = isStale
           if (isStale) {
             // 持仓过期：降级为一般结构研究——不发布盈亏矩阵/减仓/增量等个性化数值，
@@ -817,7 +826,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
               ? null
               : {
                   side: position0.side as 'long' | 'short',
-                  isStale: Date.now() - position0.confirmedAt > position0.staleAfterHours * 3600_000,
+                  isStale: isPositionStale(position0.confirmedAt, position0.staleAfterHours),
                   stopPrice: position0.stopPrice === null ? null : Number(position0.stopPrice),
                   // 快照最后价：止损触发判断（当前价已穿越用户确认的止损价 → exit）
                   lastPrice: v2.lastPrice ?? null,
@@ -867,6 +876,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         counterClaims.push({
           text: `${v2.structureView.conflictDetail}：冲突期间方向结论都应视为低质量，优先等待`,
           evidenceIds: link?.counterIds ?? [],
+          origin: 'template',
         })
       }
       // 逐规则反例声明（关联链路的反证侧）：每个有反例证据的规则出一条，
@@ -876,21 +886,28 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         counterClaims.push({
           text: `「${link.termZh}」反例：${link.counterNote}`,
           evidenceIds: link.counterIds,
+          origin: 'template',
         })
       }
       if (ids.length === 0) {
-        counterClaims.push({ text: '知识库未命中明确反证资料：不构成支持证据，仅表示反证检索为空', evidenceIds: [] })
+        counterClaims.push({ text: '知识库未命中明确反证资料：不构成支持证据，仅表示反证检索为空', evidenceIds: [], origin: 'template' })
       }
-      // 角色模板（九轮修复）：反证审查者角色从冻结配置 roles 解析——
-      // promptRef 支持 inline:<文本> 或 server/data/prompts/<ref>.txt 文件，
-      // 角色级 budget 优先于全局预算；未配置回退工程默认（回退计入日志）
+      // 角色模板（九轮修复 + P0-6 冻结语义）：优先只读冻结集（创建时已终解析，
+      // 含 counterRole.promptRef 显式引用——inline:/registry:/旧文件名兼容链在冻结时完成）；
+      // 旧检查点恢复（frozen 无 prompts 字段）时回退执行期解析：counterRole.promptRef
+      // （resolveRolePrompt 兼容）→ 注册表指针 → 工程默认；角色级 budget 优先于全局预算
       const roles = ((ctx.frozenConfig?.raw as { roles?: { name?: string; promptRef?: string; budget?: { maxLlmCalls?: number; maxRuntimeMs?: number } }[] } | undefined)?.roles ?? [])
       const counterRole = roles.find((r) => /counter|反证/i.test(r.name ?? '')) ?? null
-      let counterSystem = '你是反证审查者。基于反证证据每行一条反对当前方向的理由（中文，≤80字），只引用证据内容，禁止编造数字。没有可用反证输出：无。'
-      if (counterRole?.promptRef !== undefined) {
-        const resolved = await resolveRolePrompt(counterRole.promptRef)
-        if (resolved !== null) counterSystem = resolved
-        else log.warn('research', '反证审查者 promptRef 解析失败（回退默认模板）', kv({ run: ctx.runId.slice(0, 8), promptRef: counterRole.promptRef }))
+      let counterSystem: string
+      const frozenCounter = frozenPrompt(ctx.frozenConfig?.raw as Parameters<typeof frozenPrompt>[0], 'counter-reviewer')
+      if (frozenCounter !== null) {
+        counterSystem = frozenCounter.content
+      } else if (counterRole?.promptRef !== undefined && (await resolveRolePrompt(counterRole.promptRef)) !== null) {
+        counterSystem = (await resolveRolePrompt(counterRole.promptRef))!
+        log.warn('research', '旧检查点无冻结提示词，回退角色 promptRef 解析', kv({ run: ctx.runId.slice(0, 8), promptRef: counterRole.promptRef }))
+      } else {
+        counterSystem = DEFAULT_PROMPTS['counter-reviewer']
+        log.warn('research', '反证提示词回退工程默认（无冻结集且无 promptRef）', kv({ run: ctx.runId.slice(0, 8) }))
       }
       const roleLlmBudget = counterRole?.budget?.maxLlmCalls
       const llm = resolveLlmClient((ctx.frozenConfig?.raw as { capabilities?: Parameters<typeof resolveLlmClient>[0] } | undefined)?.capabilities)
@@ -901,14 +918,14 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         const runtimeBudget = roleRuntimeBudget ?? ctx.frozenConfig?.budgets.maxRuntimeMs
         const remainingMs = runtimeBudget !== undefined ? runtimeBudget - (Date.now() - ctx.runStartedAt) : undefined
         if (remainingMs !== undefined && remainingMs < 10_000) {
-          counterClaims.push({ text: `运行时间预算剩余 ${Math.max(0, remainingMs)}ms，不足以发起 LLM 反证归纳：保留规则反证`, evidenceIds: [] })
+          counterClaims.push({ text: `运行时间预算剩余 ${Math.max(0, remainingMs)}ms，不足以发起 LLM 反证归纳：保留规则反证`, evidenceIds: [], origin: 'template' })
         } else {
           const promptDraft = `结构：${JSON.stringify(ctx.structures?.perTimeframe ?? {})}`
           const maxTokens = 500
           const estCost = estimateMaxLlmCallCostUsd(promptDraft.length + 300, maxTokens)
           const costCap = ctx.frozenConfig?.budgets.maxCostUsd
           if (costCap !== undefined && estCost !== null && ctx.usage.costUsd + estCost > costCap) {
-            counterClaims.push({ text: `LLM 调用费用预估 $${estCost.toFixed(4)} 将超出预算上限 $${costCap}（已用 $${ctx.usage.costUsd.toFixed(4)}）：保留规则反证`, evidenceIds: [] })
+            counterClaims.push({ text: `LLM 调用费用预估 $${estCost.toFixed(4)} 将超出预算上限 $${costCap}（已用 $${ctx.usage.costUsd.toFixed(4)}）：保留规则反证`, evidenceIds: [], origin: 'template' })
           } else {
         try {
           const rows = await getDb()!
@@ -928,10 +945,19 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
           const callCost = estimateLlmCostUsd(out.usage)
           if (callCost !== null) ctx.usage.costUsd += callCost
           for (const line of parseClaimLines(out.text, 5)) {
-            if (line !== '无') counterClaims.push({ text: line, evidenceIds: rows.slice(0, 2).map((e) => e.id) })
+            // 「无 / 无可用反证输出：无。」等空输出形态不是声明（e2e 实测 LLM 会带修饰词）
+            if (line === '无' || /^无可用反证输出|^：?无[。．.]?$/.test(line.trim())) continue
+            // P0-3 逐条证据绑定：行尾 [k] 标记精确绑定；无标记/越界回退锚定词项重叠；
+            // 剥离标记后的净文本入库（前端不渲染引用编号语法）。仍无重叠 → 空绑定+标注（不误绑）
+            const { text: cleanLine } = stripCiteMarkers(line)
+            const bound = bindCounterEvidence(line, rows.map((e) => ({ id: e.id, text: e.text })))
+            if (bound.mode === 'anchored' && bound.evidenceIds.length === 0) {
+              log.warn('research', '反证声明未能绑定任何证据（锚定词项无重叠，保持空绑定）', kv({ run: ctx.runId.slice(0, 8), 声明: cleanLine.slice(0, 60) }))
+            }
+            counterClaims.push({ text: cleanLine, evidenceIds: bound.evidenceIds, origin: 'llm' })
           }
         } catch (err) {
-          counterClaims.push({ text: `（LLM 反证归纳失败，保留规则反证：${(err as Error).message.slice(0, 120)}）`, evidenceIds: [] })
+          counterClaims.push({ text: `（LLM 反证归纳失败，保留规则反证：${(err as Error).message.slice(0, 120)}）`, evidenceIds: [], origin: 'template' })
         }
           }
         }
@@ -1040,6 +1066,11 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
     name: 'publish',
     async run(ctx: RunContext): Promise<void> {
       const v2 = v2of(ctx)
+      // P0-5 降级门控：修复耗尽降级发布时剔除 LLM 归纳的反证内容（不可信——未通过校验），
+      // 只保留代码计算的结构结论、事实行与规则/证据拼装的反证；结果标注 degraded 与原因
+      if (ctx.degradedPublish !== undefined) {
+        ctx.counterClaims = ctx.counterClaims.filter((c) => c.origin !== 'llm')
+      }
       const evidenceCount = (ctx.retrieval?.supportEvidenceIds.length ?? 0) + (ctx.retrieval?.counterEvidenceIds.length ?? 0)
       // 证据质量（关联链路语义）：带引用的结构声明数优先——complete 需要理论链接的
       // 声明与反例同时存在；知识库为空时回退计数语义并显式说明。
@@ -1096,6 +1127,9 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         probability: (v2.probabilityBlock as ResearchResultV2['probability']) ?? null,
         unavailableCode,
         missingInputs,
+        ...(ctx.degradedPublish !== undefined
+          ? { degraded: true as const, degradedReasons: ctx.degradedPublish.reasons.slice(0, 10) }
+          : {}),
         payload: v2.v2Payload as ResearchResultV2['payload'],
       }
       // 结果契约运行时校验（八轮修复 B3）：装配后必须通过 ResearchResultV2Schema，

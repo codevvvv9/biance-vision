@@ -207,33 +207,46 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
 }
 
 
-// ---- 8) 规则卡层：草拟（模板）→ 占位拒绝发布 → 补全 → 发布 → 检索命中 ----
+// ---- 8) 规则卡层：草拟（chat 未配置=模板占位 / 已配置=LLM）→ 发布 → 检索命中 ----
 {
   const { draftRuleCard, getRuleCard, updateRuleCardDraft, publishRuleCard, deleteRuleCardDraft } = await import('../server/src/knowledge/ruleCards.js')
   const draft = await draftRuleCard('h2', 'knowledge-smoke')
-  check('规则卡草拟（模板，chat 未配置）', draft.card.status === 'draft' && draft.card.draftedBy === 'template', `证据 ${draft.evidenceCount}`)
+  check(
+    '规则卡草拟（template|llm，随 chat 配置）',
+    draft.card.status === 'draft' && (draft.card.draftedBy === 'template' || draft.card.draftedBy === 'llm'),
+    `draftedBy=${draft.card.draftedBy} 证据 ${draft.evidenceCount}`,
+  )
+  // 先尝试直接发布：模板草稿含「待人工补全」占位 → 被拒后人工补全再发；
+  // LLM 草稿（chat 已配置）完整 → 直接可发布。两条路径都必须收敛到 published。
+  let published: Awaited<ReturnType<typeof publishRuleCard>> | null = null
   let placeholderRejected = false
   try {
-    await publishRuleCard(draft.card.id)
+    published = await publishRuleCard(draft.card.id)
   } catch (e) {
     placeholderRejected = (e as Error).message.includes('待人工补全')
   }
-  check('含「待人工补全」占位时发布被拒', placeholderRejected)
-  await updateRuleCardDraft(draft.card.id, {
-    definition: 'H2 是多头回调中第二次上推（二次进场），最可靠的顺势进场点。',
-    conditions: ['回调处于多头趋势', '第二次上破前根高点'],
-    context: '趋势中的回调；交易区间内不可靠',
-    invalidation: '跌破回调起点或出现反向 MTR',
-    confusable: ['H1', 'L2'],
-    counterExamples: ['铁丝网中的 H2 常失败'],
-    ruleId: 'hl_count',
-    sourceNote: '人工补全',
-  })
-  const published = await publishRuleCard(draft.card.id)
-  check('补全后发布成功（v1 published）', published.status === 'published' && published.version === 1)
+  if (placeholderRejected) {
+    check('含「待人工补全」占位时发布被拒（模板草稿）', placeholderRejected)
+    await updateRuleCardDraft(draft.card.id, {
+      definition: 'H2 是多头回调中第二次上推（二次进场），最可靠的顺势进场点。',
+      conditions: ['回调处于多头趋势', '第二次上破前根高点'],
+      context: '趋势中的回调；交易区间内不可靠',
+      invalidation: '跌破回调起点或出现反向 MTR',
+      confusable: ['H1', 'L2'],
+      counterExamples: ['铁丝网中的 H2 常失败'],
+      ruleId: 'hl_count',
+      sourceNote: '人工补全',
+    })
+    published = await publishRuleCard(draft.card.id)
+  } else {
+    check('chat 已配置时 LLM 草稿完整可发布', draft.card.draftedBy === 'llm', `draftedBy=${draft.card.draftedBy}`)
+  }
+  // version 不锁定 1：重复执行或此前残留的已发布同概念卡会递增版本，语义只要求成功发布
+  check('发布成功（published）', published !== null && published.status === 'published', `version=${published?.version ?? '-'}`)
+  const pub = published as NonNullable<typeof published>
   let publishedImmutable = false
   try {
-    await updateRuleCardDraft(published.id, {
+    await updateRuleCardDraft(pub.id, {
       definition: 'x', conditions: [], context: '', invalidation: '', confusable: [], counterExamples: [], ruleId: '', sourceNote: '',
     })
   } catch (e) {

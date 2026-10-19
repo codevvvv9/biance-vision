@@ -19,6 +19,7 @@
 | [api-storage.md](api-storage.md) | API 与存储 | 端点清单、SSE 协议、共享 zod schema、实体与迁移 | partial |
 | [admin-security.md](admin-security.md) | Admin 与安全 | 能力配置、知识绑定、发布、密钥、授权与审计 | partial |
 | [evaluation-deployment.md](evaluation-deployment.md) | 评测与部署 | 测试集、回放、上线门槛、Docker、监控与实施顺序 | partial |
+| [evaluation-harness.md](evaluation-harness.md) | 评测台 | 独立评测域、确定性校验器、Subject 适配器、按条目审计与发布门禁 | planned |
 
 ## 状态流转规则
 

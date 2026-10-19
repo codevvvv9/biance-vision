@@ -4,7 +4,7 @@
  * - productPayload：perp 计划盈亏矩阵与费用情景；event EV/盈亏平衡/倒计时
  * - 证据抽屉：冻结片段（支持/反证），点击定位（页码/图号/原文）
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import type { ResearchResult } from 'biance-vision-brooks'
 import MiniMarkdown from '../components/MiniMarkdown'
@@ -64,15 +64,16 @@ function ExpiryCountdown({ expiryAt, asOfRemainingMs }: { expiryAt: number; asOf
   )
 }
 
-export function ResultCard({ result, horizon, runId }: { result: ResearchResult; horizon?: string; runId?: string }): JSX.Element {
+export function ResultCard({ result, horizon, runId, onCitation }: { result: ResearchResult; horizon?: string; runId?: string; onCitation?: (evidenceId: string) => void }): JSX.Element {
   // 论断引用定位（P2）：evidenceIds → 可点击标记，展开冻结原文（页码/来源/文档）
   const [evidenceMap, setEvidenceMap] = useState<Map<string, EvidenceItem> | null>(null)
   const [openEvidence, setOpenEvidence] = useState<string | null>(null)
   const hasCitations = result.claims.some((c) => c.evidenceIds.length > 0)
+  const citationIds = [...new Set(result.claims.flatMap((c) => c.evidenceIds))]
   useEffect(() => {
     setEvidenceMap(null)
     setOpenEvidence(null)
-    if (!runId || !hasCitations) return
+    if (!runId || !hasCitations || onCitation) return
     let alive = true
     api<{ evidence: EvidenceItem[] }>(`/research/runs/${runId}/evidence`)
       .then((r) => {
@@ -84,7 +85,7 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
     return () => {
       alive = false
     }
-  }, [runId, hasCitations])
+  }, [runId, hasCitations, onCitation])
   const r2 = result as unknown as {
     schemaVersion?: number
     decision: string
@@ -92,6 +93,9 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
     side?: string | null
     probability: { probabilityUp: number; probabilityTie: number | null; modelVersion: string } | null
     unavailableCode?: string | null
+    /** P0-5 受控降级：修复耗尽后仅保留代码计算内容发布 */
+    degraded?: boolean
+    degradedReasons?: string[]
     payload: Record<string, unknown>
   }
   const pp = r2?.payload ?? {}
@@ -108,7 +112,20 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
             研究模式（非币安事件合约产品）
           </span>
         )}
+        {r2?.degraded === true && (
+          <span className="mode-tag degraded-tag" role="note" aria-label="降级发布">
+            降级发布
+          </span>
+        )}
       </div>
+      {r2?.degraded === true && (r2?.degradedReasons ?? []).length > 0 && (
+        <ul className="missing-list">
+          <li>降级原因（已剔除未经校验的归纳内容，仅保留代码计算结论）：</li>
+          {(r2?.degradedReasons ?? []).slice(0, 5).map((x) => (
+            <li key={x}>· {x}</li>
+          ))}
+        </ul>
+      )}
       {r2?.probability === null || r2?.probability === undefined ? (
         <p className="prob-note">概率：不可用（{r2?.unavailableCode ?? 'model_not_published'}；不由 AI 编造）</p>
       ) : (
@@ -138,11 +155,11 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
                 <span key={eid} className="cite-wrap">
                   <button
                     className={`cite-mark c-${ev?.stance ?? 'unknown'}`}
-                    onClick={() => setOpenEvidence(openEvidence === `${i}:${eid}` ? null : `${i}:${eid}`)}
-                    aria-label={ev ? `查看引用 ${j + 1}：${ev.docTitle ?? ev.kind}${ev.pageNo !== null ? ` 第${ev.pageNo}页` : ''}` : `引用 ${j + 1}（详情未加载）`}
+                    onClick={() => onCitation ? onCitation(eid) : setOpenEvidence(openEvidence === `${i}:${eid}` ? null : `${i}:${eid}`)}
+                    aria-label={onCitation ? `查看引用 ${citationIds.indexOf(eid) + 1}` : ev ? `查看引用 ${j + 1}：${ev.docTitle ?? ev.kind}${ev.pageNo !== null ? ` 第${ev.pageNo}页` : ''}` : `引用 ${j + 1}（详情未加载）`}
                     title={ev ? `${ev.docTitle ?? ev.kind}${ev.pageNo !== null ? ` · 第 ${ev.pageNo} 页` : ''}${ev.sourceTier !== null ? ` · ${ev.sourceTier}` : ''}` : '引用详情未加载'}
                   >
-                    [{j + 1}]
+                    [{onCitation ? citationIds.indexOf(eid) + 1 : j + 1}]
                   </button>
                   {openEvidence === `${i}:${eid}` && ev !== undefined && (
                     <span className="cite-popover" role="note">
@@ -254,11 +271,18 @@ export function ResultCard({ result, horizon, runId }: { result: ResearchResult;
   )
 }
 
-export function EvidenceDrawer({ runId, open, onClose, onLocateBar }: { runId: string; open: boolean; onClose: () => void; onLocateBar?: (atTime: number) => void }): JSX.Element {
+export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = false, selectedEvidenceId, citationIds = [] }: { runId: string; open: boolean; onClose: () => void; onLocateBar?: (atTime: number) => void; embedded?: boolean; selectedEvidenceId?: string | null; citationIds?: string[] }): JSX.Element {
   const [items, setItems] = useState<EvidenceItem[] | null>(null)
   const [structures, setStructures] = useState<StructureEventItem[]>([])
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  useEffect(() => {
+    if (!open || !selectedEvidenceId || items === null) return
+    setExpanded(selectedEvidenceId)
+    const el = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-evidence-id]') ?? []).find((item) => item.dataset.evidenceId === selectedEvidenceId)
+    el?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior })
+  }, [items, selectedEvidenceId, open])
 
   // 拉取按 runId 键控：切换 run 时先清空再重取，杜绝展示上一个 run 的缓存证据
   useEffect(() => {
@@ -282,17 +306,20 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar }: { runId: s
 
   if (!open) return <></>
   return (
-    <div className="evidence-drawer" role="dialog" aria-label="证据抽屉">
+    <div className={embedded ? 'wb-evidence-content' : 'evidence-drawer'} role={embedded ? undefined : 'dialog'} aria-label="证据抽屉">
       <div className="drawer-head">
         <strong>证据（{items?.length ?? '…'}）</strong>
-        <button className="icon-btn" onClick={onClose} aria-label="关闭">✕</button>
+        {!embedded && <button className="icon-btn" onClick={onClose} aria-label="关闭">✕</button>}
       </div>
       {error && <p className="err-text">{error}</p>}
       {items !== null && items.length === 0 && <p className="muted">无冻结证据（知识库未发布资料时检索为空，不编造引用）</p>}
-      <ul className="evidence-list">
+      {items === null && !error && <p className="dim" role="status">正在读取冻结证据…</p>}
+      {selectedEvidenceId && items && !items.some((e) => e.id === selectedEvidenceId) && <p className="err-text">该引用不在本次冻结证据中。</p>}
+      <ul className="evidence-list" ref={listRef}>
         {(items ?? []).map((e) => (
-          <li key={e.id} className={e.stance}>
-            <button className="evidence-toggle" onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
+          <li key={e.id} data-evidence-id={e.id} className={`${e.stance}${e.id === selectedEvidenceId ? ' selected' : ''}`}>
+            <button className="evidence-toggle" aria-expanded={expanded === e.id} onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
+              {citationIds.includes(e.id) && <span className="wb-cite-number">[{citationIds.indexOf(e.id) + 1}]</span>}
               <span className={`stance s-${e.stance}`}>{e.stance === 'support' ? '支持' : '反证'}</span>
               <span className="loc">
                 {e.docTitle !== undefined && e.docTitle !== '' ? e.docTitle : e.kind === 'knowledge_chunk' ? '知识片段' : e.kind}

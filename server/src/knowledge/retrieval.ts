@@ -7,12 +7,12 @@
  */
 import { sql } from 'drizzle-orm'
 import type { AgentCapabilities, SearchDebugResult, SearchHit } from 'biance-vision-brooks'
-import type { KnowledgeChunkRow } from '../models.js'
+import type { KnowledgeChunkRow, RuleCardRow } from '../models.js'
 import { getDb } from '../db.js'
 import { getCapabilities, resolveSecret } from '../admin/capabilities.js'
 import { resolveEmbeddingClient } from './embeddings.js'
 import { extractCjkBigrams, extractLatinTokens, normalizeQueryTerms } from './terms.js'
-import { getAdjacentChunks, getChunkById, getDocument, publishedDocVersionIds } from './store.js'
+import { getAdjacentChunks, getChunkById, getDocument, getKnowledgeVersion, publishedDocVersionIds } from './store.js'
 import { vectorSupportSync } from './vector.js'
 
 /** 规则卡/案例的伪 chunk 行（检索与引用统一形状；页码/图号不适用为 null） */
@@ -42,6 +42,10 @@ export interface SearchOptions {
   mode?: SearchMode
   /** 指定知识版本（缺省 = 最新发布）；绑定 Agent 版本时传入 */
   knowledgeVersionId?: string
+  /** 显式 as-of 时刻（P0-4）：规则卡/案例层只返回该时刻前发布的行。
+   * 缺省时若指定了 knowledgeVersionId 则取该版本的发布时刻（复现性：
+   * run 冻结知识版本后新发布的规则卡/案例不进入该 run 检索）；两者都未指定则不过滤。 */
+  knowledgeAsOf?: Date
   /** 召回候选数（起始值 40，评测可调） */
   candidateLimit?: number
   /** 最终保留数（起始值 8） */
@@ -55,6 +59,8 @@ export interface SearchOptions {
   /** 冻结配置的能力（研究 run 内检索必传——配置冻结贯穿 RAG 执行，评审 F4）；
    * 缺省读全局生效配置（会话概念问答等非 run 路径） */
   caps?: AgentCapabilities | null
+  /** run 冻结的 query-rewrite 提示词全文（P0-6：run 内改写只读冻结文本；缺省走注册表指针解析） */
+  frozenQueryRewritePrompt?: string
 }
 
 export interface RetrievedChunk {
@@ -206,7 +212,7 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
   const llmVariantQueries: string[] = []
   if ((options.llmVariants ?? 0) > 0) {
     const { proposeLlmVariants } = await import('./queryRewrite.js')
-    const proposed = await proposeLlmVariants(query, matchedTerms, options.llmVariants ?? 0, caps)
+    const proposed = await proposeLlmVariants(query, matchedTerms, options.llmVariants ?? 0, caps, options.frozenQueryRewritePrompt)
     notes.push(proposed.note)
     for (const v of proposed.variants) {
       if (v !== query && !variants.includes(v) && !llmVariantQueries.includes(v)) {
@@ -240,20 +246,39 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
     notes.push(`词项召回失败：${(err as Error).message}`)
   }
 
-  // 规则卡层 + 案例层召回（published；与原始资料层并列进 RRF，证据不泄漏案例 outcome）
+  // 规则卡层 + 案例层召回（published；与原始资料层并列进 RRF，证据不泄漏案例 outcome）。
+  // P0-4 as-of 过滤：指定知识版本（或显式 asOf）时，只召回该时刻前发布的规则卡/案例——
+  // 原始资料层已按 publishedDocVersionIds 过滤，此处补齐第二/三层（§3.2.7-C 复现性缺口）
+  let knowledgeAsOf = options.knowledgeAsOf
+  if (knowledgeAsOf === undefined && options.knowledgeVersionId !== undefined) {
+    const kvRow = await getKnowledgeVersion(options.knowledgeVersionId)
+    knowledgeAsOf = kvRow?.createdAt ?? undefined
+  }
+  notes.push(
+    knowledgeAsOf !== undefined
+      ? `规则卡/案例 as-of 过滤：仅发布于 ${knowledgeAsOf.toISOString()} 之前的行`
+      : '规则卡/案例 as-of 过滤：未启用（未指定知识版本，最新语义）',
+  )
   const extraLists: SearchHit[][] = []
+  // 召回层的历史快照（as-of 语义下的卡片/案例投影）：必须直接传到最终组装——
+  // 最终阶段回查当前行会按「当前 published」过滤，旧卡归档/案例下架后历史候选被丢弃
+  // （2026-10-19 二轮审查 P1：as-of 召回 1 条 → 组装剩 0 条的复现）
+  const cardSnapshots = new Map<string, RuleCardRow>()
+  const caseSnapshots = new Map<string, { id: string; docVersionId: string; text: string; title: string; annotation: string }>()
   try {
     const { publishedRuleCards, ruleCardToRetrievable, publishedCasesForRetrieval } = await import('./ruleCards.js')
     const cardHits: SearchHit[] = []
-    for (const card of await publishedRuleCards()) {
+    for (const card of await publishedRuleCards(knowledgeAsOf)) {
       const r = ruleCardToRetrievable(card)
+      cardSnapshots.set(r.id, card)
       const docTerms = new Set([...extractLatinTokens(r.text.toLowerCase()), ...extractCjkBigrams(r.text), card.concept])
       const overlap = uniqTerms.filter((t) => docTerms.has(t)).length + (uniqTerms.includes(card.concept) ? 2 : 0)
       if (overlap > 0) cardHits.push({ chunkId: r.id, score: overlap })
     }
     if (cardHits.length > 0) extraLists.push(cardHits.sort((a, b) => b.score - a.score))
     const caseHits: SearchHit[] = []
-    for (const c of await publishedCasesForRetrieval()) {
+    for (const c of await publishedCasesForRetrieval(knowledgeAsOf)) {
+      caseSnapshots.set(c.id, c)
       const docTerms = new Set([...extractLatinTokens(`${c.title} ${c.text}`.toLowerCase()), ...extractCjkBigrams(c.text)])
       const overlap = uniqTerms.filter((t) => docTerms.has(t)).length
       if (overlap > 0) caseHits.push({ chunkId: c.id, score: overlap })
@@ -325,14 +350,15 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
   const chunkIds = finalIds.filter((id) => !id.startsWith('rulecard:') && !id.startsWith('case:'))
   const rows = await fetchChunksWithDoc(chunkIds)
   const byId = new Map<string, ChunkRowWithDoc | RetrievedChunk>(rows.map((r) => [r.id, r]))
-  // 规则卡/案例命中（伪 chunk；案例只含决策时可见字段）
+  // 规则卡/案例命中（伪 chunk）：直接消费召回层快照（as-of 历史语义在此终结）——
+  // 不回查当前行状态：旧卡归档/案例下架后，历史时刻召回的候选仍完整进入最终结果
   {
-    const { getRuleCard, ruleCardToRetrievable, getCaseWindow } = await import('./ruleCards.js')
+    const { ruleCardToRetrievable } = await import('./ruleCards.js')
     for (const id of finalIds) {
       if (byId.has(id)) continue
       if (id.startsWith('rulecard:')) {
-        const card = await getRuleCard(id.slice('rulecard:'.length))
-        if (card === null || card.status !== 'published') continue
+        const card = cardSnapshots.get(id)
+        if (card === undefined) continue
         const r = ruleCardToRetrievable(card)
         byId.set(id, {
           chunk: pseudoChunk(id, r.docVersionId, r.text),
@@ -341,13 +367,11 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
           adjacent: [],
         })
       } else if (id.startsWith('case:')) {
-        const cw = await getCaseWindow(id.slice('case:'.length))
-        if (cw === null || !cw.published) continue
-        const vc = cw.visibleContext as Record<string, unknown>
-        const text = `案例 ${cw.symbol}/${cw.interval}（决策时 ${vc.regime ?? ''}，always-in ${vc.alwaysIn ?? ''}）：${cw.annotation}`
+        const c = caseSnapshots.get(id)
+        if (c === undefined) continue
         byId.set(id, {
-          chunk: pseudoChunk(id, `case:${cw.id}#v1`, text),
-          docTitle: `案例：${cw.symbol} ${cw.interval}`,
+          chunk: pseudoChunk(id, c.docVersionId, c.text),
+          docTitle: c.title,
           docSourceTier: 'community',
           adjacent: [],
         })

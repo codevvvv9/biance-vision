@@ -1,11 +1,13 @@
 import type { CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
 import SplitText from '../components/fx/SplitText'
+import { authReturnTo, authUrl, researchUiMode } from '../research/uiMode'
 
 /** 注册页：暂不开放注册，仅提示联系超级管理员 */
 export default function RegisterPage(): JSX.Element {
+  const { search } = useLocation()
   return (
     <div className="auth-wrap">
       <AuthFx />
@@ -36,7 +38,7 @@ export default function RegisterPage(): JSX.Element {
         </div>
 
         <div className="auth-foot center">
-          <Link to="/login" className="btn btn-ghost">
+          <Link to={authUrl('/login', authReturnTo(search), researchUiMode(search))} className="btn btn-ghost">
             ← 返回登录
           </Link>
         </div>

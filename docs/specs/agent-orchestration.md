@@ -114,5 +114,7 @@
 ## 参考来源
 
 - 仓库内：docs/brooks-agent-architecture.md（§7 查询规划、§8 Agent 编排）、docs/specs/api-storage.md、docs/specs/knowledge-rag.md、docs/specs/prediction.md、docs/specs/admin-security.md、server/src/aiTools.ts（现有工具循环）。
-- [TradingAgents](https://github.com/TauricResearch/TradingAgents)：角色分工与正反研究模式参考。
+- [TradingAgents](https://github.com/TauricResearch/TradingAgents)：角色分工与正反研究模式参考；2026-10-16 增量参考其 point-in-time 证据纪律（历史数据无法确认公开时间时宁可拒答）。
 - [FinRobot](https://github.com/AI4Finance-Foundation/FinRobot)：确定性计算与模型解读分离模式参考。
+- [ai-hedge-fund](https://github.com/virattt/ai-hedge-fund)：追加式审计账本、对账失败即停与 kill switch 的工程可信度参考；不引入其执行链或自动下单能力。
+- [docs/references/financial-agent-patterns.md](../references/financial-agent-patterns.md)：AI+量化+Agent 开源模式、许可边界与 Hugging Face 评测资源的维护清单。

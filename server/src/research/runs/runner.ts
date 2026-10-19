@@ -42,6 +42,9 @@ export function runCheckpointOf(c: RunContext, _name: string): Record<string, un
     retrieval: c.retrieval,
     claims: c.claims,
     counterClaims: c.counterClaims,
+    // 降级发布标志必须随检查点持久化：validate 降级收尾后崩溃，恢复执行 publish 时
+    // 仍按降级门控装配（剔 LLM 反证语义已在 pipeline 内完成，counterClaims 为剔除后集合）
+    degradedPublish: c.degradedPublish,
     usage: c.usage,
     result: c.result,
     v2: Object.fromEntries(CHECKPOINT_V2_KEYS.map((k) => [k, v2[k]])),
@@ -100,6 +103,7 @@ export async function executeRun(runId: string): Promise<void> {
     decision: null,
     result: null,
     validationFeedback: null,
+    degradedPublish: undefined,
     usage: { llmCalls: 0, tokens: 0, searchCalls: 0, toolCalls: 0, costUsd: 0 },
     runStartedAt: Date.now(),
   }
@@ -112,6 +116,7 @@ export async function executeRun(runId: string): Promise<void> {
     ctx.retrieval = (saved.retrieval as RunContext['retrieval']) ?? null
     ctx.claims = (saved.claims as RunContext['claims']) ?? []
     ctx.counterClaims = (saved.counterClaims as RunContext['counterClaims']) ?? []
+    ctx.degradedPublish = (saved.degradedPublish as RunContext['degradedPublish']) ?? undefined
     ctx.usage = { ...ctx.usage, ...((saved.usage as RunContext['usage']) ?? {}) }
     const v2 = saved.v2 as Record<string, unknown> | undefined
     if (v2 !== undefined) {
@@ -126,7 +131,7 @@ export async function executeRun(runId: string): Promise<void> {
   if (ctx.snapshotId !== null) {
     const { loadSnapshotPack } = await import('../../services/marketSnapshot.js')
     const pack = await loadSnapshotPack(ctx.snapshotId)
-    if (pack !== null) ctx.snapshotPack = { candles: pack.candles, funding: pack.funding, indexRef: pack.indexRef }
+    if (pack.status === 'ok') ctx.snapshotPack = { candles: pack.pack.candles, funding: pack.pack.funding, indexRef: pack.pack.indexRef }
   }
   // 续跑时把已有 result 带回（幂等发布）：优先已落库 result，其次 checkpoint 里的
   // （publish 阶段 completed 后、最终发布写库前崩溃 → 从 checkpoint 恢复并补发布）

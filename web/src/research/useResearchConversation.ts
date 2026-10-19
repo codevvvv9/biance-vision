@@ -31,6 +31,7 @@ export interface ConversationSummary {
   id: string
   title: string
   updatedAt: number
+  context?: Partial<ConversationContextSync>
 }
 
 /** 顶栏同步进会话上下文的字段（与 PATCH /conversations/:id/context 契约一致） */
@@ -52,6 +53,8 @@ interface ServerMessage {
 }
 
 export interface UseResearchConversationOptions {
+  /** Public workbench must never load private conversations or send anonymous requests. */
+  enabled?: boolean
   /** 顶栏上下文（变化时 PATCH）；null = 不同步（悬浮助手无顶栏） */
   context?: ConversationContextSync | null
   /** 首条助手问候语 */
@@ -62,6 +65,7 @@ export interface UseResearchConversationOptions {
   ensureOnMount?: boolean
   /** 消息带回 runId 时回调（调用方负责 openRun 跟踪 SSE） */
   onRunCreated?: (runId: string) => void
+  onConversationCreated?: (conversationId: string) => void
   /** 确认卡落库后回调（如刷新持仓列表） */
   onPositionsChanged?: () => void
 }
@@ -85,7 +89,7 @@ function toChatMessage(m: ServerMessage): ChatMessage | null {
 }
 
 export function useResearchConversation(options: UseResearchConversationOptions = {}) {
-  const { context = null, greeting = DEFAULT_GREETING, restoreLatest = false, ensureOnMount = false } = options
+  const { enabled = true, context = null, greeting = DEFAULT_GREETING, restoreLatest = false, ensureOnMount = false } = options
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', text: greeting }])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -93,6 +97,15 @@ export function useResearchConversation(options: UseResearchConversationOptions 
   const [cardBusy, setCardBusy] = useState<number | null>(null)
   const [convId, setConvId] = useState<string | null>(null)
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [historyError, setHistoryError] = useState('')
+  const [loadingConversation, setLoadingConversation] = useState(false)
+  const generation = useRef(0)
+  const sending = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; ++generation.current }
+  }, [])
   /** 恢复/建会话完成前不消费 pendingPrompt（避免消息发到新建空会话） */
   const [ready, setReady] = useState(!restoreLatest && !ensureOnMount)
   /** 已同步到会话上下文的顶栏选择（变化时才 PATCH；确认卡落库的引用不经过这里，不会被覆盖） */
@@ -101,28 +114,45 @@ export function useResearchConversation(options: UseResearchConversationOptions 
   optsRef.current = options
 
   const refreshConversations = useCallback(async (): Promise<ConversationSummary[]> => {
+    if (!enabled) return []
     try {
       const d = await api<{ conversations: ConversationSummary[] }>('/conversations')
+      if (!mounted.current) return []
       setConversations(d.conversations)
+      setHistoryError('')
       return d.conversations
-    } catch {
+    } catch (e) {
+      if (mounted.current) setHistoryError((e as Error).message)
       return []
     }
-  }, [])
+  }, [enabled])
 
-  const loadConversation = useCallback(async (id: string): Promise<void> => {
+  const loadConversation = useCallback(async (id: string): Promise<boolean> => {
+    if (!enabled || sending.current) return false
+    const gen = ++generation.current
+    setLoadingConversation(true)
     try {
-      const d = await api<{ messages: ServerMessage[] }>(`/conversations/${id}/messages`)
+      const d = await api<{ messages: ServerMessage[] }>(`/conversations/${encodeURIComponent(id)}/messages`)
+      if (gen !== generation.current) return false
       const restored = d.messages.map(toChatMessage).filter((m): m is ChatMessage => m !== null)
       setConvId(id)
       syncedCtxRef.current = null // 换会话后下次发消息重新同步顶栏上下文
       setMessages(restored.length > 0 ? restored : [{ role: 'assistant', text: greeting }])
-    } catch {
-      /* 会话不可读（已删除/越权）：留在当前视图 */
+      setHistoryError('')
+      return true
+    } catch (e) {
+      if (gen === generation.current) setHistoryError((e as Error).message)
+      return false
+    } finally {
+      if (gen === generation.current) setLoadingConversation(false)
     }
-  }, [greeting])
+  }, [enabled, greeting])
 
   const newConversation = useCallback((): void => {
+    if (sending.current) return
+    ++generation.current
+    setLoadingConversation(false)
+    setHistoryError('')
     setConvId(null)
     syncedCtxRef.current = null
     setMessages([{ role: 'assistant', text: greeting }])
@@ -130,7 +160,7 @@ export function useResearchConversation(options: UseResearchConversationOptions 
 
   // 恢复最近会话；无历史且 ensureOnMount 时立即创建空会话
   useEffect(() => {
-    if (!restoreLatest && !ensureOnMount) return
+    if (!enabled || (!restoreLatest && !ensureOnMount)) return
     let alive = true
     void (async () => {
       const list = await refreshConversations()
@@ -154,9 +184,10 @@ export function useResearchConversation(options: UseResearchConversationOptions 
   }, [])
 
   const send = useCallback(
-    async (raw?: string): Promise<void> => {
+    async (raw?: string): Promise<boolean> => {
       const message = (raw ?? input).trim()
-      if (message === '' || busy) return
+      if (!enabled || message === '' || sending.current || loadingConversation) return false
+      sending.current = true
       setInput('')
       setMessages((prev) => [...prev, { role: 'user', text: message }])
       setBusy(true)
@@ -165,7 +196,10 @@ export function useResearchConversation(options: UseResearchConversationOptions 
         if (cid === null) {
           const c = await api<{ conversation: { id: string } }>('/conversations', { method: 'POST', body: {} })
           cid = c.conversation.id
-          setConvId(cid)
+          if (mounted.current) {
+            setConvId(cid)
+            optsRef.current.onConversationCreated?.(cid)
+          }
         }
         // 顶栏全部状态同步进会话上下文（新会话必同步；之后仅变化时）——
         // 聊天启动的研究由此定位正确行情：切了交易对/期限/场景再聊天，
@@ -206,6 +240,7 @@ export function useResearchConversation(options: UseResearchConversationOptions 
           r.message?.card?.kind === 'confirm_position' && r.message.card.draft !== null && r.message.card.draft !== undefined
             ? r.message.card
             : null
+        if (!mounted.current) return true
         // 确认卡内联进消息流（不再 window.confirm）：用户点「确认写入」后才 PATCH context 落库
         setMessages((prev) => [
           ...prev,
@@ -228,13 +263,16 @@ export function useResearchConversation(options: UseResearchConversationOptions 
         ])
         if (runId !== null) optsRef.current.onRunCreated?.(runId)
         void refreshConversations()
+        return true
       } catch (e) {
-        setMessages((prev) => [...prev, { role: 'assistant', text: `出错了：${(e as Error).message}` }])
+        if (mounted.current) setMessages((prev) => [...prev, { role: 'assistant', text: `出错了：${(e as Error).message}` }])
+        return false
       } finally {
-        setBusy(false)
+        sending.current = false
+        if (mounted.current) setBusy(false)
       }
     },
-    [input, busy, convId, context, refreshConversations],
+    [input, enabled, loadingConversation, convId, context, refreshConversations],
   )
 
   /** 确认卡：确认写入 → PATCH context（服务端校验字段并落 portfolio）；取消 → 仅标记，不落库 */
@@ -288,6 +326,8 @@ export function useResearchConversation(options: UseResearchConversationOptions 
     convId,
     ready,
     conversations,
+    historyError,
+    loadingConversation,
     refreshConversations,
     loadConversation,
     newConversation,

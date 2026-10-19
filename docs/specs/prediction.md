@@ -97,5 +97,5 @@
 - `docs/specs/market-data.md`（快照与收盘约束）
 - `docs/specs/api-storage.md`（`predictions` / `prediction_models` 实体）
 - `docs/specs/evaluation-deployment.md`（样本外回放、校准门槛与上线标准）
-- `docs/references/financial-agent-patterns.md`（Freqtrade 前视偏差检查、FinRL 样本划分方法的适配说明）
+- `docs/references/financial-agent-patterns.md`（Freqtrade 前视偏差检查、FinRL 样本划分方法的适配说明；2026-10-16 增补 Qlib RollingGen、MLflow alias/tag、mlfinpy CPCV/唯一性权重，均仅作方法论参考）
 - `docs/brooks-price-action-manual.md`（Brooks 经验统计的原始口径说明）

@@ -22,12 +22,15 @@ function sharesAnchor(variant: string, anchors: Set<string>): boolean {
 /**
  * 生成 LLM 改写变体（≤max 个）。
  * 校验规则：字符串、4-120 字、不与原查询重复、通过反漂移校验；任一不满足即丢弃该条。
+ * P0-6：提示词经注册表解析。run 内调用传 frozenSystem（冻结全文，只读）；
+ * 会话层（未传）每次指针解析（不缓存）——与 prompts.ts 解析链一致。
  */
 export async function proposeLlmVariants(
   query: string,
   matchedTerms: string[],
   max: number,
   caps?: AgentCapabilities | null,
+  frozenSystem?: string,
 ): Promise<LlmVariantsOutcome> {
   if (max <= 0) return { variants: [], note: '改写变体未开启' }
   // 评审 F4：run 内调用传入冻结能力（严格使用，不回退全局）；非 run 路径（未传）读全局生效配置
@@ -38,12 +41,14 @@ export async function proposeLlmVariants(
         : null
       : resolveLlmClient()
   if (llm === null) return { variants: [], note: 'chat 能力未配置，LLM 改写跳过（仅确定性变体）' }
+  let system = frozenSystem
+  if (system === undefined) {
+    const { resolvePromptTemplate } = await import('../research/prompts.js')
+    system = (await resolvePromptTemplate('query-rewrite')).content
+  }
   try {
     const out = await llm.complete({
-      system:
-        '你是检索查询改写器。给定中文交易研究问题与命中的 Brooks 术语，生成改写查询用于知识库召回。' +
-        '规则：保持原意；可展开术语规范名、中英文对应、同义表述；不得引入原问题没有的概念；' +
-        '每个变体不超过 120 字；只输出 JSON 字符串数组，不要任何解释。',
+      system,
       user: `问题：${query.slice(0, 500)}\n命中术语：${matchedTerms.slice(0, 8).join('、') || '（无）'}\n生成至多 ${max} 个改写查询。`,
       maxTokens: 300,
       temperature: 0,

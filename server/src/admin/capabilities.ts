@@ -16,7 +16,7 @@ import { getDb } from '../db.js'
 import { kv, log } from '../logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const SECRETS_FILE = path.join(__dirname, '..', 'data', 'secrets.json')
+const SECRETS_FILE = path.join(__dirname, '..', '..', 'data', 'secrets.json')
 
 const DEFAULT_CAPABILITIES: AgentCapabilities = {
   chat: { enabled: false },

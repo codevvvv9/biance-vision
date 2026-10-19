@@ -10,6 +10,8 @@
 
 > 评审修复（2026-10-13，F3/F6/F10）：(F3) 资金费率 `listFunding` 增加 `asOf` 过滤（历史复盘不泄漏未来费率）；product_analysis 统一消费快照冻结 funding（类型/水化/装载贯通），旧快照缺 funding 时按 asOf 补读；新增 `GET /api/research/runs/:id/candles?interval=&priceType=`——结果图表读冻结输入包（无包返回 snapshot:false，前端回退实时库）。(F6) 会话持仓草稿闭环：待确认草稿持久化于会话上下文，后续消息槽位合并补齐；确认写入改走共享 `PositionInputSchema`（非法方向/非正数量/越界杠杆 400）；确认幂等（草稿指纹重复确认返回已落库持仓，不重复建仓）；会话消息 10s 同内容窗口去重。(F10) `run_events` 持久化按 run 串行化（消除 SELECT max(seq)+1 竞争；主键 (run_id,seq) 冲突重试一次），终态清理串行链；事件仍先落库拿 seq 再推送。回归锚点：`scripts/p1-regression-check.ts` [评审 F6/F7]、`pnpm linkage:smoke`、`pnpm research:smoke`。
 
+> 修复（2026-10-19，快照双后端分裂）：本地源码进程此前不加载任何 .env，BlobStore 静默落本地磁盘，与容器（MinIO env）形成双后端——容器 worker 写 MinIO、本地 API 读磁盘，图表报「快照不可复现」。修复：入口首位 `import './env.js'` 加载 `server/.env`（不覆盖已有环境变量），启动日志/`/api/health` 暴露 `blobStore` 后端类型；`GET /api/research/runs/:id/candles` 响应新增 `reason`（`ok/no_snapshot/no_row/no_key/blob_missing/hash_mismatch/no_interval`），前端按原因展示回退文案；`loadSnapshotPack` 对「有 key 读不到/哈希不匹配」打 warn。历史磁盘数据用 `pnpm blobs:migrate` 幂等迁入 MinIO。
+
 > 修复验收（2026-10-09 八轮）：(B2/B3) 研究发布门禁落地——validate 阶段重新 `freezeRunConfig()` 比对 configHash（不一致 → `version_mismatch` 拒绝发布），publish 阶段结果装配后经 `ResearchResultV2Schema` 运行时校验（非法结构 → ValidationRejected，不发布）。(D1) `PUT /api/admin/evaluations/datasets/:id` 落地：原地改名或整体替换 items（itemCount 同步），version 不变——版本递增语义仍由 POST 同名新建承担。新增端点见下表（`/api/predictions/stats`、`/api/event-quotes/:id/confirm`）。
 
 > 实现状态（2026-10-01）：端点清单全部落地——/api/market/*、/api/admin/knowledge/*、/api/research/runs*（含 SSE 与 /evidence）、/api/portfolio、/api/event-quotes、/api/predictions*、/api/admin/agents|evaluations|models*（含训练触发）。迁移 0007（知识）/0008（研究）/0009（Agent 版本与评测）已产出并自动执行。

@@ -1,6 +1,22 @@
 # UI 与交互
 
 > 状态：partial
+>
+> P0 质量闭环（2026-10-16，vertical-agent-architecture.md §6）：后端受控降级（task_degraded 事件 + degraded 结果字段）与前端降级徽章/横幅已落地（RunBubble/ResearchResult，双 UI 模式共用）；提示词注册表、逐条证据绑定、知识 as-of、可信回答组装器为服务端改动（/api/admin/prompts 五端点供后续管理页使用）。浏览器端到端验收待线上 rebuild 后执行。
+
+> 新对话工作台（2026-10-16）：`implemented`。`codex/dev-agent-workbench` 已实现 `/research?ui=dev`：左侧会话、中央回答、右侧按需证据/冻结图表、底部现货/USDT 永续/事件合约标签。无参数、`ui=legacy` 或未知值继续使用下文旧布局。两套页面按需挂载，同账号、同 API、同研究结果；`ui` 只选择界面。未登录新模式提供静态欢迎页、独立场景草稿及登录返回。类型检查、构建和浏览器受控接口回归已通过；尚未完成真实账号与研究 worker 的端到端验收，保持 implemented。见 [实施方案](../dev-agent-workbench-plan.md) 与 [验收记录](../references/workbench-ui-qa-2026-10-16.md)。
+
+### 新对话模式的实现约束（`ui=dev`）
+
+- `WorkbenchPage` 使用独立全屏外壳与作用域样式，不叠加旧顶栏、行情带或悬浮助手；桌面会话栏可折叠，手机为可关闭抽屉。会话来自真实 `/conversations`，按今天/昨天/最近 7 天/更早分组，保留大盘、价格行为与管理员入口。
+- `uiMode` 统一解析模式与站内登录返回；模式切换保留 conversation/run 及其他查询参数，不发消息、不创建 run。登录/开通说明/返回/登录成功保留模式与深链；认证状态变化时清理私人组件状态。会话、消息或确认操作未完成时禁用模式切换。
+- 输入框上沿为现货（teaching+spot）、USDT 永续（perp+usdm_perp）、事件合约（event+usdm_perp）三个场景。每个场景独立草稿，sessionStorage 仅用于同标签页的登录恢复；不存储 UI 模式。切换场景或标的清除持仓/报价关联，异步保存返回也不能把关联带入另一个场景。
+- 会话懒创建；只有登录后才加载会话、持仓与报价。未登录可以编辑，发送进入登录；失败消息保留错误并恢复草稿。消息/上下文恢复/运行/确认期间锁定产品、交易对与期限；新会话只停止当前页面订阅，不取消后台任务。
+- 复用运行气泡、确认卡与最终结果卡。历史消息中的研究入口按 ID 打开结果；当前选中研究卡嵌入对应回答，独立 run 深链展示独立卡片。一次只跟踪一个 run；支持 step_started/completed、发布、失败、取消、重连游标及 5s 终态轮询兜底。只有 published 结果进入最终结论展示，详情/结果读取错误可见。失败重试复用该 run 的产品、标的与期限，不从当前场景挪用持仓/报价。
+- 引用编号按当前结果的 evidenceIds 首次出现顺序去重，点击后打开右栏、高亮并展开对应冻结片段；来源、支持/反证、页码/图号仅展示接口已有字段。证据按 runId 键控。结构事件点击切到该 run 的图表，使用其 symbol/marketType/horizon/asOf 与冻结输入包；图表操作不改历史结论，快照回退警告始终可见。止损/强平/执行价只取该结果 payload 的有效字段。
+- 右栏默认关闭，桌面宽度 340–700px（同时受视口宽度限制），可拖动分隔线或用左右键调整；手机为全屏资料层。小于 760px 保留图表/对话/证据视图按钮，与底部三个产品场景分开。
+- 持仓/报价录入、关联与结算使用已有真实接口；不展示尚无后端支持的附件和思考模式控件。沿用模型/概率/EV 不可用、证据不足与 1w 研究模式提示。
+- 仅靠近消息底部时自动跟随内容增长；阅读历史时显示回到底部。抽屉和弹窗支持 Escape、焦点约束与焦点返回；场景标签支持左右/Home/End 键；遵循 reduced-motion。
 
 > 复审修复（2026-10-13 晚，R5/F6 前端）：(1) 冻结视图下快照输入包不可读时，图表下方显示琥珀警告「快照不可复现：…（非原始输入）」（`useResearchCandles` 返回 source/fallbackReason，不再静默回退实时库）；正常读取输入包时快照行标注「输入包数据」。(2) 持仓确认卡字段不齐（card.complete===false）时确认按钮禁用并显示缺失槽位提示，补齐路径为对话内续聊（服务端草稿合并）。
 
@@ -24,7 +40,7 @@
 
 ## 已确定决策
 
-- 新增路由 `/research`（`web/src/research/ResearchPage.tsx`），加入 `web/src/App.tsx` 认证区与 `web/src/components/Header.tsx` 的 TABS；新增 `/admin/knowledge`、`/admin/agents`、`/admin/evaluations` 三个 Admin 页面（superadmin 自守卫，沿用 `web/src/pages/AdminPage.tsx` 模式）。
+- 新增路由 `/research`（`web/src/research/ResearchPage.tsx`），加入 `web/src/App.tsx` 认证区与 `web/src/components/Header.tsx` 的 TABS；新增 `/admin/knowledge`、`/admin/agents`、`/admin/evals` 三个 Admin 页面（superadmin 自守卫，沿用 `web/src/pages/AdminPage.tsx` 模式；页面路由为 `/admin/evals`，`/api/admin/evaluations/*` 是 API 端点前缀，勿混淆）。
 - 视觉沿用现有深色 token 与面板体系：`--bg-0..3`、`--cyan`、`--up/--down`（见 `web/src/styles/base.css`，样式按职责拆分为 `web/src/styles/` 的 base/components/pages/ai/research 五文件）与 `.panel` 系列扁平样式；研究页与复盘页 K 线统一复用 klinecharts 的 `web/src/brooks/BrooksChart.tsx`（含 Brooks 结构指标层）。
 - 悬浮 AI 助手为右下角 FAB 图标按钮（无 3D 机器人/three.js 依赖），打开后是固定浮层聊天窗；助手与研究工作台共用 `/api/conversations` 会话链路（同一套消息、上下文与持仓确认卡），助手内触发的研究以运行气泡跟踪并可跳回 `/research?run=:id`。
 - 研究进度通过 `/api/research/runs/:id/events` 的 SSE 渲染；最终结论只展示校验通过后的结果（`run_completed`），未校验的中间文本不作为结论展示。
@@ -83,7 +99,7 @@
 
 - `/admin/knowledge`：文档列表与状态、解析预览、发布、`search-debug` 面板。
 - `/admin/agents`：版本列表、草稿编辑、发布、回滚、调试运行。
-- `/admin/evaluations`：数据集管理、触发评测运行、报告查看。
+- `/admin/evals`：数据集管理、触发评测运行、报告查看。
 
 ## 边界与失败处理
 
@@ -99,6 +115,7 @@
 | 运行错误 | 显示失败步骤与原因，提供重试入口 |
 | 数据库不可用 | 停止新增研究与发布入口，界面显示实际可用状态（只读） |
 | 1w 研究模式 | 显著标识，且不与官方四种期限并列展示为「币安产品」 |
+| 受控降级发布（P0-5，2026-10-16） | 结果卡头部琥珀「降级发布」徽章 + 原因列表（已剔除未经校验的归纳内容）；运行气泡先收 task_degraded 横幅（修复耗尽等 code 有独立文案）再 run_published；旧客户端安全忽略新事件类型 |
 
 ## 验收用例
 

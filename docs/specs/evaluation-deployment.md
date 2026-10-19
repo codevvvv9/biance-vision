@@ -21,7 +21,7 @@
 ## 数据与接口
 
 - `eval_datasets`（类型、版本）、`eval_runs`（数据集版本、指标结果）；API `/api/admin/evaluations/*`（数据集 CRUD、触发运行走 pg-boss、报告查询），见 docs/specs/api-storage.md。
-- 评测代码：`server/src/eval/`；因果性检查复用 `scripts/causality-check.ts`（`pnpm brooks:causality`）；结构自测 `scripts/brooks-selftest.ts`（`pnpm brooks:selftest`）。
+- 评测代码：当前执行为 `server/src/research/evalRunner.ts`；独立评测台的目标设计见 docs/specs/evaluation-harness.md。因果性检查复用 `scripts/causality-check.ts`（`pnpm brooks:causality`）；结构自测 `scripts/brooks-selftest.ts`（`pnpm brooks:selftest`）。
 - 部署：`docker-compose.yml` 六服务，卷 `pgdata`、`miniodata`：
 
 | 服务 | 镜像/来源 | 职责 |
@@ -99,6 +99,8 @@
 
 ## 参考来源
 
-- 仓库内：`scripts/brooks-selftest.ts`、`docker-compose.yml`、`Dockerfile`、`docker/postgres-init.sql`、`server/.env.example`、docs/specs/prediction.md、docs/specs/market-data.md、docs/specs/api-storage.md、docs/specs/knowledge-rag.md、docs/brooks-agent-architecture.md（§11、§12）。
+- 仓库内：`scripts/brooks-selftest.ts`、`docker-compose.yml`、`Dockerfile`、`docker/postgres-init.sql`、`server/.env.example`、docs/specs/prediction.md、docs/specs/market-data.md、docs/specs/api-storage.md、docs/specs/knowledge-rag.md、docs/specs/evaluation-harness.md（独立评测台目标设计）、docs/brooks-agent-architecture.md（§11、§12）。
 - [Freqtrade](https://github.com/freqtrade/freqtrade) 与 [lookahead-analysis](https://docs.freqtrade.io/en/stable/lookahead-analysis/)：回放与前视偏差检查方法参考。
 - [FinRL](https://github.com/AI4Finance-Foundation/FinRL)：训练/测试/交易样本划分参考（不引入强化学习）。
+- [NautilusTrader fill models](https://nautilustrader.io/docs/latest/concepts/backtesting/fill-models) 与 [QuantConnect LEAN reality modeling](https://www.quantconnect.com/docs/v2/writing-algorithms/reality-modeling)：fill/slippage/fee 假设显式化与敏感性扫描参考（2026-10-16）。
+- [FinQA](https://github.com/czyssrs/FinQA)、[ConvFinQA](https://github.com/czyssrs/ConvFinQA)、[FinanceBench](https://huggingface.co/datasets/PatronusAI/financebench)、[FinBen](https://github.com/The-FinAI/FinBen)：数值推理与引用真实性评测协议参考；CC-BY-NC 资源仅用于非商用评测（2026-10-16）。

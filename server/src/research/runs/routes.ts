@@ -252,24 +252,27 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
   })
 
   /** 快照输入包 K 线（评审 F3：结果图表读冻结输入包而非实时库，历史复盘图表可复现）。
-   * 旧 run 无快照包时返回 snapshot:false，前端回退实时库（带 asOf）。 */
+   * 不可用时返回 snapshot:false 且带 reason（ok/no_snapshot/no_row/no_key/blob_missing/
+   * hash_mismatch/no_interval），前端按原因展示回退文案并读实时库（带 asOf）。 */
   app.get('/api/research/runs/:id/candles', async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
     const { id } = req.params as { id: string }
     const row = await getRunForUser(id, session.username)
     if (!row) return reply.code(404).send({ code: 'not_found', message: '研究运行不存在' })
-    if (row.snapshotId === null) return { snapshot: false, candles: [] }
+    if (row.snapshotId === null) return { snapshot: false, candles: [], reason: 'no_snapshot' }
     const pack = await loadSnapshotPack(row.snapshotId)
-    if (pack === null) return { snapshot: false, candles: [] }
+    if (pack.status !== 'ok') return { snapshot: false, candles: [], reason: pack.status }
     const q = req.query as { interval?: string; priceType?: string }
     const interval = q.interval ?? '15m'
     const priceType = q.priceType ?? 'trade'
     const INTERVAL_MS: Record<string, number> = { '1m': 60_000, '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000, '1d': 86_400_000 }
     const step = INTERVAL_MS[interval] ?? 60_000
-    const rows = pack.candles.find((c) => c.interval === interval && c.priceType === priceType)?.rows ?? []
+    const rows = pack.pack.candles.find((c) => c.interval === interval && c.priceType === priceType)?.rows ?? []
+    if (rows.length === 0) return { snapshot: false, candles: [], reason: 'no_interval' }
     return {
       snapshot: true,
+      reason: 'ok',
       candles: rows.map((r) => ({
         openTime: r.t,
         open: r.o,

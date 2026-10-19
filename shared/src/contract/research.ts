@@ -124,7 +124,39 @@ export const RUN_PROGRESS_TYPES = [
   'run_published',
   'run_failed',
   'run_cancelled',
+  // P0-5/P1-7（C 域）：过程事件与安全/降级事件二分。新增类型不改变既有五种事件的结构；
+  // 旧客户端对未知类型安全忽略（useResearchRun 的 switch default）。
+  'step_detail',
+  'security_interrupt',
+  'task_degraded',
 ] as const
+
+/** step_detail：真实阶段/工具状态/计数播报（红线 #5：不携带提示词/证据/消息正文，不称思维链） */
+export const StepDetailPayloadSchema = z.object({
+  step: z.string(),
+  kind: z.enum(['llm_call', 'retrieval_variant', 'repair_loop', 'evidence_frozen', 'structure_claim', 'synthesis']),
+  label: z.string(),
+  status: z.enum(['started', 'finished']),
+  detail: z.object({ count: z.number().int().optional(), round: z.number().int().optional() }).optional(),
+})
+export type StepDetailPayload = z.infer<typeof StepDetailPayloadSchema>
+
+/** security_interrupt：仅硬中断安全场景（version_mismatch）；与可用性降级（task_degraded）二分 */
+export const SecurityInterruptPayloadSchema = z.object({
+  code: z.literal('version_mismatch'),
+  reason: z.string(),
+  at: z.number().int(),
+})
+export type SecurityInterruptPayload = z.infer<typeof SecurityInterruptPayloadSchema>
+
+/** task_degraded：任务级受控降级（补问/部分输出/降级发布），由任务语义决定 handling */
+export const TaskDegradedPayloadSchema = z.object({
+  code: z.enum(['data_stale', 'model_unpublished', 'quote_missing', 'repair_exhausted']),
+  handling: z.enum(['ask_user', 'partial_output', 'degraded_publish']),
+  reason: z.string(),
+  at: z.number().int(),
+})
+export type TaskDegradedPayload = z.infer<typeof TaskDegradedPayloadSchema>
 
 /** SSE 进度事件（/api/research/runs/:id/events）；run_published 的 payload 与 GET result 一致 */
 export const RunProgressEventSchema = z.object({

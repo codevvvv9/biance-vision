@@ -18,6 +18,7 @@ import {
   EvalRunSchema,
 } from 'biance-vision-brooks'
 import { listActiveUsernames, queryAudit, recordAudit } from '../audit.js'
+import { createDraft as createPromptDraft, currentPointers as listPromptPointers, listTemplates as listPromptTemplates, publishTemplate, rollbackTo as rollbackPromptTo, toDto as promptToDto, updateDraft as updatePromptDraft } from './promptsAdmin.js'
 import { getUsers, updateChatPolicy } from '../users.js'
 import type { SessionRecord } from '../users.js'
 import { getChatUsageToday, normalizeChatPolicy } from '../chatPolicy.js'
@@ -688,9 +689,90 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
   })
 }
 
+// ---- /api/admin/prompts（P0-6 提示词注册表：列表/草稿/编辑/发布/回滚；全 requireSuperadmin+审计） ----
+
+function registerPromptRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  app.get('/api/admin/prompts', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const q = req.query as { name?: string; scene?: string }
+    const [templates, pointers] = await Promise.all([listPromptTemplates(q.name, q.scene), listPromptPointers()])
+    return { templates: templates.map(promptToDto), pointers }
+  })
+
+  app.post('/api/admin/prompts', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = parseBody(
+      z.object({
+        name: z.string().trim().min(1).max(64),
+        scene: z.string().trim().max(64).optional(),
+        content: z.string().min(1).max(20000),
+        note: z.string().max(500).optional(),
+      }),
+      req.body,
+      reply,
+    )
+    if (body === null) return reply
+    try {
+      const row = await createPromptDraft({ ...body, createdBy: session.username })
+      recordAudit(session, { action: 'settings_update', target: row.id, detail: `新建提示词草稿「${row.name}」v${row.version}` })
+      return reply.code(201).send({ template: promptToDto(row) })
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'create_failed', message: e.message })
+    }
+  })
+
+  app.put('/api/admin/prompts/:id', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const body = parseBody(z.object({ content: z.string().min(1).max(20000).optional(), note: z.string().max(500).optional() }), req.body, reply)
+    if (body === null) return reply
+    try {
+      const row = await updatePromptDraft(id, body)
+      recordAudit(session, { action: 'settings_update', target: id, detail: `编辑提示词草稿「${row.name}」v${row.version}` })
+      return { template: promptToDto(row) }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'update_failed', message: e.message })
+    }
+  })
+
+  app.post('/api/admin/prompts/:id/publish', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    try {
+      const row = await publishTemplate(id)
+      recordAudit(session, { action: 'settings_update', target: id, detail: `发布提示词「${row.name}」v${row.version}（指针已切换）` })
+      return { template: promptToDto(row) }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'publish_failed', message: e.message })
+    }
+  })
+
+  app.post('/api/admin/prompts/:id/rollback', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    try {
+      const row = await rollbackPromptTo(id)
+      recordAudit(session, { action: 'settings_update', target: id, detail: `回滚提示词「${row.name}」到 v${row.version}` })
+      return { template: promptToDto(row) }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'rollback_failed', message: e.message })
+    }
+  })
+}
+
 export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
   registerAdminCoreRoutes(app, deps)
   registerAgentRoutes(app, deps)
   registerEvaluationRoutes(app, deps)
   registerModelRoutes(app, deps)
+  registerPromptRoutes(app, deps)
 }

@@ -7,7 +7,7 @@
 | 文档 | 说明 |
 | --- | --- |
 | [user-manual.md](user-manual.md) | 最终用户使用手册：登录上手、现货/永续/事件合约三场景操作步骤、AI Brooks 原理联动、异常状态与 FAQ |
-| [admin-manual.md](admin-manual.md) | 管理后台操作手册（超管）：用户与聊天管控、知识库导入/发布/检索调试、Agent 能力与版本流、评测与模型训练、故障排查 |
+| [admin-manual.md](admin-manual.md) | 管理后台操作手册（超管）：上手与两套 AI 配置辨析、AI 设置档案、用户管控与限量、知识库导入/发布/检索调试、Agent 能力与版本流、评测与模型训练、故障排查 |
 
 ## specs（正式规格）
 

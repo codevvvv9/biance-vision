@@ -112,8 +112,11 @@ function db() {
   return d
 }
 
-/** 默认运行预算（improvement-plan §4.3：可版本化工程默认值；费用表缺失时不假装执行费用上限） */
-export const DEFAULT_RUN_BUDGETS = { maxLlmCalls: 6, maxToolCalls: 20, maxSearchCalls: 2, maxRuntimeMs: 60_000 }
+/** 默认运行预算（improvement-plan §4.3：可版本化工程默认值；费用表缺失时不假装执行费用上限）。
+ * maxRuntimeMs=180s（浏览器 e2e 实测 2026-10-19：快照+结构+检索（嵌入网络延迟波动）+
+ * LLM 反证（~16s）常态 40-60s，偶发 >60s 被 60s 默认值误杀成 failed；租约每步续期 +120s，
+ * 180s 上限下无接管风险，单阶段 LLM 调用另有 90s 硬顶） */
+export const DEFAULT_RUN_BUDGETS = { maxLlmCalls: 6, maxToolCalls: 20, maxSearchCalls: 2, maxRuntimeMs: 180_000 }
 
 /** 运行租约时长（worker 崩溃后其他 worker 的接管等待上限） */
 export const RUN_LEASE_MS = 120_000
@@ -203,6 +206,10 @@ export async function freezeRunConfig(): Promise<NonNullable<import('../orchestr
   if (agent === null || raw.capabilities === undefined) {
     raw.capabilities = getCapabilities()
   }
+  // P0-6 提示词终解析：五个模板全文冻结进 raw.prompts（{name,templateId,version,content,source}）；
+  // 执行阶段只读冻结内容，不再解析发布指针（红线 #2）。注册表清空时回退工程默认+日志。
+  const { freezePromptSet } = await import('../prompts.js')
+  raw.prompts = await freezePromptSet(raw as { roles?: { name?: string; promptRef?: string }[] })
   const frozen = { label: agent?.label ?? 'default-v1', budgets, knowledgeVersionId, raw, fees, stepSize, minNotional, fundingWindow }
   return { ...frozen, configHash: hashFrozenConfig(frozen) }
 }

@@ -14,14 +14,24 @@ interface Props {
   result: ResearchResult | null
   sseError: string
   sseConn: SseConnState
+  /** P0-5 受控降级（task_degraded 事件）：显示降级横幅；正常运行为 null */
+  degraded?: { code: string; handling: string; reason: string } | null
   onCancel: () => void
   /** 失败后以相同标的与期限重新发起（研究台与悬浮助手均提供） */
   onRetry?: () => void
   /** 结果卡下方附加操作（如「查看证据」「在研究工作台打开」） */
   footer?: ReactNode
+  onCitation?: (evidenceId: string) => void
 }
 
-export function RunBubble({ run, steps, result, sseError, sseConn, onCancel, onRetry, footer }: Props): JSX.Element {
+const DEGRADED_LABEL: Record<string, string> = {
+  repair_exhausted: '修复预算耗尽，已剔除未经校验的归纳内容',
+  data_stale: '数据过期',
+  model_unpublished: '模型未发布',
+  quote_missing: '报价缺失',
+}
+
+export function RunBubble({ run, steps, result, sseError, sseConn, degraded, onCancel, onRetry, footer, onCitation }: Props): JSX.Element {
   const active = run.status !== 'published' && run.status !== 'failed' && run.status !== 'cancelled'
   return (
     <div
@@ -52,13 +62,19 @@ export function RunBubble({ run, steps, result, sseError, sseConn, onCancel, onR
         </ol>
       )}
       {sseError !== '' && <p className="err-text">{sseError}</p>}
+      {degraded !== null && degraded !== undefined && (
+        <p className="degraded-note" role="status">
+          受控降级：{DEGRADED_LABEL[degraded.code] ?? degraded.code}
+          {degraded.reason !== '' ? `（${degraded.reason.slice(0, 200)}）` : ''}
+        </p>
+      )}
       {run.error !== undefined && run.error !== '' && <p className="err-text">{run.error}</p>}
       {run.status === 'failed' && onRetry !== undefined && (
-        <button className="btn btn-primary btn-sm" aria-label="以相同参数重新发起研究" onClick={onRetry}>
+        <button className="btn btn-primary btn-sm" aria-label="以相同标的与期限重新发起研究" onClick={onRetry}>
           重新发起（相同标的与期限）
         </button>
       )}
-      {result !== null && <ResultCard result={result} horizon={run.horizon} runId={run.id} />}
+      {result !== null && run.status === 'published' && <ResultCard result={result} horizon={run.horizon} runId={run.id} onCitation={onCitation} />}
       {footer}
     </div>
   )

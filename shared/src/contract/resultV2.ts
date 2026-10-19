@@ -167,6 +167,10 @@ export const ResearchResultV2Schema = z.object({
   probability: ProbabilityBlockV2Schema.nullable(),
   unavailableCode: UnavailableCodeSchema.nullable(),
   missingInputs: z.array(z.string()),
+  /** P0-5 受控降级：修复预算耗尽后按产品规则降级发布（仅保留代码计算内容）；
+   * 正常发布缺省无此二字段（旧结果兼容） */
+  degraded: z.boolean().optional(),
+  degradedReasons: z.array(z.string()).optional(),
   payload: ProductPayloadV2Schema,
 })
 export type ResearchResultV2 = z.infer<typeof ResearchResultV2Schema>

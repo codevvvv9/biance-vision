@@ -1,3 +1,4 @@
+import './env.js'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
@@ -84,6 +85,7 @@ import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from 
 import { startQueue } from './queue.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
+import { currentBlobStoreKind } from './knowledge/blobstore.js'
 import { probeVectorSupport } from './knowledge/vector.js'
 import { refreshCapabilities } from './admin/capabilities.js'
 import { registerProductRoutes } from './research/productRoutes.js'
@@ -509,6 +511,7 @@ app.get('/api/health', async () => ({
   symbols: tickerCache.size,
   clients: clients.size,
   storage: storageMode(),
+  blobStore: currentBlobStoreKind(),
   geoBlock: geoBlockStatus(),
   uptime: Math.floor(process.uptime()),
   lastTickerAt,
@@ -1015,6 +1018,7 @@ app
   .then(() => {
     log.ok('server', `biance-vision api listening on http://${HOST}:${PORT}`, kv({
       存储: storageMode(),
+      对象存储: currentBlobStoreKind(),
       Node: process.version,
       pid: process.pid,
     }))

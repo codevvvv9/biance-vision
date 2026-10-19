@@ -3,6 +3,7 @@
  * 启动序列：initDb → DB 不可用则黄色警告并以退出码 0 退出（compose 重启策略负责重试）
  * → startQueue → 注册任务处理器 → 周期调度（快/慢分开键）→ 首启动历史回补。
  */
+import './env.js'
 import { kv, log } from './logger.js'
 import { initDb } from './db.js'
 import { Q_BACKFILL, Q_FUNDING, Q_INGEST, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, getBoss, startQueue, stopQueue } from './queue.js'
@@ -13,6 +14,7 @@ import { ingestOpenInterest } from './market/oi.js'
 import { OI_INTERVAL, seriesKeyText, watchlistPerpSymbols, watchlistSeries, watchlistSeriesBySpeed } from './market/watchlist.js'
 import type { SeriesKey } from './market/watchlist.js'
 import { registerKnowledgeWorkers } from './knowledge/jobs.js'
+import { currentBlobStoreKind } from './knowledge/blobstore.js'
 import { probeVectorSupport } from './knowledge/vector.js'
 import { registerResearchWorkers } from './research/runs/jobs.js'
 import { registerAdminWorkers } from './admin/jobs.js'
@@ -153,7 +155,7 @@ async function initialBackfill(): Promise<void> {
 }
 
 await initialBackfill()
-log.ok('worker', '行情 worker 已就绪', kv({ pid: process.pid, 调度: 'fast=* * * * * / slow=11 * * * *' }))
+log.ok('worker', '行情 worker 已就绪', kv({ pid: process.pid, 调度: 'fast=* * * * * / slow=11 * * * *', 对象存储: currentBlobStoreKind() }))
 
 const shutdown = (signal: string): void => {
   log.info('worker', `收到 ${signal}，正在停止`)

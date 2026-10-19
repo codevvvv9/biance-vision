@@ -22,6 +22,7 @@ import { useResearchCandles } from './useResearchCandles'
 import { PositionConfirmCard } from './PositionConfirmCard'
 import { RunBubble } from './RunBubble'
 import MiniMarkdown from '../components/MiniMarkdown'
+import { UiModeSwitch } from './UiModeSwitch'
 
 type Product = 'perp' | 'event' | 'teaching'
 type MarketType = 'spot' | 'usdm_perp'
@@ -128,11 +129,13 @@ export default function ResearchPage(): JSX.Element {
     setTab('run')
     if (tracker.activeRun?.id === runId) return
     try {
-      const d = await api<{ runs: ResearchRun[] }>('/research/runs')
-      const target = d.runs.find((x) => x.id === runId)
-      if (target) tracker.openRun(target)
-    } catch {
-      /* 列表不可用（DB 中断等）：保持当前视图 */
+      const d = await api<{ run: ResearchRun }>(`/research/runs/${encodeURIComponent(runId)}`)
+      setSymbol(d.run.symbol)
+      setHorizon(d.run.horizon)
+      setScenario(d.run.product === 'event' ? 'event' : d.run.product === 'teaching' ? 'spot' : 'perp')
+      tracker.openRun(d.run)
+    } catch (e) {
+      setLeftError(`研究加载失败：${(e as Error).message}`)
     }
   }
 
@@ -155,6 +158,27 @@ export default function ResearchPage(): JSX.Element {
   // （助手是全局浮层，跳转是同路由参数变化、组件不重挂载，不能只在 mount 时消费一次）
   const [searchParams] = useSearchParams()
   const bootRunRef = useRef<string | null>(null)
+  const bootConvRef = useRef<string | null>(null)
+  useEffect(() => {
+    const id = searchParams.get('conversation')
+    if (!id || bootConvRef.current === id) return
+    bootConvRef.current = id
+    void (async () => {
+      if (!await conv.loadConversation(id)) return
+      const list = await conv.refreshConversations()
+      const ctx = list.find(c => c.id === id)?.context
+      if (!ctx) return
+      // A run deep link owns the frozen chart settings; the conversation still restores its messages.
+      if (!searchParams.get('run')) {
+        setScenario(ctx.product === 'event' ? 'event' : ctx.product === 'teaching' ? 'spot' : 'perp')
+        if (ctx.symbol) setSymbol(ctx.symbol)
+        if (ctx.horizon && ctx.horizon in HORIZON_TF) setHorizon(ctx.horizon as Horizon)
+      }
+      setSelectedPosition(ctx.product === 'perp' ? ctx.positionId ?? '' : '')
+      setSelectedQuote(ctx.product === 'event' ? ctx.quoteId ?? '' : '')
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
   useEffect(() => {
     const runId = searchParams.get('run')
     if (runId === null || runId === '' || bootRunRef.current === runId) return
@@ -315,6 +339,7 @@ export default function ResearchPage(): JSX.Element {
   return (
     <div className="research-page">
       <div className="research-topbar">
+        <UiModeSwitch disabled={conv.busy || conv.cardBusy !== null} conversationId={conv.convId ?? searchParams.get('conversation')} runId={tracker.activeRun?.id ?? searchParams.get('run')} />
         <select value={scenario} onChange={(e) => { setScenario(e.target.value as Scenario); setChartAsOf(null) }} aria-label="研究场景">
           <option value="spot">现货</option>
           <option value="perp">USDT 永续</option>
@@ -529,6 +554,7 @@ export default function ResearchPage(): JSX.Element {
                   result={result}
                   sseError={tracker.sseError}
                   sseConn={tracker.sseConn}
+                  degraded={tracker.degraded}
                   onCancel={() => void tracker.cancelRun()}
                   onRetry={() => void retryRun()}
                   footer={

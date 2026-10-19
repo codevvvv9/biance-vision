@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm'
 import { INTERVAL_MS } from 'biance-vision-brooks'
 import { getDb } from '../db.js'
 import { marketSnapshots } from '../models.js'
-import { getBlobStore } from '../knowledge/blobstore.js'
+import { currentBlobStoreKind, getBlobStore } from '../knowledge/blobstore.js'
 import { readCandles } from '../market/read.js'
 import { listFunding } from '../market/funding.js'
 import { getProvider } from '../market/providers/registry.js'
@@ -195,17 +195,38 @@ export async function createFrozenSnapshot(input: {
     return { snapshotId, asOf: input.asOf, symbol: input.symbol, marketType: input.marketType, perInterval, issues, inputPack, inputHash, inputPackKey }
 }
 
-/** 历史复盘读取：从（已冻结的）快照输入包还原窗口，不重查当前行情 */
-export async function loadSnapshotPack(snapshotId: string): Promise<FrozenSnapshot['inputPack'] | null> {
+/** 历史复盘读取：从（已冻结的）快照输入包还原窗口，不重查当前行情。
+ * 失败原因可区分（2026-10-19）：写入与读取的对象存储后端不一致、blob 丢失、哈希不匹配
+ * 一律打 warn 并显式返回，不再静默 null——本地磁盘/MinIO 双后端分裂曾因此难以定位。 */
+export type SnapshotPackResult =
+  | { status: 'ok'; pack: FrozenSnapshot['inputPack'] }
+  | { status: 'no_row' | 'no_key' | 'blob_missing' | 'hash_mismatch' }
+
+export async function loadSnapshotPack(snapshotId: string): Promise<SnapshotPackResult> {
   const db = getDb()
-  if (!db) return null
+  if (!db) return { status: 'no_row' }
   const rows = await db.select().from(marketSnapshots).where(eq(marketSnapshots.id, snapshotId)).limit(1)
   const row = rows[0]
-  if (!row || row.inputPackKey === null) return null
+  if (!row) {
+    log.warn('snapshot', '快照记录不存在', kv({ snapshotId }))
+    return { status: 'no_row' }
+  }
+  if (row.inputPackKey === null) return { status: 'no_key' } // 旧版本运行未持久化输入包，属历史数据
   const buf = await getBlobStore().get(row.inputPackKey)
-  if (buf === null) return null
+  if (buf === null) {
+    log.warn('snapshot', '输入包在当前对象存储后端读不到（写入与读取后端可能不一致）', kv({
+      snapshotId,
+      key: row.inputPackKey,
+      后端: currentBlobStoreKind(),
+    }))
+    return { status: 'blob_missing' }
+  }
   const parsed = JSON.parse(buf.toString('utf8')) as FrozenSnapshot['inputPack']
-  return createHash('sha256').update(JSON.stringify(parsed)).digest('hex') === row.inputHash ? parsed : null
+  if (createHash('sha256').update(JSON.stringify(parsed)).digest('hex') !== row.inputHash) {
+    log.warn('snapshot', '输入包哈希校验失败，拒绝使用', kv({ snapshotId, key: row.inputPackKey }))
+    return { status: 'hash_mismatch' }
+  }
+  return { status: 'ok', pack: parsed }
 }
 
 /** 历史范围读取（训练用）：按时间块升序拼接，不受单次 1500 根契约限制。

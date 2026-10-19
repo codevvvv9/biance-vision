@@ -6,10 +6,11 @@
  * - 案例窗：从库内已收盘 K 线构建「决策时可见上下文」（引擎只喂 knownAt<=atTime 的
  *   前缀），未来结果标签单独计算入 outcome 列——检索只返回 visibleContext。
  */
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, lte } from 'drizzle-orm'
 import { analyzeBrooks } from 'biance-vision-brooks'
+import { sql } from 'drizzle-orm'
 import { getDb } from '../db.js'
-import { caseWindows, ruleCards } from '../models.js'
+import { caseWindows, knowledgePublications, ruleCards } from '../models.js'
 import type { CaseWindowRow, RuleCardRow } from '../models.js'
 import { readCandles } from '../market/read.js'
 import { searchHybrid } from './retrieval.js'
@@ -159,6 +160,15 @@ export async function publishRuleCard(id: string): Promise<RuleCardRow> {
       .set({ status: 'published', version: nextVersion, publishedAt: new Date(), updatedAt: new Date() })
       .where(eq(ruleCards.id, id))
       .returning()
+    // 发布历史（迁移 0018，append-only）：快照 concept+content，as-of 重放依据——
+    // 同概念旧版本行归档/后续再发布都不影响历史时刻的检索结果（P0-4 复现性）
+    await tx.insert(knowledgePublications).values({
+      kind: 'rulecard',
+      refId: id,
+      version: nextVersion,
+      concept: card.concept,
+      contentSnapshot: { concept: card.concept, version: nextVersion, content: card.content },
+    })
     log.ok('knowledge', '规则卡发布', kv({ 概念: card.concept, 版本: nextVersion }))
     return updated[0]
   })
@@ -169,11 +179,42 @@ export async function deleteRuleCardDraft(id: string): Promise<void> {
   if (rows.length === 0) throw Object.assign(new Error('仅草稿可删除'), { statusCode: 400 })
 }
 
-/** 已发布规则卡 → 检索伪 chunk（概念名 + 卡片文本做词项） */
-export async function publishedRuleCards(): Promise<RuleCardRow[]> {
+/**
+ * 已发布规则卡 → 检索伪 chunk（概念名 + 卡片文本做词项）。
+ * asOf（P0-4，2026-10-19 审查修正）：走 knowledge_publications 发布历史重放——
+ * 取「每个卡片在 asOf 之前最后一次发布」的快照，与当前状态（新版归档旧版、下架）
+ * 完全解耦；此前按「当前 published 且 publishedAt<=asOf」过滤，旧版本被归档后
+ * 历史时刻即查不到（重放漂移）。缺省不过滤 = 最新版本语义（当前 published 行）。
+ */
+export async function publishedRuleCards(asOf?: Date): Promise<RuleCardRow[]> {
   const db = getDb()
   if (!db) return []
-  return db.select().from(ruleCards).where(eq(ruleCards.status, 'published'))
+  if (asOf === undefined) return db.select().from(ruleCards).where(eq(ruleCards.status, 'published'))
+  // 同概念新版=新行新 id：按 ref_id 去重会同时返回新旧两版（二轮审查复现「同概念 2 条」）。
+  // as-of 语义 = 每个概念在 asOf 前最后一次发布的版本（概念级生效版本，新旧版本互斥）
+  const res = (await db.execute(sql`
+    select distinct on (concept) concept, ref_id, version, content_snapshot, published_at
+    from knowledge_publications
+    where kind = 'rulecard' and event_type = 'publish' and published_at <= ${asOf.toISOString()}
+    order by concept, published_at desc
+  `)) as unknown as Record<string, unknown>[] | { rows: Record<string, unknown>[] }
+  const rows = (Array.isArray(res) ? res : res.rows) ?? []
+  return rows.map((r) => {
+    const snap = (r.content_snapshot ?? {}) as { concept?: string; version?: number; content?: Record<string, unknown> }
+    return {
+      id: String(r.ref_id),
+      concept: String(r.concept ?? snap.concept ?? ''),
+      status: 'published',
+      version: Number(r.version ?? snap.version ?? 1),
+      content: (snap.content ?? {}) as Record<string, unknown>,
+      citations: [],
+      draftedBy: 'llm',
+      createdBy: '',
+      createdAt: new Date(String(r.published_at)),
+      updatedAt: new Date(String(r.published_at)),
+      publishedAt: new Date(String(r.published_at)),
+    } as RuleCardRow
+  })
 }
 
 export function ruleCardToRetrievable(card: RuleCardRow): {
@@ -300,9 +341,15 @@ export async function listCaseWindows(publishedOnly = true): Promise<CaseWindowR
 }
 
 export async function setCasePublished(id: string, published: boolean): Promise<CaseWindowRow> {
-  const rows = await getDb()!
+  const db = getDb()!
+  // 发布历史（append-only，迁移 0019 补下架事件）：as-of 重放按「每个 ref 最后一条事件」
+  // 判断有效性——publish → 有效，unpublish → 该时刻起已下架；历史时刻结果不随后续
+  // 管理操作漂移。取消发布只影响最新语义（无 asOf）检索，不删历史。
+  await db.insert(knowledgePublications).values({ kind: 'case', refId: id, version: 1, eventType: published ? 'publish' : 'unpublish' })
+  const rows = await db
     .update(caseWindows)
-    .set({ published })
+    // 发布写真实发布时刻（最新语义的展示）；取消发布清空，重新发布再写
+    .set(published ? { published, publishedAt: new Date() } : { published, publishedAt: null })
     .where(eq(caseWindows.id, id))
     .returning()
   if (rows.length === 0) throw Object.assign(new Error('案例不存在'), { statusCode: 404 })
@@ -314,18 +361,57 @@ export async function getCaseWindow(id: string): Promise<CaseWindowRow | null> {
   return rows[0] ?? null
 }
 
-/** 案例检索视图：只含可见字段（outcome 由 admin 详情按需读取，绝不进检索结果） */
-export async function publishedCasesForRetrieval(): Promise<
+/**
+ * 案例检索视图：只含可见字段（outcome 由 admin 详情按需读取，绝不进检索结果）。
+ * asOf（P0-4，2026-10-19 审查修正）：走 knowledge_publications 历史重放——
+ * 「asOf 前最后一次发布」的案例集合，取消发布/重新发布不改变历史时刻结果
+ * （此前按当前 published 标志过滤，unpublish 会改写历史）。案例 visibleContext
+ * 构建后不可变，内容直接 join 现行行。缺省 = 当前 published（最新语义）。
+ */
+export async function publishedCasesForRetrieval(asOf?: Date): Promise<
   { id: string; docVersionId: string; text: string; title: string; annotation: string }[]
 > {
   const db = getDb()
   if (!db) return []
-  const rows = await db
-    .select()
-    .from(caseWindows)
-    .where(eq(caseWindows.published, true))
-    .orderBy(desc(caseWindows.atTime))
-    .limit(200)
+  let rows: CaseWindowRow[]
+  if (asOf === undefined) {
+    rows = await db
+      .select()
+      .from(caseWindows)
+      .where(eq(caseWindows.published, true))
+      .orderBy(desc(caseWindows.atTime))
+      .limit(200)
+  } else {
+    // 每个案例取 asOf 前最后一条事件：publish → 该时刻有效；unpublish → 已下架（二轮审查：
+    // 此前取消发布无历史事件，历史时刻无法判断下架状态）
+    const res = (await db.execute(sql`
+      select w.* from (
+        select distinct on (ref_id) ref_id, event_type
+        from knowledge_publications
+        where kind = 'case' and published_at <= ${asOf.toISOString()}
+        order by ref_id, published_at desc
+      ) p
+      join case_windows w on w.id = p.ref_id
+      where p.event_type = 'publish'
+      order by w.at_time desc
+      limit 200
+    `)) as unknown as Record<string, unknown>[] | { rows: Record<string, unknown>[] }
+    const raw = (Array.isArray(res) ? res : res.rows) ?? []
+    rows = raw.map((r) => ({
+      id: String(r.id),
+      symbol: String(r.symbol),
+      marketType: String(r.market_type) as CaseWindowRow['marketType'],
+      interval: String(r.interval),
+      atTime: Number(r.at_time),
+      visibleContext: r.visible_context as Record<string, unknown>,
+      outcome: r.outcome as Record<string, unknown>,
+      annotation: String(r.annotation ?? ''),
+      createdBy: String(r.created_by ?? ''),
+      published: true,
+      publishedAt: r.published_at === null || r.published_at === undefined ? null : new Date(String(r.published_at)),
+      createdAt: new Date(String(r.created_at)),
+    })) as CaseWindowRow[]
+  }
   return rows.map((r) => {
     const vc = r.visibleContext as Record<string, unknown>
     const text = `${r.symbol} ${r.interval} 案例：决策时状态 ${vc.regime ?? ''}，always-in ${vc.alwaysIn ?? ''}，信号 ${Array.isArray(vc.signalKinds) ? (vc.signalKinds as string[]).join('、') : ''}。标注：${r.annotation}`

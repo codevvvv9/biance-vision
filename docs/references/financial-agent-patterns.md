@@ -1,6 +1,7 @@
 # 金融 Agent 开源模式与交互模式参考
 
-> 核验日期：2026-09-30。本文只记录「借鉴什么模式、不借鉴什么」，
+> 核验日期：2026-09-30；2026-10-16 增补 AI+量化+Agent 增量调研（见 §1.1/§1.2/§1.3）。
+> 本文只记录「借鉴什么模式、不借鉴什么」，
 > 任何项目的市场假设、数据与回测表现都不能直接证明 Brooks 方法在币安任何品种/周期的效果。
 > 项目代码与文档会变动，落地时应固定所参考的 commit/依赖版本，并复核实际 API 与许可。
 
@@ -12,6 +13,45 @@
 | FinRobot | <https://github.com/AI4Finance-Foundation/FinRobot> | 确定性数值计算与模型解读分离：代码算指标，LLM 负责解释；金融研究任务的工具化拆分 | 其股票估值/财报逻辑不直接迁入价格行为；本项目所有数值（计划盈亏、费用、资金费率情景、仓位上限、EV、盈亏平衡胜率）一律由代码计算并挂 evidenceId；预测概率唯一来自统计模块，LLM 不生成或修改概率 |
 | Freqtrade | <https://github.com/freqtrade/freqtrade> 与 [lookahead-analysis 文档](https://docs.freqtrade.io/en/stable/lookahead-analysis/) | 回放方法论与前视偏差检查：对比完整数据运行与切片运行的结果差异；回放计入费用/滑点/成交约束的纪律 | Freqtrade 是自动交易机器人框架，本项目是研究 Agent、不自动下单；借鉴 lookahead-analysis 的方法思想，针对本 TypeScript 引擎实现等价的因果性检查（前缀一致性/逐根一致性/未收盘拒绝，见 `scripts/brooks-selftest.ts` 同风格校验脚本），不能直接引用其结果证明本引擎无泄漏 |
 | FinRL | <https://github.com/AI4Finance-Foundation/FinRL> | 训练/测试/交易样本按时间划分的纪律 | 不引入强化学习；本项目采用 dev/calibration/sealed-test 时间切分 + 重叠标签 purge/embargo；模型为 scikit-learn 分位数梯度提升，而非 RL 策略 |
+
+### 1.1 增量调研结论（2026-10-16，GitHub API 核验 stars/许可证/最近维护信号）
+
+本项目的固定八步流水线、受控三角色、pg-boss 持久化/恢复、数值由代码计算、概率唯一来自统计模块、证据冻结，整体上比多数热门项目更保守、更可审计。下列项目只作机制参考，不改变现有边界。
+
+| 项目 | 链接 | 核验信号（2026-10-16） | 借鉴点 | 本项目适配差异 |
+|---|---|---|---|---|
+| ai-hedge-fund | <https://github.com/virattt/ai-hedge-fund> | 64,020 stars；MIT；2026-10-02 push（v2 重写中） | 追加式哈希链账本、回测/纸交易共用同一 `advance()` 路径、T 日决策 T+1 执行、对账失败即 `BookMismatch` 停机、kill switch | 只借「审计留痕与宁停勿错」思想；不引入其信号→权重→执行链，不做自动下单；LLM 人格扮演不进入研究流水线 |
+| Microsoft Qlib | <https://github.com/microsoft/qlib> | 49,396 stars；MIT；2026-10-14 push | RollingGen 滚动任务生成、Point-in-Time 数据、qrun YAML 声明式工作流与 Record 挂载 | 不整体引入其二进制数据层与内置回测；可借滚动样本外任务切分思想落到 research-py/pg-boss |
+| Microsoft RD-Agent(Q) | <https://github.com/microsoft/RD-Agent> | 14,951 stars；MIT；2026-10-11 push；NeurIPS 2025 论文见 <https://arxiv.org/abs/2505.15155> | 「假设→代码实现→真实回测反馈→知识库沉淀」的自动研发循环；Docker 沙箱与最小权限执行姿态 | 目标是因子/模型研发而非研究叙事；论文收益口径不可外推；只借闭环状态机，不让 LLM 直接改生产规则 |
+| NautilusTrader | <https://github.com/nautechsystems/nautilus_trader> | 30,128 stars；LGPL-3.0；2026-10-16 push | `prob_fill_on_limit`、`prob_slippage`、`liquidity_consumption`、可复现 random_seed，把回测隐形乐观偏差显式参数化 | 只把 fill-model 数学借作回放敏感性维度；不引入 Rust/LGPL 引擎进对外服务 |
+| QuantConnect LEAN | <https://github.com/QuantConnect/Lean> | 22,030 stars；Apache-2.0；2026-10-15 push | Reality Modeling：`IFillModel` / `ISlippageModel` / `IFeeModel` 三接口显式分离 | 纯架构借鉴：回放报告应列出所用 fill/slippage/fee 模型版本；不引入 C# 引擎 |
+| MLflow | <https://github.com/mlflow/mlflow> | 28,408 stars；Apache-2.0；2026-10-16 push | 模型 Registry 的 alias（如 `@champion`）与 tag 门控、版本 lineage | 本项目保留自研注册表与金融门控；可借 alias/tag 语义做回滚与发布指针 |
+| PyWhy DoWhy | <https://github.com/py-why/dowhy> | 8,359 stars；MIT；2026-10-16 push | `refute` API：随机混杂、安慰剂处理、子集重估，把「发现因果/因子有效」变成可拒真检验 | 可作为 `scripts/causality-check.ts` 之外的统计反证补充；因果图假设错误时结论无效 |
+| mlfinpy | <https://github.com/baobach/mlfinpy> | 89 stars；MIT；2026-10-11 push | CPCV、三障碍标签、meta-labeling、样本唯一性权重、分数阶差分 | 社区很小，只移植 CPCV/uniqueness 算法并自写测试；不作为关键路径依赖 |
+
+### 1.2 明确排除或仅借思想
+
+| 项目 | 核验结果 | 结论 |
+|---|---|---|
+| vectorbt | <https://github.com/polakowo/vectorbt>；Apache-2.0 + Commons Clause；开源版维护模式 | 许可禁止「出售以该软件功能为主要价值的产品/服务」，商用风险高；不引入 |
+| mlfinlab | <https://github.com/hudson-and-thames/mlfinlab>；All Rights Reserved、非开源，2023-10 后停更 | 仅可读论文/思想；商用需购买许可；用 mlfinpy 算法替代 |
+| backtrader | <https://github.com/mementum/backtrader>；GPL-3.0；2024-08 后实质停更 | GPL 传染性与停更风险；不引入 |
+| Hummingbot | <https://github.com/hummingbot/hummingbot>；Apache-2.0、活跃 | 强项是交易所实盘连接与做市执行，与「不自动交易」边界冲突；无增量 |
+| CryptoTrade | <https://github.com/Xtra-Computing/CryptoTrade>；CC BY-NC-SA；2024-12 停更 | 非商业许可，只读链上/链下双通道证据组织思想，不搬代码或数据 |
+| FinMem / FinAgent | <https://github.com/pipiku915/FinMem-LLM-StockTrading>（MIT，2024 停更）；<https://github.com/DVampire/FinAgent>（MIT，2024 停更） | 论文原型，只借分层记忆/双层反思/多模态证据组织；自报收益不作证据 |
+
+### 1.3 Hugging Face / 评测资源（按本项目用途筛选）
+
+| 资源 | 链接 | 类型与许可 | 借鉴点 | 使用边界 |
+|---|---|---|---|---|
+| FinQA / ConvFinQA | <https://github.com/czyssrs/FinQA>；<https://github.com/czyssrs/ConvFinQA> | 数据集；MIT | gold program + `exe_ans` 可校验「代码数值计算链路」；ConvFinQA 多轮 turn 对齐追问场景 | 英文财报领域，不证明币安能力；本地 dev 集即可闭环 |
+| FinanceBench | <https://huggingface.co/datasets/PatronusAI/financebench> | 数据集；CC-BY-NC-4.0 | 「答案 + evidence_text + doc_name + evidence_page_num」协议可直接照抄为引用真实性评测格式 | 非商用；只借协议，用自有 Brooks/币安资料重建中文集 |
+| FinBen / PIXIU | <https://github.com/The-FinAI/FinBen>；<https://github.com/The-FinAI/PIXIU> | 评测框架；代码 MIT，子数据集各自许可 | lm-eval 式任务注册、Missing Ratio、中文 ICE-PIXIU；其股票预测任务可作「LLM 直接预测效果差」的内部对照 | 逐数据集核对许可；榜单分数不作投资能力证据 |
+| FinGPT | <https://github.com/AI4Finance-Foundation/FinGPT>；<https://huggingface.co/FinGPT> | 框架/模型/数据；MIT | 数据管道分层、低成本 LoRA、中文市场与新闻标题打标数据 | 模型较旧；不用于生成概率或方向结论 |
+| Fin-R1 | <https://huggingface.co/SUFE-AIFLM-Lab/Fin-R1>；<https://github.com/SUFE-AIFLM-Lab/Fin-R1> | 中文金融推理模型；模型 Apache-2.0；Fin-R1-Data 单独许可未核验（HF 401） | 「规则匹配先过滤 + 大模型双轮打分」可用于规则卡/RAG 语料质控 | 只做推理解释基线，不做涨跌预测；数据集授权需另核 |
+| Qwen DianJin / Fin-PRM | <https://github.com/aliyun/qwen-dianjin>；<https://huggingface.co/DianJin> | 中文金融模型族；仓库 MIT，DianJin-R1-7B MIT；DianJin-RED CC-BY-NC | Fin-PRM 过程奖励模型提供「逐步骤校验」思路；CFLUE 可作中文理解回归 | 校验器仍以代码为准；NC 数据不商用 |
+| FinEval | <https://github.com/SUFE-AIFLM-Lab/FinEval> | 中文金融选择题；Apache-2.0 | 知识面回归测试（换模型/提示词后确认金融常识未退化） | 选择题不考数值与引用，不能当研究能力证据 |
+| RAGTruth / CRUD-RAG | <https://github.com/ParticleMedia/RAGTruth>；<https://github.com/IAAR-Shanghai/CRUD_RAG> | 幻觉评测；RAGTruth MIT；CRUD-RAG 未声明许可证 | 词级幻觉标注与中文 RAG 消融设计，可用于训练/评估引用幻觉守门员 | CRUD-RAG 只复现评测设计；RAGTruth 英文通用域，需自建中文金融标注 |
 
 ## 2. 公开产品交互模式研究
 

@@ -800,6 +800,8 @@ export const conversationMessages = pgTable(
     runId: text('run_id'),
     /** 确认卡/补全卡：{ kind:'confirm_position'|'completion', draft } */
     card: jsonb('card').$type<Record<string, unknown>>(),
+    /** 本条回复实际使用的提示词版本（P0-6 审计）：[{name,scene,version,templateId}] */
+    promptRefs: jsonb('prompt_refs').$type<Record<string, unknown>[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('conversation_messages_conv_idx').on(table.conversationId, table.createdAt)],
@@ -824,7 +826,7 @@ export type NewConversationRow = typeof conversations.$inferInsert
 export type ConversationMessageRow = typeof conversationMessages.$inferSelect
 export type NewConversationMessageRow = typeof conversationMessages.$inferInsert
 export type RunEventRow = typeof runEvents.$inferSelect
-export type NewRunEventRow = typeof runEvents.$inferInsert
+export type NewRunEventRow = typeof runEvents.$inferSelect
 
 // ---------------------------------------------------------------------------
 // 规则卡层与案例层（docs/specs/knowledge-rag.md 三资料层的第 2/3 层）：
@@ -861,6 +863,35 @@ export const ruleCards = pgTable(
   (table) => [index('rule_cards_concept_idx').on(table.concept, table.status)],
 )
 
+/**
+ * 知识发布历史（迁移 0018，append-only）：规则卡发布时快照 concept+content、案例发布时
+ * 记 ref。as-of 检索按「每个 ref 在 asOf 前最后一次发布」重放——与当前状态
+ * （归档/下架/新版覆盖）解耦，历史重放结果不随后续管理操作漂移（P0-4 复现性）。
+ */
+export const knowledgePublications = pgTable(
+  'knowledge_publications',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    /** rulecard | case */
+    kind: text('kind').notNull(),
+    /** publish | unpublish（迁移 0019：案例下架记事件，as-of 按最后事件判断有效性） */
+    eventType: text('event_type').notNull().default('publish'),
+    refId: text('ref_id').notNull(),
+    version: integer('version').notNull().default(1),
+    /** 规则卡快照字段（案例为 null：案例 visibleContext 构建后不可变） */
+    concept: text('concept'),
+    contentSnapshot: jsonb('content_snapshot').$type<Record<string, unknown> | null>(),
+    publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('knowledge_publications_kind_published_idx').on(table.kind, table.publishedAt),
+    index('knowledge_publications_ref_idx').on(table.kind, table.refId, table.publishedAt),
+  ],
+)
+
 /** 案例窗：visibleContext=决策时可见（检索返回）；outcome=未来结果（仅 admin 详情，不参与检索） */
 export const caseWindows = pgTable(
   'case_windows',
@@ -880,6 +911,8 @@ export const caseWindows = pgTable(
     /** 人工结构标注 */
     annotation: text('annotation').notNull().default(''),
     published: boolean('published').notNull().default(false),
+    /** 发布时刻（P0-4 as-of 过滤：run 冻结知识版本后发布的案例不进入该 run 检索；取消发布置空） */
+    publishedAt: timestamp('published_at', { withTimezone: true }),
     createdBy: text('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -887,6 +920,54 @@ export const caseWindows = pgTable(
 )
 
 export type RuleCardRow = typeof ruleCards.$inferSelect
+
+// ---------------------------------------------------------------------------
+// 提示词模板注册表（P0-6，vertical-agent-architecture.md §4.B）：
+// draft → published（不可变，WHERE status='draft' 防写穿）→ retired；
+// 生效指针 (name, scene) 复合键（scene='' 为全局）；rollback=指针切回历史 published。
+// run 创建时终解析冻结进 frozenConfig.raw.prompts；执行阶段只读冻结内容（红线 #2）。
+// ---------------------------------------------------------------------------
+
+/** 提示词模板版本：同 (name,scene) 内 version 递增；published 行永久保留可解析 */
+export const promptTemplates = pgTable(
+  'prompt_templates',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    /** 模板名（PROMPT_NAMES 五个之一；场景作用域见 scene） */
+    name: text('name').notNull(),
+    /** 场景作用域（''=全局生效；P1-1 场景注册表启用差异化模板） */
+    scene: text('scene').notNull().default(''),
+    /** draft | published | retired */
+    status: text('status').notNull().default('draft'),
+    /** 同 (name,scene) 内递增 */
+    version: integer('version').notNull().default(1),
+    content: text('content').notNull(),
+    note: text('note').notNull().default(''),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('prompt_templates_name_idx').on(table.name, table.scene, table.version)],
+)
+
+/** 生效指针：(name,scene) → published 模板 id；与发布同事务切换 */
+export const promptTemplatePointers = pgTable(
+  'prompt_template_pointers',
+  {
+    name: text('name').notNull(),
+    scene: text('scene').notNull().default(''),
+    publishedId: text('published_id').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.name, table.scene] })],
+)
+
+export type PromptTemplateRow = typeof promptTemplates.$inferSelect
+export type NewPromptTemplateRow = typeof promptTemplates.$inferInsert
+export type PromptTemplatePointerRow = typeof promptTemplatePointers.$inferSelect
 export type NewRuleCardRow = typeof ruleCards.$inferInsert
 export type CaseWindowRow = typeof caseWindows.$inferSelect
 export type NewCaseWindowRow = typeof caseWindows.$inferInsert

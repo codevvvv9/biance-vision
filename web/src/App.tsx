@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import ErrorBoundary from './components/ErrorBoundary'
 import Header from './components/Header'
 import TickerTape from './components/TickerTape'
@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard'
 // 登录/注册是未登录用户的第一屏，保持静态 import（不进懒加载列表）
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import { authReturnTo, authUrl, researchUiMode } from './research/uiMode'
 
 // 重页面全部懒加载：登录后的首屏只有大盘，K 线/研究/价格行为按需取 chunk
 const AdminApp = lazy(() => import('./admin'))
@@ -19,6 +20,7 @@ const AlertsPage = lazy(() => import('./pages/AlertsPage'))
 const BrooksPage = lazy(() => import('./pages/BrooksPage'))
 const MoversPage = lazy(() => import('./pages/MoversPage'))
 const ResearchPage = lazy(() => import('./research/ResearchPage'))
+const WorkbenchPage = lazy(() => import('./research/WorkbenchPage'))
 // 悬浮 AI 助手懒加载：它经 RunBubble→MiniMarkdown 拉进 react-markdown/katex 全家桶，
 // 静态挂载会把 433KB 的 markdown chunk 拖进首屏关键路径；后台异步加载即可
 const AiAssistant = lazy(() => import('./ai/AiAssistant'))
@@ -115,12 +117,15 @@ function AuthedApp(): JSX.Element {
 
 function Shell(): JSX.Element {
   const { user, loading } = useAuth()
+  const location = useLocation()
+  const dev = location.pathname === '/research' && researchUiMode(location.search) === 'dev'
+  const workbench = <ErrorBoundary><Suspense fallback={<PageFallback />}><WorkbenchPage key={user?.username ?? 'guest'} /></Suspense></ErrorBoundary>
 
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <>
       <div className="bg-fx" aria-hidden>
         <div className="bg-grid" />
-        {user ? <AuroraBg /> : null}
+        {user && !dev ? <AuroraBg /> : null}
         <div className="bg-glow glow-a" />
         <div className="bg-glow glow-b" />
       </div>
@@ -128,6 +133,10 @@ function Shell(): JSX.Element {
         <div className="auth-wrap">
           <div className="auth-loading">正在验证登录状态…</div>
         </div>
+      ) : dev ? (
+        user ? <MarketProvider>{workbench}<Toasts /></MarketProvider> : workbench
+      ) : user && (location.pathname === '/login' || location.pathname === '/register') ? (
+        <Navigate to={authReturnTo(location.search, location.state as { from?: string } | null)} replace />
       ) : user ? (
         <AuthedApp />
       ) : (
@@ -135,11 +144,11 @@ function Shell(): JSX.Element {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to={authUrl('/login', `${location.pathname}${location.search}${location.hash}`, researchUiMode(location.search))} replace />} />
           </Routes>
         </main>
       )}
-    </BrowserRouter>
+    </>
   )
 }
 
@@ -147,7 +156,7 @@ export default function App(): JSX.Element {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Shell />
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Shell /></BrowserRouter>
       </AuthProvider>
     </ErrorBoundary>
   )

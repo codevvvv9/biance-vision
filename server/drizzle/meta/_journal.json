@@ -113,6 +113,34 @@
       "when": 1792108860000,
       "tag": "0015_users_chat_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0016_as_of_knowledge_layers",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792195260000,
+      "tag": "0017_prompt_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792380000000,
+      "tag": "0018_knowledge_publications",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792386600000,
+      "tag": "0019_publication_events",
+      "breakpoints": true
     }
   ]
 }

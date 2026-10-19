@@ -214,6 +214,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
             result={tracker.result}
             sseError={tracker.sseError}
             sseConn={tracker.sseConn}
+            degraded={tracker.degraded}
             onCancel={() => void tracker.cancelRun()}
             onRetry={() => void retryRun()}
             footer={

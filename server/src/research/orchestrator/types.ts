@@ -95,12 +95,16 @@ export interface RunContext {
   productPayload: Record<string, unknown> | null
   /** 分析者/反证的声明 */
   claims: { text: string; kind: 'fact' | 'interpretation'; evidenceIds: string[] }[]
-  counterClaims: { text: string; evidenceIds: string[] }[]
+  /** origin（P0-5）：'llm'=LLM 反证归纳产出（降级发布时剔除）；'template'=代码/规则拼装（保留） */
+  counterClaims: { text: string; evidenceIds: string[]; origin?: 'template' | 'llm' }[]
   /** 校验与发布 */
   decision: ResearchDecision | null
   result: ResearchResult | null
   /** 校验失败进入修复轮时，由流水线注入的问题清单（product_analysis 修复轮消费） */
   validationFeedback: string[] | null
+  /** P0-5 受控降级：修复预算耗尽后置位——publish 只保留代码计算内容并标注 degraded；
+   *  终态为 published(degraded) 而非 failed */
+  degradedPublish: { reasons: string[] } | undefined
   /** 用量计数（预算护栏；运行时预算在 pipeline 步骤边界强制；costUsd 需单价配置才累计） */
   usage: { llmCalls: number; tokens: number; searchCalls: number; toolCalls: number; costUsd: number }
   /** 运行开始时刻（运行时预算强制用） */

@@ -40,6 +40,21 @@ export interface ResearchCandles {
   fallbackReason: string | null
 }
 
+/** 冻结输入包不可用原因（服务端 /runs/:id/candles 的 reason 契约）→ 展示文案。
+ * 未知原因回退旧文案；不再把「后端不一致/缺周期」混为一谈（2026-10-19 双后端分裂教训） */
+const PACK_REASON_TEXT: Record<string, string> = {
+  no_snapshot: '该运行无快照记录（旧版本数据）',
+  no_key: '该运行未持久化输入包（旧版本运行）',
+  blob_missing: '输入包在当前对象存储后端读不到（写入与读取后端可能不一致）',
+  hash_mismatch: '输入包哈希校验失败，已拒绝使用',
+  no_interval: '输入包未冻结该周期（非原始输入，不可复现）',
+}
+
+const packFallbackText = (reason?: string): string =>
+  reason !== undefined && PACK_REASON_TEXT[reason] !== undefined
+    ? PACK_REASON_TEXT[reason]
+    : '冻结输入包不存在或缺该周期（非原始输入，不可复现）'
+
 export function useResearchCandles(
   symbol: string,
   marketType: 'spot' | 'usdm_perp',
@@ -78,11 +93,11 @@ export function useResearchCandles(
       // 优先读 run 的冻结输入包（snapshot:true）；不可读时回退实时库但必须显式标记来源（评审 R5）
       if (runId !== undefined && runId !== null && runId !== '') {
         try {
-          const r = await api<{ snapshot: boolean; candles: CandleRowDto[] }>(
+          const r = await api<{ snapshot: boolean; candles: CandleRowDto[]; reason?: string }>(
             `/research/runs/${runId}/candles?${new URLSearchParams({ interval, priceType: 'trade' }).toString()}`,
           )
           if (r.snapshot && r.candles.length > 0) return { rows: mapRows(r.candles), source: 'snapshot', fallbackReason: null }
-          return { rows: await fetchLive(), source: 'live', fallbackReason: '冻结输入包不存在或缺该周期（非原始输入，不可复现）' }
+          return { rows: await fetchLive(), source: 'live', fallbackReason: packFallbackText(r.reason) }
         } catch (e) {
           return { rows: await fetchLive(), source: 'live', fallbackReason: `冻结输入包读取失败（${(e as Error).message}），当前为实时库重建数据` }
         }

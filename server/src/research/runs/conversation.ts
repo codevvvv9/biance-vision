@@ -14,6 +14,7 @@ import type { ConversationMessageRow, ConversationRow } from '../../models.js'
 import { createRun } from './store.js'
 import { enqueueResearchRun } from './jobs.js'
 import { classifyIntentOrchestrated } from './intent.js'
+import { assembleTrustedReply } from './replyAssembler.js'
 import { kv, log } from '../../logger.js'
 
 export type Intent = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system'
@@ -27,7 +28,7 @@ const WEEK_HORIZON_RE = /一周|下周|1\s*周|7\s*天|\b1w\b/i
 export function classifyIntent(text: string): Intent {
   if (/什么是|解释|概念|术语|意思|怎么理解|定义/.test(text)) return 'concept'
   if (/复盘|历史|当时|回放|如果当时/.test(text)) return 'replay'
-  if (/新闻|消息面|为什么涨|为什么跌|归因/.test(text)) return 'news'
+  if (/新闻|消息面|为什么涨|为什么跌|为什么大涨|为什么大跌|归因/.test(text)) return 'news'
   // 「预测 BTCUSDT 一周涨跌」→ 方向研究（return_positive 模型）：不得因「涨跌」
   // 关键字落入事件合约研究（1w 不是其产品期限，也没有可引用报价）
   if (DIRECTION_RESEARCH_RE.test(text) && WEEK_HORIZON_RE.test(text)) return 'structure'
@@ -230,6 +231,8 @@ async function appendMessage(input: {
   intent?: Intent | null
   runId?: string | null
   card?: Record<string, unknown> | null
+  /** P0-6 审计：本条回复使用的提示词版本（注册表解析结果） */
+  promptRefs?: { name: string; scene: string; version: number | null; templateId: string | null }[]
 }): Promise<ConversationMessageRow> {
   const rows = await getDb()!
     .insert(conversationMessages)
@@ -240,6 +243,7 @@ async function appendMessage(input: {
       intent: input.intent ?? null,
       runId: input.runId ?? null,
       card: input.card ?? null,
+      promptRefs: input.promptRefs ?? null,
     })
     .returning()
   await getDb()!.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, input.conversationId))
@@ -441,14 +445,11 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
 
   // 寒暄/能力询问（LLM 分类为 system；确定性分类无此能力）：直接回复引导，不启动研究
   if (intent === 'system') {
+    // P0-2 统一可信入口：全部意图回复经组装器（内容只来自 {事实, 证据, 配置文案}）
+    const reply = assembleTrustedReply({ key: 'system_intro' })
     const msg = await appendMessage({
       conversationId: conv.id, role: 'assistant', intent,
-      content:
-        '我是基于 Brooks 价格行为的研究助手，可以这样问我：\n' +
-        '- 概念：「什么是内包线」「什么是高潮反转」\n' +
-        '- 结构与方向：「BTC 现在结构如何」「ETHUSDT 一小时能买吗」\n' +
-        '- 持仓研究：先录入持仓，再说「用我的持仓分析」\n' +
-        '- 历史复盘：「复盘昨天 BTC 的走势」',
+      content: reply.content,
     })
     return { message: msg, runId: null, needCompletion: [] }
   }
@@ -460,7 +461,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     if (!isSearchEnabled()) {
       const msg = await appendMessage({
         conversationId: conv.id, role: 'assistant', intent,
-        content: '新闻归因需要联网搜索能力（Brave Search 等），当前未配置：无法给出消息面归因，也不编造新闻。请管理员在 Agent 配置中启用 search 能力后重试。',
+        content: assembleTrustedReply({ key: 'news_unconfigured' }).content,
       })
       return { message: msg, runId: null, needCompletion: [] }
     }
@@ -468,18 +469,20 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     const items = await searchAndVerify([`${newsSymbol} 最新消息 涨跌 原因`, text.slice(0, 80)])
     let content: string
     if (items.length === 0) {
-      content = '联网搜索未获得可通过原页核验的证据（域名白名单/重定向/超时/体积限制）：不编造新闻。可稍后重试，或让管理员检查 search 能力的白名单配置。'
-    } else {
+      const msg = await appendMessage({ conversationId: conv.id, role: 'assistant', intent, content: assembleTrustedReply({ key: 'news_empty' }).content })
+      return { message: msg, runId: null, needCompletion: [] }
+    }
+    {
       const block = items.map((w, i) => `[${i + 1}] ${w.title}（${w.url}）\n${w.pageText.slice(0, 500)}`).join('\n\n')
       const { resolveLlmClient } = await import('../llm.js')
+      const { resolvePromptTemplate } = await import('../prompts.js')
+      const newsPrompt = await resolvePromptTemplate('news-attribution')
       const llm = resolveLlmClient()
       let summarized = ''
       if (llm !== null) {
         try {
           const out = await llm.complete({
-            system:
-              '你是加密市场新闻归因助手。只基于给定的已核验网页内容回答用户问题（中文，≤250 字），' +
-              '结尾用 [1][2] 标注引用编号；网页内容与问题无关就明说未找到相关归因，不得使用外部知识编造。',
+            system: newsPrompt.content,
             user: `问题：${text}\n\n已核验网页：\n${block}`,
             maxTokens: 600,
             timeoutMs: 20_000,
@@ -490,14 +493,28 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
         }
       }
       const sources = `来源（已核验原页）：\n${items.map((w, i) => `[${i + 1}] ${w.title} — ${w.url}`).join('\n')}`
-      content =
-        summarized !== ''
-          ? `${summarized}\n\n${sources}`
-          : `核验通过的消息来源（chat 能力未配置或调用失败，给出原文摘录）：\n` +
-            items.map((w, i) => `[${i + 1}] ${w.title} — ${w.url}\n${w.snippet !== '' ? w.snippet : w.pageText.slice(0, 150)}`).join('\n\n')
+      const excerptFallback =
+        `核验通过的消息来源（chat 能力未配置或调用失败，给出原文摘录）：\n` +
+        items.map((w, i) => `[${i + 1}] ${w.title} — ${w.url}\n${w.snippet !== '' ? w.snippet : w.pageText.slice(0, 150)}`).join('\n\n')
+      // P0-2：LLM 摘要经组装器校验（[k] 引用 ∈ 来源数；概率红线；句级数字白名单——
+      // 证据=发送给模型的同一份正文（block 同构：标题+URL+pageText 前 500 字），
+      // 白名单外数字的句子剔除；摘录模式走 sections 证据豁免通道
+      const reply = assembleTrustedReply({
+        key: 'news_body',
+        llmText: summarized !== '' ? summarized : null,
+        llmFallback: excerptFallback,
+        sourceCount: items.length,
+        sections: summarized !== '' ? [sources] : [sources, excerptFallback],
+        evidenceTexts: items.map((w, i) => `[${i + 1}] ${w.title}（${w.url}）\n${w.pageText.slice(0, 500)}`),
+      })
+      if (reply.degraded) log.warn('conversation', '回复组装降级（校验失败回退安全形态）', kv({ 会话: conv.id.slice(0, 8), 检查: reply.checkNotes.join(';').slice(0, 120) }))
+      content = reply.content
+      const msg = await appendMessage({
+        conversationId: conv.id, role: 'assistant', intent, content,
+        promptRefs: [{ name: newsPrompt.name, scene: newsPrompt.scene, version: newsPrompt.version, templateId: newsPrompt.templateId }],
+      })
+      return { message: msg, runId: null, needCompletion: [] }
     }
-    const msg = await appendMessage({ conversationId: conv.id, role: 'assistant', intent, content })
-    return { message: msg, runId: null, needCompletion: [] }
   }
 
   // 概念问答（#6 修复）：直接 RAG + 反证作答（可选用 LLM 组织解释），不启动行情八步流程
@@ -508,11 +525,13 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     const evidenceBlock = support.hits.map((h) => `【${h.docTitle}${h.chunk.pageNo !== null ? ` 第${h.chunk.pageNo}页` : ''}】${h.chunk.text.slice(0, 300)}`).join('\n')
     let answer = ''
     const { resolveLlmClient, parseClaimLines } = await import('../llm.js')
+    const { resolvePromptTemplate } = await import('../prompts.js')
+    const conceptPrompt = await resolvePromptTemplate('concept-teaching')
     const llm = resolveLlmClient()
     if (llm !== null) {
       try {
         const out = await llm.complete({
-          system: '你是 Brooks 价格行为教学者。基于给出的资料片段回答概念问题（中文，≤200 字），末尾用「注意：」给一条常见误解或反例。只使用资料内容，没有就明说资料未覆盖。',
+          system: conceptPrompt.content,
           user: `问题：${text}\n\n资料：\n${evidenceBlock || '（知识库无命中）'}\n\n反证片段：\n${counter.hits.map((h) => h.chunk.text.slice(0, 150)).join('\n')}`,
           maxTokens: 500,
         })
@@ -521,13 +540,25 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
         answer = `（LLM 解释失败，退回资料原文：${(err as Error).message.slice(0, 80)}）`
       }
     }
-    if (answer === '' && support.hits.length > 0) {
-      answer = `资料依据：\n${evidenceBlock}`
-    }
-    if (support.hits.length === 0) {
-      answer = '知识库未命中相关资料：不编造解释。可在知识库导入 Brooks 官方术语表/手册后重试。'
-    }
-    const msg = await appendMessage({ conversationId: conv.id, role: 'assistant', intent, content: answer })
+    // P0-2：解释正文经组装器（句级数字白名单：证据=支持+反证知识块正文，白名单外
+    // 数字的句子剔除；未命中知识库走安全模板，不编造）
+    const reply =
+      support.hits.length === 0
+        ? assembleTrustedReply({ key: 'concept_no_hit' })
+        : assembleTrustedReply({
+            key: 'concept_body',
+            // LLM 解释作为 llmText（可被概率红线/数字白名单拒绝）；资料原文走 sections
+            // 证据豁免通道（书摘常含「概率/小数」等知识性表述，不属于伪造概率）
+            llmText: answer !== '' ? answer : null,
+            llmFallback: `资料依据：\n${evidenceBlock}`,
+            sections: answer !== '' ? [] : [`资料依据：\n${evidenceBlock}`],
+            evidenceTexts: [...support.hits.map((h) => h.chunk.text), ...counter.hits.map((h) => h.chunk.text)],
+          })
+    if (reply.degraded) log.warn('conversation', '回复组装降级（概念问答回退）', kv({ 会话: conv.id.slice(0, 8), 检查: reply.checkNotes.join(';').slice(0, 120) }))
+    const msg = await appendMessage({
+      conversationId: conv.id, role: 'assistant', intent, content: reply.content,
+      promptRefs: [{ name: conceptPrompt.name, scene: conceptPrompt.scene, version: conceptPrompt.version, templateId: conceptPrompt.templateId }],
+    })
     return { message: msg, runId: null, needCompletion: [] }
   }
 
@@ -601,12 +632,16 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     if (merged.symbol === undefined) merged.symbol = symbol
     const missing = missingPositionFields(merged)
     await getDb()!.update(conversations).set({ context: { ...ctx, draft: merged }, updatedAt: new Date() }).where(eq(conversations.id, conv.id))
+    const draftReply =
+      missing.length === 0
+        ? assembleTrustedReply({ key: 'draft_complete' })
+        : assembleTrustedReply({
+            key: 'draft_pending',
+            facts: { missingLabels: missing.map((k) => POSITION_FIELD_LABEL[k] ?? k).join('、') },
+          })
     const msg = await appendMessage({
       conversationId: conv.id, role: 'assistant', intent,
-      content:
-        missing.length === 0
-          ? '持仓信息已齐，请核对确认卡（确认后才会计入你的持仓；重复确认不会重复建仓）。'
-          : `已记录持仓草稿，还缺：${missing.map((k) => POSITION_FIELD_LABEL[k] ?? k).join('、')}。请补充（例如「入场 60000，最多亏 200」），或回复「取消」丢弃草稿。`,
+      content: draftReply.content,
       card: { kind: 'confirm_position', draft: merged as Record<string, unknown>, missingFields: missing, complete: missing.length === 0 },
     })
     return { message: msg, runId: null, needCompletion: missing.length === 0 ? ['confirm_position'] : missing.map((k) => `position_${k}`) }
@@ -624,10 +659,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     if (parsed === 'invalid' || parsed === undefined) {
       const msg = await appendMessage({
         conversationId: conv.id, role: 'assistant', intent,
-        content:
-          parsed === 'invalid'
-            ? '复盘日期无法解析（或指向未来）：请给出有效日期（如「复盘 2026-10-01 的 BTC」）或相对时间（「昨天」「前天」）。不使用当前行情冒充历史复盘。'
-            : '复盘需要明确的历史时点：请给出日期（如「复盘 2026-10-01 的 BTC」）或相对时间（「昨天」「前天」）。不使用当前行情冒充历史复盘。',
+        content: assembleTrustedReply({ key: parsed === 'invalid' ? 'replay_invalid' : 'replay_missing' }).content,
       })
       return { message: msg, runId: null, needCompletion: ['replay_asOf'] }
     }
@@ -684,18 +716,31 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
       /* 附答失败不影响主研究流程 */
     }
   }
+  const startedReply = assembleTrustedReply({
+    key: 'run_started',
+    facts: {
+      intentLabel: intentLabel[intent],
+      symbol,
+      horizon,
+      asOfNote,
+      directionNote,
+      queueNote: queued ? '' : '（执行队列暂不可用，运行已建档待重投）',
+      // 附加问题附答为证据摘录（数字来自冻结知识片段，随槽位进入可信来源）
+      subAnswer,
+    },
+    notes: contextNotes,
+  })
+  if (startedReply.degraded) log.warn('conversation', '回复组装降级（启动研究）', kv({ 会话: conv.id.slice(0, 8), 检查: startedReply.checkNotes.join(';').slice(0, 120) }))
   const msg = await appendMessage({
     conversationId: conv.id,
     role: 'assistant',
     intent,
     runId: run.id,
-    content:
-      `按「${intentLabel[intent]} · ${symbol} · ${horizon}」${asOfNote}${directionNote}启动研究：` +
-      `已冻结行情输入包与配置版本，结构、检索、计算与校验完成后给出结论与证据。` +
-      (contextNotes.length > 0 ? `${contextNotes.join('；')}。` : '') +
-      (queued ? '' : '（执行队列暂不可用，运行已建档待重投）') +
-      subAnswer +
-      `可继续追问（如「换成 ETHUSDT」「改成 1 小时」「现在呢」）。`,
+    promptRefs:
+      orch.promptRef !== null
+        ? [{ name: orch.promptRef.name, scene: '', version: orch.promptRef.version, templateId: orch.promptRef.templateId }]
+        : undefined,
+    content: startedReply.content,
   })
   log.ok('conversation', '消息路由', kv({ 会话: conv.id.slice(0, 8), 意图: intent, 产品: product, run: run.id.slice(0, 8) }))
   return { message: msg, runId: run.id, needCompletion: [] }

@@ -720,3 +720,16 @@
   max-height: 260px;
   overflow: auto;
 }
+.ui-mode-switch { color:var(--cyan); font-size:12px; text-decoration:none; padding:7px 10px; border:1px solid var(--line-2); border-radius:7px; white-space:nowrap; }
+
+/* P0-5 受控降级：结果卡降级徽章与运行气泡降级横幅（琥珀，对齐 .stale-tag） */
+.mode-tag.degraded-tag {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.run-bubble .degraded-note {
+  margin: 6px 0 0;
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.5;
+}

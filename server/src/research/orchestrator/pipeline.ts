@@ -111,6 +111,7 @@ export async function runPipeline(
         throw await abortRun(name, `budget_exceeded: 估算费用 $${ctx.usage.costUsd.toFixed(4)} 超过上限 $${budgets.maxCostUsd}`)
       }
     }
+    const stageStartAt = Date.now()
     try {
       ctx.validationFeedback = validationFeedback
       await runStage(name, validationFeedback !== null && REPAIR_LOOP.includes(name))
@@ -128,6 +129,49 @@ export async function runPipeline(
         validationFeedback = err.issues
         // 回到修复环起点（product_analysis），带入问题清单重跑
         i = STAGE_NAMES.indexOf(REPAIR_LOOP[0])
+        continue
+      }
+      // P0-5 受控降级（2026-10-19 审查修正）：修复预算耗尽后不无条件降级——
+      // 只有「剔除 LLM 归纳反证后能通过完整重校验」的情形才允许降级发布（叙述内容不可信
+      // 可剔除，硬红线不可绕过：数值伪造/版本不一致/行情质量门控/决策完整性/事件动作违规
+      // 等剔除反证后仍会拒绝 → 阻断为 failed，不得带病发布决策与概率）。
+      // 预算红线（budget_exceeded）不降级：那是资源滥用防护，仍走 failed。
+      if (err instanceof ValidationRejected && name === 'validate') {
+        const removedLlmClaims = ctx.counterClaims.filter((c) => c.origin === 'llm').length
+        ctx.counterClaims = ctx.counterClaims.filter((c) => c.origin !== 'llm')
+        let recheckErr: ValidationRejected | null = null
+        try {
+          await stageByName.get('validate')!.run(ctx)
+        } catch (re) {
+          if (re instanceof ValidationRejected) recheckErr = re
+          else throw re
+        }
+        if (recheckErr !== null) {
+          // 剔除后仍不通过：不可降级问题 → 阻断（与 abortRun 同路径，含租约丢失容忍）
+          const blockMsg = `validation_blocked: 存在不可降级的校验问题（修复耗尽仍拒绝）：${recheckErr.issues.join('; ')}`
+          try {
+            await store.stepFailed(ctx.runId, 'validate', Date.now(), blockMsg, options.leaseOwner)
+            emit('run_failed', 'validate', { error: blockMsg })
+            await store.fail(ctx.runId, blockMsg, options.leaseOwner)
+          } catch (writeErr) {
+            if (!(writeErr instanceof LeaseLostError)) throw writeErr
+          }
+          throw new Error(blockMsg)
+        }
+        ctx.degradedPublish = { reasons: err.issues }
+        validationFeedback = null
+        emit('task_degraded', name, {
+          code: 'repair_exhausted',
+          handling: 'degraded_publish',
+          reason: `修复预算耗尽（${maxRepairAttempts} 次）：${err.issues.join('; ')}（已剔除 ${removedLlmClaims} 条 LLM 反证并通过完整重校验）`.slice(0, 500),
+          at: Date.now(),
+        })
+        // validate 以「降级通过」收尾：检查点（含 degradedPublish 与剔除后的 counterClaims）
+        // 与步骤状态在同一事务原子提交并续租——崩溃恢复后 publish 仍按降级门控装配
+        const checkpoint = options.checkpointOf?.(ctx, 'validate') ?? null
+        await store.completeStage(ctx.runId, 'validate', Date.now(), Date.now() - stageStartAt, checkpoint, options.leaseOwner)
+        emit('step_completed', 'validate')
+        i++
         continue
       }
       const message = err instanceof Error ? err.message : String(err)

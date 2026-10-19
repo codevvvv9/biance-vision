@@ -41,3 +41,11 @@ GITHUB_ACTIONS_PLAN.md
 
 # 隧道固定域名等本地私有配置（不入库）
 scripts/tunnels.local.sh
+
+# REA 逆向分析本地报告(不入库；仓库为 public，第三方 APK 逆向报告不入库)
+docs/antafu-reverse-engineering.md
+docs/references/antafu-*.md
+
+# Agent 工具本地目录（不入库）
+.omo/
+.zcode/

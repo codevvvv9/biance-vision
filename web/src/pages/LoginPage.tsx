@@ -5,13 +5,14 @@ import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
 import Magnet from '../components/fx/Magnet'
 import SplitText from '../components/fx/SplitText'
+import { authReturnTo, authUrl, researchUiMode } from '../research/uiMode'
 
 /** 登录页：未开放自助注册，账号由超级管理员通过脚本开通 */
 export default function LoginPage(): JSX.Element {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const from = (location.state as { from?: string } | null)?.from ?? '/'
+  const from = authReturnTo(location.search, location.state as { from?: string } | null)
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -84,7 +85,8 @@ export default function LoginPage(): JSX.Element {
 
         <div className="auth-foot">
           还没有账号？
-          <Link to="/register">联系管理员开通</Link>
+          <Link to={authUrl('/register', from, researchUiMode(location.search))}>联系管理员开通</Link>
+          {researchUiMode(location.search) === 'dev' && <Link to={from}>返回研究工作台</Link>}
         </div>
       </div>
     </div>
