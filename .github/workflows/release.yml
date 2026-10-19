@@ -1,9 +1,11 @@
 name: Release
 
-# 只在推送 v 开头的 tag 时触发（如 v0.1.0）；发布前本地先过 pnpm release:gate
+# 推送 v 开头的 tag 时触发（如 v0.1.0）；也支持手动触发（重建当前 tag 的镜像与 Release）。
+# 发布前本地先过 pnpm release:gate
 on:
   push:
     tags: ['v*']
+  workflow_dispatch: # gh workflow run release.yml --ref <tag>
 
 permissions:
   contents: write # 创建 GitHub Release
