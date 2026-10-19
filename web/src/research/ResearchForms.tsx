@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import type { EventQuote, Position } from 'biance-vision-brooks'
+import { Dropdown } from './Dropdown'
 
 const input = (label: string, node: JSX.Element, hint?: string): JSX.Element => (
   <label className="field">
@@ -59,19 +60,13 @@ export function PositionForm({ symbol, onSaved }: { symbol: string; onSaved: (p:
       <h4>录入持仓（App 抄录）</h4>
       <div className="form-grid">
         {input('方向', (
-          <select value={side} onChange={(e) => setSide(e.target.value as 'long' | 'short')}>
-            <option value="long">做多 long</option>
-            <option value="short">做空 short</option>
-          </select>
+          <Dropdown value={side} onChange={(v) => setSide(v)} options={[{ value: 'long', label: '做多 long' }, { value: 'short', label: '做空 short' }]} />
         ))}
         {input('数量', <input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" placeholder="0.01" />)}
         {input('开仓价', <input value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} inputMode="decimal" placeholder="60000" />)}
         {input('杠杆', <input type="number" min={1} max={125} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} />)}
         {input('保证金模式', (
-          <select value={marginMode} onChange={(e) => setMarginMode(e.target.value as 'cross' | 'isolated')}>
-            <option value="isolated">逐仓 isolated</option>
-            <option value="cross">全仓 cross</option>
-          </select>
+          <Dropdown value={marginMode} onChange={(v) => setMarginMode(v)} options={[{ value: 'isolated', label: '逐仓 isolated' }, { value: 'cross', label: '全仓 cross' }]} />
         ))}
         {input('风险预算', <input value={riskBudget} onChange={(e) => setRiskBudget(e.target.value)} inputMode="decimal" placeholder="可承受损失金额" />)}
         {input('止损价', <input value={stopPrice} onChange={(e) => setStopPrice(e.target.value)} inputMode="decimal" placeholder="可留空" />)}
@@ -169,29 +164,28 @@ export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: Ev
       <div className="form-grid">
         {input('执行价', <input value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} inputMode="decimal" />)}
         {input('到期方式', (
-          <select
+          <Dropdown
             value={expiryMode}
-            onChange={(e) => {
-              const next = e.target.value as 'duration' | 'exact'
+            onChange={(v) => {
               // 已提交订单不允许切回「现在+期限」（App 到期时间已固定）
-              if (orderState === 'submitted' && next === 'duration') return
-              setExpiryMode(next)
+              if (orderState === 'submitted' && v === 'duration') return
+              setExpiryMode(v)
             }}
-            aria-disabled={orderState === 'submitted'}
-          >
-            <option value="duration" disabled={orderState === 'submitted'}>录入时刻 + 期限（预览）</option>
-            <option value="exact">App 固定到期时刻（已提交订单必选）</option>
-          </select>
+            options={[
+              { value: 'duration', label: '录入时刻 + 期限（预览）', disabled: orderState === 'submitted' },
+              { value: 'exact', label: 'App 固定到期时刻（已提交订单必选）' },
+            ]}
+          />
         ), orderState === 'submitted' ? '已提交订单锁定为固定到期时刻，不能改回「现在+期限」' : undefined)}
         {expiryMode === 'duration'
           ? input('期限（分钟）', (
-              <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
-                <option value={10}>10 分钟</option>
-                <option value={30}>30 分钟</option>
-                <option value={60}>1 小时</option>
-                <option value={1440}>1 天</option>
-                <option value={10080}>1 周（研究模式）</option>
-              </select>
+              <Dropdown value={minutes} onChange={(v) => setMinutes(v)} options={[
+                { value: 10, label: '10 分钟' },
+                { value: 30, label: '30 分钟' },
+                { value: 60, label: '1 小时' },
+                { value: 1440, label: '1 天' },
+                { value: 10080, label: '1 周（研究模式）' },
+              ]} />
             ), '1 周为研究期限，非币安已有事件合约产品')
           : input('到期时刻', (
               <input

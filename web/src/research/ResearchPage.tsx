@@ -23,6 +23,7 @@ import { PositionConfirmCard } from './PositionConfirmCard'
 import { RunBubble } from './RunBubble'
 import MiniMarkdown from '../components/MiniMarkdown'
 import { UiModeSwitch } from './UiModeSwitch'
+import { Dropdown } from './Dropdown'
 
 type Product = 'perp' | 'event' | 'teaching'
 type MarketType = 'spot' | 'usdm_perp'
@@ -340,11 +341,16 @@ export default function ResearchPage(): JSX.Element {
     <div className="research-page">
       <div className="research-topbar">
         <UiModeSwitch disabled={conv.busy || conv.cardBusy !== null} conversationId={conv.convId ?? searchParams.get('conversation')} runId={tracker.activeRun?.id ?? searchParams.get('run')} />
-        <select value={scenario} onChange={(e) => { setScenario(e.target.value as Scenario); setChartAsOf(null) }} aria-label="研究场景">
-          <option value="spot">现货</option>
-          <option value="perp">USDT 永续</option>
-          <option value="event">事件合约</option>
-        </select>
+        <Dropdown
+          value={scenario}
+          onChange={(v) => { setScenario(v); setChartAsOf(null) }}
+          ariaLabel="研究场景"
+          options={[
+            { value: 'spot', label: '现货' },
+            { value: 'perp', label: 'USDT 永续' },
+            { value: 'event', label: '事件合约' },
+          ]}
+        />
         <input
           className="symbol-input"
           value={symbol}
@@ -358,13 +364,18 @@ export default function ResearchPage(): JSX.Element {
             <option key={s} value={s} />
           ))}
         </datalist>
-        <select value={horizon} onChange={(e) => { setHorizon(e.target.value as Horizon); setChartAsOf(null) }} aria-label="研究期限">
-          <option value="10m">10 分钟</option>
-          <option value="30m">30 分钟</option>
-          <option value="1h">1 小时</option>
-          <option value="1d">1 天</option>
-          <option value="1w">1 周（研究模式）</option>
-        </select>
+        <Dropdown
+          value={horizon}
+          onChange={(v) => { setHorizon(v); setChartAsOf(null) }}
+          ariaLabel="研究期限"
+          options={[
+            { value: '10m', label: '10 分钟' },
+            { value: '30m', label: '30 分钟' },
+            { value: '1h', label: '1 小时' },
+            { value: '1d', label: '1 天' },
+            { value: '1w', label: '1 周（研究模式）' },
+          ]}
+        />
         <span className="muted">
           {dataFreshness !== null ? (
             <>
