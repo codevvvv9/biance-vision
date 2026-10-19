@@ -59,6 +59,62 @@ const POSITION_FIELD_LABEL: Record<string, string> = {
   riskBudget: '风险预算（最多可亏 USDT）',
 }
 
+/**
+ * 事件报价草稿槽位（缺输入前置追问，对齐持仓草稿 F6 模式）：
+ * 官方无报价查询接口，赔率只能来自用户从 App 抄录的投入/返还——
+ * event 研究缺报价时先追问补全或降级结构研究，不再默默跑完输出「不可用」。
+ */
+interface QuoteDraft {
+  direction?: 'above' | 'below'
+  strikePrice?: number
+  stake?: number
+  totalPayout?: number
+  horizon?: '10m' | '30m' | '1h' | '1d' | '1w'
+}
+const QUOTE_FIELD_LABEL: Record<keyof QuoteDraft, string> = {
+  direction: '方向（高于/低于执行价）',
+  strikePrice: '执行价（如 60000）',
+  stake: '投入金额',
+  totalPayout: '含本金总返还（App 展示的返还，不是净赚）',
+  horizon: '期限（10 分钟/30 分钟/1 小时/1 天）',
+}
+const QUOTE_FIELDS = Object.keys(QUOTE_FIELD_LABEL) as (keyof QuoteDraft)[]
+export function missingQuoteFields(d: QuoteDraft): (keyof QuoteDraft)[] {
+  return QUOTE_FIELDS.filter((k) => d[k] === undefined || d[k] === null || (typeof d[k] === 'number' && !Number.isFinite(d[k])))
+}
+
+/**
+ * 纯结构语义问句（A 修）：问「结构」且不含任何事件/赔率词。这类问题不依赖
+ * 事件报价，不得被 LLM 纠偏或上下文残留路由进 event 产品线（缺报价时核心
+ * 输出会被砍成「不可用」，晾住用户）。仅对确定性 structure 分类生效。
+ */
+const EVENT_SEMANTIC_RE = /事件|高于|低于|执行价|到期|报价|结算|胜率|概率|赔率|平价|EV/i
+export function isStructureOnlyQuestion(text: string, deterministicIntent: Intent = classifyIntent(text)): boolean {
+  return deterministicIntent === 'structure' && /结构/.test(text) && !EVENT_SEMANTIC_RE.test(text)
+}
+/** 口述报价提取：「BTC 高于 60000，投 10 返 17，10 分钟」→ direction/strike/stake/totalPayout/horizon */
+export function extractQuoteDraft(text: string): QuoteDraft {
+  const d: QuoteDraft = {}
+  const dirAbove = /(?:高于|以上|大于|大于等于)/.test(text)
+  const dirBelow = /(?:低于|以下|小于|小于等于)/.test(text)
+  if (dirAbove !== dirBelow) d.direction = dirAbove ? 'above' : 'below'
+  const strike = text.match(/(?:高于|以上|大于等于|大于|低于|以下|小于等于|小于)\s*([\d,]+(?:\.\d+)?)/)
+  if (strike !== null) {
+    const v = Number(strike[1].replace(/,/g, ''))
+    if (Number.isFinite(v) && v > 0) d.strikePrice = v
+  }
+  const payout = text.match(/投(?:入)?\s*([\d,]+(?:\.\d+)?)\s*(?:U?SDT)?[,，。；、\s]*(?:返(?:还|还|回)?|得|赚|收)\s*(?:回?\s*)?([\d,]+(?:\.\d+)?)/)
+  if (payout !== null) {
+    const stake = Number(payout[1].replace(/,/g, ''))
+    const total = Number(payout[2].replace(/,/g, ''))
+    if (Number.isFinite(stake) && stake > 0) d.stake = stake
+    if (Number.isFinite(total) && total > 0) d.totalPayout = total
+  }
+  const h = parseHorizon(text)
+  if (h !== null) d.horizon = h
+  return d
+}
+
 /** 时刻解析（UTC+8 本地钟点）：支持「10:00 / 10:30:25 / 10点30分 / 10时30分」与
  * 凌晨/早上/上午/中午/下午/晚上 限定词。有限定词但解析不出时刻 → 'invalid'
  *（显式时间不可解析必须请求补全，评审三轮-2，不得退回日末/当前时刻） */
@@ -430,10 +486,14 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
   const userMsg = await appendMessage({ conversationId: conv.id, role: 'user', content: text })
   void userMsg
   const detIntent = classifyIntent(text)
+  // 纯结构语义问句（问「结构」且无任何事件/赔率词）：结构结论不依赖报价，
+  // 不得因 LLM 对「10 分钟」等短期限的事件合约联想被纠偏进 event——
+  // 那样缺报价时核心输出被砍成「不可用」，结构答案明明已算出却晾住用户
+  const structureOnlyQuestion = isStructureOnlyQuestion(text)
   // LLM 叠加层：chat 能力已配置时纠偏确定性误分（如「我的多单要止损吗」被确定性漏判）；
-  // 未配置/失败一律降级确定性，不伪造理解
+  // 未配置/失败一律降级确定性，不伪造理解。结构问句上确定性正则比 LLM 的期限联想可信
   const orch = await classifyIntentOrchestrated(text, detIntent)
-  const intent = orch.intent
+  const intent = structureOnlyQuestion && orch.intent === 'event' ? 'structure' : orch.intent
   const ctx = conv.context as {
     product?: 'perp' | 'event' | 'teaching'
     symbol?: string
@@ -441,6 +501,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     horizon?: '10m' | '30m' | '1h' | '1d' | '1w'
     positionId?: string | null
     quoteId?: string | null
+    quoteDraft?: QuoteDraft | null
   }
 
   // 寒暄/能力询问（LLM 分类为 system；确定性分类无此能力）：直接回复引导，不启动研究
@@ -576,11 +637,18 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
         ? 'perp'
         : intent === 'event'
           ? 'event'
-          : ctx.product ?? 'teaching'
-
+          : structureOnlyQuestion && ctx.product === 'event'
+            ? 'teaching'
+            : ctx.product ?? 'teaching'
   // 交易对一致性（九轮修复）：消息切换 symbol 后，上下文里旧交易对的持仓/报价
   // 引用不再带入新研究（BTC 入场价不得混入 ETH 行情）；切回原交易对自动恢复引用
   const contextNotes: string[] = []
+  // 纯结构问句在 event 上下文中的降级说明（结构照常输出；如需 EV 再给报价）；
+  // 同时丢弃待补全的报价草稿（用户已选择不要 EV 路径，不留悬挂状态）
+  if (structureOnlyQuestion && ctx.product === 'event' && intent !== 'event') {
+    contextNotes.push('已按结构研究处理（结构结论不依赖报价）；如需事件合约 EV 评估，请提供一条报价（如「高于 60000，投 10 返 17，10 分钟」）')
+    ctx.quoteDraft = null
+  }
   let positionId: string | null = product === 'perp' ? (ctx.positionId ?? null) : null
   if (positionId !== null) {
     const posRows = await getDb()!
@@ -623,8 +691,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     await getDb()!.update(conversations).set({ context: { ...ctx, draft: null }, updatedAt: new Date() }).where(eq(conversations.id, conv.id))
     const msg = await appendMessage({ conversationId: conv.id, role: 'assistant', intent, content: '已丢弃待确认的持仓草稿，未写入持仓。' })
     return { message: msg, runId: null, needCompletion: [] }
-  }
-  if (
+  }  if (
     (pendingDraft !== undefined && (fillsGap || (intent === 'perp' && touched.length > 0))) ||
     (intent === 'perp' && pendingDraft === undefined && draft.side !== undefined && draft.qty !== undefined)
   ) {
@@ -650,6 +717,89 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
   // 杠杆假设（#6 修复）：「改成 20 倍」→ 假设研究（新 run 带 override，不写回持仓）
   const levMatch = text.match(/(?:改成|换成|调整到|用)\s*(\d{1,3})\s*倍/)
   const positionOverride = levMatch !== null ? { leverage: Math.max(1, Math.min(125, Number(levMatch[1]))) } : undefined
+
+  // ---- 事件报价缺输入闭环（B 修）：event 产品且未引用报价时不再默默跑管线 ----
+  // 报价是 EV 的赔率来源（盈亏平衡胜率=投入÷返还），官方无查询接口只能由用户抄录。
+  // 「作废报价」：清掉刚代录的 preview 引用（行删除；submitted 订单行只清引用不动行）
+  if (intent !== 'replay' && product === 'event' && ctx.quoteId != null && /作废报价|删掉报价|不要这个报价/.test(text)) {
+    await getDb()!
+      .delete(eventQuotes)
+      .where(and(eq(eventQuotes.id, ctx.quoteId), eq(eventQuotes.userId, conv.userId), eq(eventQuotes.orderState, 'preview')))
+    await getDb()!.update(conversations).set({ context: { ...ctx, quoteId: null, quoteDraft: null }, updatedAt: new Date() }).where(eq(conversations.id, conv.id))
+    const msg = await appendMessage({ conversationId: conv.id, role: 'assistant', intent, content: assembleTrustedReply({ key: 'quote_discarded' }).content })
+    return { message: msg, runId: null, needCompletion: [] }
+  }
+  if (intent !== 'replay' && product === 'event' && quoteId === null) {
+    // 槽位合并（F6 同款）：上下文里的待补草稿 + 本轮提取合并；「取消」丢弃
+    const quoteTouched = extractQuoteDraft(text)
+    const pendingQuoteDraft = ctx.quoteDraft != null ? ctx.quoteDraft : null
+    if (pendingQuoteDraft !== null && /取消|放弃|不要了/.test(text)) {
+      await getDb()!.update(conversations).set({ context: { ...ctx, quoteDraft: null }, updatedAt: new Date() }).where(eq(conversations.id, conv.id))
+      const msg = await appendMessage({ conversationId: conv.id, role: 'assistant', intent, content: assembleTrustedReply({ key: 'quote_discarded' }).content })
+      return { message: msg, runId: null, needCompletion: [] }
+    }
+    const mergedQuote: QuoteDraft = {
+      ...(pendingQuoteDraft ?? {}),
+      ...Object.fromEntries(QUOTE_FIELDS.filter((k) => quoteTouched[k] !== undefined).map((k) => [k, quoteTouched[k]])),
+    } as QuoteDraft
+    const missingQuote = missingQuoteFields(mergedQuote)
+    if (missingQuote.length === 0) {
+      // 数值校验与 POST /api/event-quotes 同构：返还≥投入；违例不建行，请求更正
+      if (mergedQuote.totalPayout! < mergedQuote.stake!) {
+        const msg = await appendMessage({
+          conversationId: conv.id, role: 'assistant', intent,
+          content: assembleTrustedReply({ key: 'quote_invalid', facts: { reason: '含本金总返还小于投入金额（App 展示的返还包含本金，应大于等于投入）' } }).content,
+        })
+        return { message: msg, runId: null, needCompletion: ['quote_totalPayout'] }
+      }
+      // 建 preview 报价（duration 模式，expiryAt−asOf 恰为桶时长，必落入已验证桶）
+      const BUCKET_MS = { '10m': 10 * 60_000, '30m': 30 * 60_000, '1h': 60 * 60_000, '1d': 24 * 60 * 60_000, '1w': 7 * 24 * 60 * 60_000 } as const
+      const nowQ = Date.now()
+      const inserted = await getDb()!
+        .insert(eventQuotes)
+        .values({
+          userId: conv.userId,
+          symbol,
+          strikePrice: String(mergedQuote.strikePrice!),
+          expiryAt: nowQ + BUCKET_MS[mergedQuote.horizon!],
+          asOf: nowQ,
+          stake: String(mergedQuote.stake!),
+          totalPayout: String(mergedQuote.totalPayout!),
+          direction: mergedQuote.direction!,
+          refPrice: null,
+          note: `会话代录（${text.slice(0, 80)}）`,
+          orderState: 'preview',
+          strikeStatus: 'preview',
+          previewAsOf: nowQ,
+        })
+        .returning({ id: eventQuotes.id })
+      quoteId = inserted[0].id
+      ctx.quoteDraft = null
+      ctx.quoteId = quoteId
+      const HORIZON_LABEL: Record<string, string> = { '10m': '10 分钟', '30m': '30 分钟', '1h': '1 小时', '1d': '1 天', '1w': '1 周' }
+      contextNotes.push(
+        assembleTrustedReply({
+          key: 'quote_recorded',
+          facts: {
+            quoteSummary:
+              `${mergedQuote.direction === 'above' ? '高于' : '低于'} ${mergedQuote.strikePrice} / 投入 ${mergedQuote.stake} / 返还 ${mergedQuote.totalPayout} / ${HORIZON_LABEL[mergedQuote.horizon!]} 到期`,
+          },
+        }).content,
+      )
+    } else {
+      // 缺输入 → 启动前追问（不再跑完八阶段才甩「不可用」）；草稿入库等下一条消息补槽位
+      await getDb()!.update(conversations).set({ context: { ...ctx, product, symbol, marketType, horizon, quoteDraft: mergedQuote }, updatedAt: new Date() }).where(eq(conversations.id, conv.id))
+      const msg = await appendMessage({
+        conversationId: conv.id, role: 'assistant', intent,
+        content: assembleTrustedReply({
+          key: 'quote_missing',
+          facts: { missingLabels: missingQuote.map((k) => QUOTE_FIELD_LABEL[k] ?? k).join('、') },
+          notes: contextNotes,
+        }).content,
+      })
+      return { message: msg, runId: null, needCompletion: missingQuote.map((k) => `quote_${k}`) }
+    }
+  }
 
   // 复盘（评审 F7）：解析历史 asOf（「昨天/前天」或显式日期）；无法解析必须请求补全，
   // 不得静默用当前时间冒充历史研究

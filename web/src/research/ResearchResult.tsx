@@ -133,6 +133,13 @@ export function ResultCard({ result, horizon, runId, onCitation }: { result: Res
           模型 {r2.probability.modelVersion}：P(高于执行价) = {(r2.probability.probabilityUp * 100).toFixed(1)}%{r2.probability.probabilityTie !== null ? `，平价 ${(r2.probability.probabilityTie * 100).toFixed(1)}%` : '（平价精度未知）'}
         </p>
       )}
+      {Array.isArray(pp.unavailableGuidance) && (pp.unavailableGuidance as string[]).length > 0 && (
+        <ul className="guidance-list" aria-label="补全引导">
+          {(pp.unavailableGuidance as string[]).map((g) => (
+            <li key={g}>· {g}</li>
+          ))}
+        </ul>
+      )}
       {(r2?.reasons ?? []).length > 0 && (
         <ul className="missing-list">{(r2?.reasons ?? []).map((x) => <li key={x}>理由：{x}</li>)}</ul>
       )}

@@ -109,6 +109,8 @@ export const EventPayloadV2Schema = z.object({
   loseAmount: z.number(),
   unavailableCode: UnavailableCodeSchema.nullable(),
   unavailableDetail: z.string().nullable(),
+  /** 缺报价等输入不可用时，结果卡必须携带的补全引导（缺什么/为什么/怎么补）——不许晾用户 */
+  unavailableGuidance: z.array(z.string()).nullable().optional(),
 })
 export type EventPayloadV2 = z.infer<typeof EventPayloadV2Schema>
 
