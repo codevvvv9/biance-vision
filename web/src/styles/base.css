@@ -87,6 +87,13 @@ body {
   margin: 4px 0;
 }
 
+/* Firefox 不支持 ::-webkit-scrollbar，用标准属性兜底（thin + 深色滑块），
+ * 两引擎下滚动条都与深色主题一体 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
