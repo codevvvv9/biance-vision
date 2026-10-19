@@ -18,6 +18,7 @@
     "user:add": "tsx scripts/add-user.ts",
     "user:passwd": "tsx scripts/passwd.ts",
     "brooks:selftest": "tsx scripts/brooks-selftest.ts",
+    "quote-guide:selftest": "tsx scripts/quote-guide-selftest.ts",
     "market:smoke": "tsx scripts/market-ingest-smoke.ts",
     "build": "pnpm --filter biance-vision-brooks run build && pnpm --filter biance-vision-server run build && pnpm --filter biance-vision-web run build",
     "typecheck": "pnpm --filter biance-vision-brooks run build && tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",

@@ -28,6 +28,17 @@ import { frozenPrompt, DEFAULT_PROMPTS } from '../prompts.js'
 import { MIN_BARS, baseIntervalFor } from '../features.js'
 import { createFrozenSnapshot, EXEC_TF, BACKGROUND_TF } from '../../services/marketSnapshot.js'
 import { predictForTarget } from '../../services/prediction.js'
+
+/**
+ * 缺事件报价时的结果卡补全引导（C 修）：不可用 ≠ 拒答，必须告诉用户
+ * 缺什么/为什么需要/怎么补/结构结论不受影响——官方无报价接口，赔率只能抄录。
+ */
+const QUOTE_GUIDANCE = [
+  '缺输入：未引用事件报价——EV 需要报价中的投入与返还得出赔率（盈亏平衡胜率 = 投入 ÷ 返还），官方无查询接口，助手不编造',
+  '补全方式一：在研究会话中直接发送报价描述（如「BTC 高于 60000，投 10 返 17，10 分钟」），助手会代录为预览报价并研究',
+  '补全方式二：在研究表单「事件研究」录入报价（已提交订单必须走表单，到期时刻需精确），再回来提问',
+  '只要结构偏向：结构结论不依赖报价，可直接问「现在的结构如何」',
+]
 import { analyzeEvent, eventEntryGate } from '../../services/eventAnalyzer.js'
 import type { EventQuoteInput, EventAnalysis } from '../../services/eventAnalyzer.js'
 import { analyzePerp, DEFAULT_PERP_FEES } from '../../services/perpetualAnalyzer.js'
@@ -689,7 +700,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         // 报价同样按 symbol 过滤：切换币种后残留的旧 quoteId 不进入 EV 计算
         const quote = await loadQuote(ctx.userId, ctx.quoteId, ctx.symbol)
         if (quote === null) {
-          v2.v2Payload = { kind: 'event', quote: null, pWin: null, pTie: null, expectedNet: null, breakevenWinRate: 0, breakevenLabel: '', winAmount: 0, loseAmount: 0, unavailableCode: 'missing_quote', unavailableDetail: '未引用报价' }
+          v2.v2Payload = { kind: 'event', quote: null, pWin: null, pTie: null, expectedNet: null, breakevenWinRate: 0, breakevenLabel: '', winAmount: 0, loseAmount: 0, unavailableCode: 'missing_quote', unavailableDetail: '未引用报价', unavailableGuidance: QUOTE_GUIDANCE }
         } else {
           const remainingMs = Math.max(0, quote.expiryAt - ctx.asOf)
           const quoteInput: EventQuoteInput = {
@@ -840,7 +851,7 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
       } else if (ctx.product === 'event') {
         const a = v2.eventAnalysis
         if (a === null) {
-          v2.decision = { action: 'insufficient_evidence', side: null, reasons: ['未引用报价'], conditions: [] }
+          v2.decision = { action: 'insufficient_evidence', side: null, reasons: ['未引用事件报价：EV 无法计算（结构结论不受影响；补全方式见下方引导）'], conditions: [] }
         } else if (a.orderState === 'submitted') {
           v2.decision = {
             action: decideEventSubmitted({ expired: (v2.v2Payload.quote as { remainingMs?: number } | undefined)?.remainingMs === 0, settled: false }),

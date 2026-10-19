@@ -381,6 +381,21 @@
   color: var(--amber);
 }
 
+/* 缺输入引导块（不可用 ≠ 拒答）：中性色而非警示色——它给的是「怎么继续」而非「哪里错了」 */
+.guidance-list {
+  margin: 4px 0 0;
+  padding: 8px 10px 8px 26px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2);
+  border-left: 2px solid var(--blue);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border-radius: 0 6px 6px 0;
+  list-style: none;
+}
+
+.guidance-list li + li { margin-top: 2px; }
+
 .claim-list {
   list-style: none;
   margin: 0;

@@ -26,6 +26,10 @@ export type ReplyTemplateKey =
   | 'draft_cancelled'
   | 'replay_invalid'
   | 'replay_missing'
+  | 'quote_missing' // 事件研究缺报价：启动前追问（缺什么/为什么/怎么补），不晾用户
+  | 'quote_recorded' // 会话代录 preview 报价：复述录入值供核对
+  | 'quote_invalid' // 口述报价数值非法（返还<投入等）：不建行，请求更正
+  | 'quote_discarded' // 作废刚代录的报价引用
 
 /** 模板（代码版本控制；占位 {{name}} 对应 facts 槽位，{{notes}} 对应动态说明行） */
 const TEMPLATES: Record<ReplyTemplateKey, string> = {
@@ -50,6 +54,17 @@ const TEMPLATES: Record<ReplyTemplateKey, string> = {
   draft_cancelled: '已丢弃待确认的持仓草稿，未写入持仓。',
   replay_invalid: '复盘日期无法解析（或指向未来）：请给出有效日期（如「复盘 2026-10-01 的 BTC」）或相对时间（「昨天」「前天」）。不使用当前行情冒充历史复盘。',
   replay_missing: '复盘需要明确的历史时点：请给出日期（如「复盘 2026-10-01 的 BTC」）或相对时间（「昨天」「前天」）。不使用当前行情冒充历史复盘。',
+  quote_missing:
+    '事件合约研究需要一条真实报价才能算 EV：赔率来自报价里的投入与返还（盈亏平衡胜率=投入÷返还），官方没有查询接口，报价只能由你从 App 抄录，助手不编造。\n' +
+    '还缺：{{missingLabels}}。\n' +
+    '三种继续方式（任选其一）：\n' +
+    '- 直接补发报价描述（示例格式：「BTC 高于 60000，投入 10 返还 17，10 分钟」），我会录入为预览报价并立即研究\n' +
+    '- 只想看结构偏向：回复「只要结构」，结构结论不依赖报价\n' +
+    '- 在研究表单「事件研究」录入报价后再来提问{{notes}}',
+  quote_recorded:
+    '已按你的描述录入预览报价（60 秒时效，执行价未锁定）并引用启动研究：{{quoteSummary}}。如与 App 实际报价不符，回复「作废报价」后重发；已提交的订单报价请用表单录入（到期时刻需精确）。',
+  quote_invalid: '报价数值不合法：{{reason}}。请核对 App 实际展示的数字后重发（示例：「BTC 高于 60000，投入 10 返还 17，10 分钟」）。',
+  quote_discarded: '已作废该预览报价引用（未启动研究）。可重新发送报价描述，或改问「只要结构」。',
 }
 
 /** 概率红线（与 services/validator.ts 同口径；独立实现避免 server→web 分层纠缠） */
