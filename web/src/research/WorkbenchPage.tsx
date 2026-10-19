@@ -12,6 +12,7 @@ import { EvidenceDrawer } from './ResearchResult'
 import { RunBubble } from './RunBubble'
 import { UiModeSwitch } from './UiModeSwitch'
 import { Dropdown } from './Dropdown'
+import { Combobox } from './Combobox'
 import { authUrl } from './uiMode'
 import { useResearchConversation } from './useResearchConversation'
 import type { ConversationContextSync } from './useResearchConversation'
@@ -279,7 +280,7 @@ export default function WorkbenchPage(): JSX.Element {
             changeScene(next); document.getElementById(`scene-${next}`)?.focus()
           }}>{(Object.keys(SCENES) as Scene[]).map(s => <button key={s} id={`scene-${s}`} role="tab" tabIndex={scene === s ? 0 : -1} aria-selected={scene === s} aria-controls="wb-composer-panel" disabled={locked} onClick={() => changeScene(s)}>{SCENES[s].label}</button>)}</div>
             <div role="tabpanel" id="wb-composer-panel" aria-labelledby={`scene-${scene}`}><textarea ref={inputRef} aria-label="研究问题" value={drafts[scene]} placeholder={SCENES[scene].hint} maxLength={2000} rows={3} onChange={e => setDrafts(d => ({ ...d, [scene]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
-              <div className="wb-compose-tools"><div className="wb-context"><label><span className="sr-only">交易对</span><input aria-label="交易对" value={symbol} disabled={locked} onChange={e => { setSymbol(e.target.value.toUpperCase()); setPositionId(''); setQuoteId('') }} list="wb-symbols" /></label><datalist id="wb-symbols">{['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'].map(s => <option key={s} value={s} />)}</datalist><label><span className="sr-only">研究期限</span><Dropdown ariaLabel="研究期限" value={horizon} disabled={locked} onChange={v => setHorizon(v)} options={(['10m', '30m', '1h', '1d', '1w'] as Horizon[]).map(h => ({ value: h, label: `${h}${h === '1w' ? ' · 研究模式' : ''}` }))} /></label></div>
+              <div className="wb-compose-tools"><div className="wb-context"><label><span className="sr-only">交易对</span><Combobox ariaLabel="交易对" value={symbol} disabled={locked} onChange={v => { setSymbol(v.toUpperCase()); setPositionId(''); setQuoteId('') }} suggestions={['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']} /></label><label><span className="sr-only">研究期限</span><Dropdown ariaLabel="研究期限" value={horizon} disabled={locked} onChange={v => setHorizon(v)} options={(['10m', '30m', '1h', '1d', '1w'] as Horizon[]).map(h => ({ value: h, label: `${h}${h === '1w' ? ' · 研究模式' : ''}` }))} /></label></div>
                 <div className="wb-send-tools">{scene !== 'spot' && <button className="wb-tool" disabled={locked} onClick={() => user ? setToolsOpen(true) : login()}>{scene === 'perp' ? (positionId ? '已关联持仓' : '持仓 / 风险') : (quoteId ? '已关联报价' : '报价 / 结算')}</button>}<button className="wb-send" aria-label={user ? '发送研究问题' : '登录后发起研究'} disabled={locked || !drafts[scene].trim()} onClick={() => void send()}>{conv.busy ? '…' : '↑'}</button></div>
               </div>
             </div>

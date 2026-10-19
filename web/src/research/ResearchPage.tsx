@@ -24,6 +24,7 @@ import { RunBubble } from './RunBubble'
 import MiniMarkdown from '../components/MiniMarkdown'
 import { UiModeSwitch } from './UiModeSwitch'
 import { Dropdown } from './Dropdown'
+import { Combobox } from './Combobox'
 
 type Product = 'perp' | 'event' | 'teaching'
 type MarketType = 'spot' | 'usdm_perp'
@@ -351,19 +352,13 @@ export default function ResearchPage(): JSX.Element {
             { value: 'event', label: '事件合约' },
           ]}
         />
-        <input
-          className="symbol-input"
+        <Combobox
+          inputClassName="symbol-input"
           value={symbol}
-          onChange={(e) => { setSymbol(e.target.value.toUpperCase()); setChartAsOf(null) }}
-          aria-label="交易对"
-          list="research-symbol-list"
-          spellCheck={false}
+          onChange={(v) => { setSymbol(v.toUpperCase()); setChartAsOf(null) }}
+          ariaLabel="交易对"
+          suggestions={symbolList}
         />
-        <datalist id="research-symbol-list">
-          {symbolList.slice(0, 60).map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
         <Dropdown
           value={horizon}
           onChange={(v) => { setHorizon(v); setChartAsOf(null) }}
