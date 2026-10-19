@@ -16,6 +16,7 @@ import {
   EvalDatasetSchema,
   EvalDatasetKindSchema,
   EvalRunSchema,
+  TraderProfilePatchSchema,
 } from 'biance-vision-brooks'
 import { listActiveUsernames, queryAudit, recordAudit } from '../audit.js'
 import { createDraft as createPromptDraft, currentPointers as listPromptPointers, listTemplates as listPromptTemplates, publishTemplate, rollbackTo as rollbackPromptTo, toDto as promptToDto, updateDraft as updatePromptDraft } from './promptsAdmin.js'
@@ -769,10 +770,70 @@ function registerPromptRoutes(app: FastifyInstance, deps: AdminRouteDeps): void 
   })
 }
 
+// ---- /api/admin/settings（P1-8：免责文案与输入面板配置；requireSuperadmin+审计）----
+function registerSettingsRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
+  app.get('/api/admin/settings/disclaimers', async (req) => {
+    deps.requireSuperadmin(req)
+    const { getDisclaimers, DEFAULT_DISCLAIMERS } = await import('./settingsStore.js')
+    return { disclaimers: await getDisclaimers(), defaults: DEFAULT_DISCLAIMERS }
+  })
+
+  app.put('/api/admin/settings/disclaimers', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    const body = parseBody(
+      z.object({
+        perp: z.string().max(500).optional(),
+        event: z.string().max(500).optional(),
+        common: z.string().max(500).optional(),
+      }),
+      req.body,
+      reply,
+    )
+    if (body === null) return
+    const { saveDisclaimers } = await import('./settingsStore.js')
+    const disclaimers = await saveDisclaimers(body)
+    recordAudit(session, { action: 'settings_update', target: 'research_disclaimers', detail: '更新免责文案（研究回复与结果卡）' })
+    return { disclaimers }
+  })
+
+  app.get('/api/admin/settings/chat-input', async (req) => {
+    deps.requireSuperadmin(req)
+    const { getChatInputConfig } = await import('./settingsStore.js')
+    return { chatInput: await getChatInputConfig() }
+  })
+
+  app.put('/api/admin/settings/chat-input', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    const { saveChatInputConfig } = await import('./settingsStore.js')
+    try {
+      const chatInput = await saveChatInputConfig(req.body)
+      recordAudit(session, { action: 'settings_update', target: 'chat_input_config', detail: `更新输入面板配置（${Object.keys(chatInput.scenes).join(',')} 场景）` })
+      return { chatInput }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 400).send({ code: 'save_failed', message: e.message })
+    }
+  })
+
+  /** P1-4 admin 代改用户画像（trader_profiles；审计留痕） */
+  app.put('/api/admin/users/:username/profile', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return
+    const { username } = req.params as { username: string }
+    const parsed = TraderProfilePatchSchema.safeParse(req.body ?? {})
+    if (!parsed.success) return badRequest(reply, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('；'))
+    const { saveTraderProfile } = await import('../research/profile.js')
+    const profile = await saveTraderProfile(username, parsed.data)
+    recordAudit(session, { action: 'settings_update', target: username, detail: `代改用户画像（风险=${profile.riskProfile ?? '未设'}，经验=${profile.experienceLevel ?? '未设'}）` })
+    return { username, profile }
+  })
+}
+
 export function registerAdminRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
   registerAdminCoreRoutes(app, deps)
   registerAgentRoutes(app, deps)
   registerEvaluationRoutes(app, deps)
   registerModelRoutes(app, deps)
   registerPromptRoutes(app, deps)
+  registerSettingsRoutes(app, deps)
 }

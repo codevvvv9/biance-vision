@@ -15,6 +15,7 @@ import { createRun } from './store.js'
 import { enqueueResearchRun } from './jobs.js'
 import { classifyIntentOrchestrated } from './intent.js'
 import { assembleTrustedReply } from './replyAssembler.js'
+import { resolveScene } from '../scenes.js'
 import { kv, log } from '../../logger.js'
 
 export type Intent = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system'
@@ -285,6 +286,8 @@ async function appendMessage(input: {
   role: 'user' | 'assistant' | 'system'
   content: string
   intent?: Intent | null
+  /** P1-1 任务场景（resolveScene 推导；system 等无场景消息为 null） */
+  sceneCode?: string | null
   runId?: string | null
   card?: Record<string, unknown> | null
   /** P0-6 审计：本条回复使用的提示词版本（注册表解析结果） */
@@ -297,6 +300,7 @@ async function appendMessage(input: {
       role: input.role,
       content: input.content,
       intent: input.intent ?? null,
+      sceneCode: input.sceneCode ?? null,
       runId: input.runId ?? null,
       card: input.card ?? null,
       promptRefs: input.promptRefs ?? null,
@@ -305,6 +309,24 @@ async function appendMessage(input: {
   await getDb()!.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, input.conversationId))
   return rows[0]
 }
+
+/** P1-5：无 run 的附答（concept/news）也计入记忆提取水位（fire-and-forget，失败不影响回复） */
+function fireMemoryExtraction(userId: string, conversationId: string): void {
+  void import('../memory.js').then(({ maybeExtractMemories }) => maybeExtractMemories(userId, conversationId))
+}
+
+/** P1-8 免责文案（按产品；app_settings 配置，读取失败回退内置基线） */
+async function researchDisclaimer(product: 'perp' | 'event' | 'teaching' | string): Promise<string> {
+  try {
+    const { getDisclaimers } = await import('../../admin/settingsStore.js')
+    const d = await getDisclaimers()
+    return product === 'perp' ? d.perp : product === 'event' ? d.event : d.common
+  } catch {
+    return DEFAULT_DISCLAIMERS_FALLBACK
+  }
+}
+
+const DEFAULT_DISCLAIMERS_FALLBACK = '研究结论基于历史结构与公开数据，不构成投资建议；合约交易有爆仓风险。'
 
 /** PATCH /api/conversations/:id/context：保存用户确认的上下文（含确认卡落库持仓） */
 async function patchContextInner(
@@ -573,7 +595,9 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
       const msg = await appendMessage({
         conversationId: conv.id, role: 'assistant', intent, content,
         promptRefs: [{ name: newsPrompt.name, scene: newsPrompt.scene, version: newsPrompt.version, templateId: newsPrompt.templateId }],
+        sceneCode: 'news-attribution',
       })
+      fireMemoryExtraction(conv.userId, conv.id)
       return { message: msg, runId: null, needCompletion: [] }
     }
   }
@@ -619,7 +643,9 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     const msg = await appendMessage({
       conversationId: conv.id, role: 'assistant', intent, content: reply.content,
       promptRefs: [{ name: conceptPrompt.name, scene: conceptPrompt.scene, version: conceptPrompt.version, templateId: conceptPrompt.templateId }],
+      sceneCode: 'concept-teach',
     })
+    fireMemoryExtraction(conv.userId, conv.id)
     return { message: msg, runId: null, needCompletion: [] }
   }
 
@@ -817,6 +843,8 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
   }
 
   // 「现在呢」→ 新快照（asOf 缺省即当前）；「改成 20 倍」→ 假设研究（不覆盖持仓）
+  // P1-1 任务场景：resolveScene 按意图+产品+持仓推导，随 run 创建落 research_runs.scene_code
+  const sceneCode = resolveScene(intent, { product, hasPosition: positionId !== null, replay: intent === 'replay' })
   const run = await createRun({
     userId: conv.userId,
     conversationId: conv.id,
@@ -826,6 +854,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
       marketType,
       horizon,
       question: text,
+      sceneCode,
       positionId: positionId ?? undefined,
       quoteId: quoteId ?? undefined,
       positionOverride,
@@ -879,12 +908,15 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
       subAnswer,
     },
     notes: contextNotes,
+    // P1-8 免责（服务端配置，按产品下发；读取失败回退内置基线文案）
+    disclaimer: await researchDisclaimer(product),
   })
   if (startedReply.degraded) log.warn('conversation', '回复组装降级（启动研究）', kv({ 会话: conv.id.slice(0, 8), 检查: startedReply.checkNotes.join(';').slice(0, 120) }))
   const msg = await appendMessage({
     conversationId: conv.id,
     role: 'assistant',
     intent,
+    sceneCode,
     runId: run.id,
     promptRefs:
       orch.promptRef !== null

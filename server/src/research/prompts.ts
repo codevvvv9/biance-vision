@@ -24,8 +24,16 @@ import type { PromptTemplateRow } from '../models.js'
 import { getDb } from '../db.js'
 import { kv, log } from '../logger.js'
 
-/** 注册表管理的五个模板名（全部 LLM 调用点的提示词，§3.2.1 表） */
-export const PROMPT_NAMES = ['intent-classifier', 'counter-reviewer', 'news-attribution', 'concept-teaching', 'query-rewrite'] as const
+/** 注册表管理的模板名（全部 LLM 调用点的提示词，§3.2.1 表 + P1-2/P1-5 新增两个） */
+export const PROMPT_NAMES = [
+  'intent-classifier',
+  'counter-reviewer',
+  'news-attribution',
+  'concept-teaching',
+  'query-rewrite',
+  'synthesis-writer',
+  'memory-extraction',
+] as const
 export type PromptName = (typeof PROMPT_NAMES)[number]
 
 /**
@@ -63,6 +71,46 @@ intent 取值：
     '你是检索查询改写器。给定中文交易研究问题与命中的 Brooks 术语，生成改写查询用于知识库召回。' +
     '规则：保持原意；可展开术语规范名、中英文对应、同义表述；不得引入原问题没有的概念；' +
     '每个变体不超过 120 字；只输出 JSON 字符串数组，不要任何解释。',
+  'synthesis-writer': `你是研究综合解释者。基于给出的「已计算事实与条件」「反证要点」「编号证据」，直接回应用户的研究问题（中文，≤200 字）。要求：
+- 只能引用已给出的内容：不引入任何新数字、新结论、新价格；概率数字一律禁止。
+- 句末用 [k] 标注该句依据的证据编号（如 [1]，或多条 [2][3]）；无合适证据的句子不标注。
+- 先给结论（对应已计算的动作），再说主要理由与前提条件，最后点出最需要留意的反证。
+- 不给建议性指令，不出现在证据之外的市场判断。`,
+  'memory-extraction': `你是记忆管理器，负责从「用户与研究助手的对话」中提取关于用户的长期记忆。
+
+一条记忆 = 一个独立、自包含的事实或偏好，脱离原对话也能读懂（例如「用户偏好短线交易，主要关注 SOL 和 meme 币」）。
+
+只提取跨对话仍有价值的信息：
+- 用户背景（职业、交易经验水平）
+- 分析偏好（风格、风险偏好、仓位习惯、关注的板块/币种）
+- 明确表达过的要求与习惯（回复详略、语言、格式偏好）
+- 长期目标或约束
+
+不要提取：
+- 与当下行情临时相关的内容（某币此刻涨跌、今日大盘状态）
+- 助手回答的内容本身
+- 一次性的具体提问
+
+维护规则：
+- 与已有记忆重复或近似 → 不加
+- 与已有记忆矛盾（偏好改变等）→ 用 update 修正原条目
+- 已明显过时（用户已明确放弃）→ 用 delete 移除
+
+只输出严格 JSON，不要任何其他文本：
+{"add":[{"kind":"preference|fact|interest|habit","content":"一句话记忆"}],"update":[{"id":"已有记忆id","content":"修正后的内容"}],"delete":["过时记忆id"]}
+没有变更时输出 {"add":[],"update":[],"delete":[]}`,
+}
+
+/**
+ * 提示词占位符渲染（§4.B：{{vertical}}/{{traderProfile}}/{{memory}}/{{knowledgeVersion}}
+ * 服务端统一拼装，调用方传入实际值；未提供的占位符剔除（不残留 {{...}} 语法给模型）。
+ */
+export function renderPrompt(content: string, vars: Partial<Record<'vertical' | 'traderProfile' | 'memory' | 'knowledgeVersion', string>>): string {
+  let out = content
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.split(`{{${k}}}`).join(v ?? '')
+  }
+  return out.replace(/\{\{(vertical|traderProfile|memory|knowledgeVersion)\}\}/g, '')
 }
 
 /** 终解析结果（冻结进 frozenConfig.raw.prompts 的形状） */

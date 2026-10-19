@@ -11,6 +11,60 @@ import { IdSchema } from './common.js'
 export const ResearchProductSchema = z.enum(['perp', 'event', 'teaching'])
 export type ResearchProduct = z.infer<typeof ResearchProductSchema>
 
+// ---- P1-1 场景注册表（vertical-agent-architecture.md §4.A）：三维度分离 ----
+// Product（产品契约，数值计算/校验规则随产品走）与 UiMode（纯前端，不入研究语义）
+// 已各自存在；TaskScene 是任务场景维度：决定提示词集作用域 / 追问动作集 / 结果卡模板。
+// sceneCode 只统一任务场景配置，不得绕过产品级校验（perp run 仍须持仓归属校验）。
+
+export const TASK_SCENES = [
+  'hold-review',
+  'structure-scan',
+  'concept-teach',
+  'quote-review',
+  'replay-analysis',
+  'news-attribution',
+] as const
+export type TaskScene = (typeof TASK_SCENES)[number]
+export const TaskSceneSchema = z.enum(TASK_SCENES)
+
+/** 场景定义（服务端注册表条目；products 声明该场景适用的产品） */
+export const SceneDefSchema = z.object({
+  code: TaskSceneSchema,
+  label: z.string(),
+  products: z.array(ResearchProductSchema),
+  description: z.string(),
+})
+export type SceneDef = z.infer<typeof SceneDefSchema>
+
+// ---- P1-3 结构化追问推荐（§4.F-1）：动作而非聊天文字 ----
+// prerequisites 是服务端门控语义（工具/数据就绪才返回该动作），不下发到客户端；
+// label 仅显示文案，不得包含结果之外的数字。
+
+export const FollowUpActionSchema = z.object({
+  action: z.enum(['open_evidence', 'rerun_with', 'switch_context', 'open_rule_card', 'counter_search']),
+  label: z.string().min(1).max(60),
+  /** 动作指向的源 run（「查看反证」=打开这个 run 的证据抽屉，不触发新研究） */
+  sourceRunId: IdSchema.nullable().optional(),
+  /** rerun_with / switch_context 的参数（interval/symbol/positionId/quoteId/stance） */
+  parameters: z.record(z.string(), z.unknown()).optional(),
+})
+export type FollowUpAction = z.infer<typeof FollowUpActionSchema>
+
+// ---- P1-4 用户画像（§4.D 第一层：长期研究偏好；独立 PG 表，PG 权威） ----
+// leverageHabitMax 是描述性字段（「历史持仓最大杠杆」），不是授权上限。
+
+export const TraderProfileSchema = z.object({
+  riskProfile: z.enum(['conservative', 'balanced', 'aggressive']).nullable(),
+  experienceLevel: z.enum(['novice', 'intermediate', 'pro']).nullable(),
+  /** 历史持仓最大杠杆（描述性习惯，非授权上限） */
+  leverageHabitMax: z.number().int().min(1).max(125).nullable(),
+  disclaimerAck: z.boolean(),
+  /** 用户最后确认时刻（画像变更须用户确认后生效） */
+  confirmedAt: z.number().int().nullable(),
+})
+export type TraderProfile = z.infer<typeof TraderProfileSchema>
+export const TraderProfilePatchSchema = TraderProfileSchema.partial()
+
 /** POST /api/research/runs 创建输入；asOf 缺省时由服务端取当前时间 */
 export const ResearchRunCreateSchema = z.object({
   product: ResearchProductSchema,
@@ -23,6 +77,8 @@ export const ResearchRunCreateSchema = z.object({
   /** 假设覆盖（「改成 20 倍」）：只影响本次研究，不写回已确认持仓 */
   positionOverride: z.object({ leverage: z.number().int().min(1).max(125) }).optional(),
   asOf: z.number().int().optional(),
+  /** P1-1 任务场景（缺省由服务端按意图+产品推导；只统一任务配置，不绕过产品校验） */
+  sceneCode: TaskSceneSchema.optional(),
 })
 export type ResearchRunCreate = z.infer<typeof ResearchRunCreateSchema>
 
@@ -45,6 +101,8 @@ export const ResearchRunSchema = z.object({
   horizon: ResearchHorizonSchema,
   /** 运行决策时刻（图表按此冻结，历史复盘与结果同刻） */
   asOf: z.number().int(),
+  /** P1-1 任务场景（服务端 resolveScene 推导或显式传入） */
+  sceneCode: TaskSceneSchema.optional(),
   snapshotId: z.string().optional(),
   configVersion: z.string().optional(),
   knowledgeVersion: z.string().optional(),
@@ -56,7 +114,7 @@ export const ResearchRunSchema = z.object({
 })
 export type ResearchRun = z.infer<typeof ResearchRunSchema>
 
-/** 流水线单步信息（plan→snapshot→structures→retrieve→product_analysis→countercase→validate→publish） */
+/** 流水线单步信息（plan→snapshot→structures→retrieve→product_analysis→countercase→synthesis→validate→publish） */
 export const RunStepInfoSchema = z.object({
   step: z.string().min(1),
   status: z.enum(['pending', 'running', 'completed', 'failed', 'skipped']),

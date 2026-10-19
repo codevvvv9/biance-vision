@@ -42,6 +42,8 @@ export function runCheckpointOf(c: RunContext, _name: string): Record<string, un
     retrieval: c.retrieval,
     claims: c.claims,
     counterClaims: c.counterClaims,
+    // P1-2 综合解释随检查点持久化：synthesis 完成后崩溃，恢复执行 publish 不再重调 LLM
+    synthesis: c.synthesis,
     // 降级发布标志必须随检查点持久化：validate 降级收尾后崩溃，恢复执行 publish 时
     // 仍按降级门控装配（剔 LLM 反证语义已在 pipeline 内完成，counterClaims 为剔除后集合）
     degradedPublish: c.degradedPublish,
@@ -83,6 +85,7 @@ export async function executeRun(runId: string): Promise<void> {
     marketType: input.marketType,
     horizon: input.horizon,
     question: input.question ?? null,
+    sceneCode: row.sceneCode ?? null,
     positionId: input.positionId ?? null,
     quoteId: input.quoteId ?? null,
     asOf: row.asOf,
@@ -100,6 +103,7 @@ export async function executeRun(runId: string): Promise<void> {
     productPayload: null,
     claims: [],
     counterClaims: [],
+    synthesis: null,
     decision: null,
     result: null,
     validationFeedback: null,
@@ -116,6 +120,7 @@ export async function executeRun(runId: string): Promise<void> {
     ctx.retrieval = (saved.retrieval as RunContext['retrieval']) ?? null
     ctx.claims = (saved.claims as RunContext['claims']) ?? []
     ctx.counterClaims = (saved.counterClaims as RunContext['counterClaims']) ?? []
+    ctx.synthesis = (saved.synthesis as RunContext['synthesis']) ?? null
     ctx.degradedPublish = (saved.degradedPublish as RunContext['degradedPublish']) ?? undefined
     ctx.usage = { ...ctx.usage, ...((saved.usage as RunContext['usage']) ?? {}) }
     const v2 = saved.v2 as Record<string, unknown> | undefined
@@ -149,6 +154,12 @@ export async function executeRun(runId: string): Promise<void> {
     }
     const stages = buildStages(positionOverride).filter((st) => !completed.has(st.name))
     await runPipeline(ctx, stages, new PgRunStore(), runBus, { leaseOwner: workerId, checkpointOf: runCheckpointOf })
+    // P1-5 研究记忆：run 发布后 fire-and-forget 提取（每会话累计 6 条新消息触发；
+    // 失败只记日志，不影响已完成的 run）
+    if (row.conversationId !== null && row.conversationId !== '') {
+      const { maybeExtractMemories } = await import('../memory.js')
+      maybeExtractMemories(row.userId, row.conversationId)
+    }
   } catch (err) {
     if (err instanceof RunCancelled) {
       // 取消是合法终态：落库由 store.fail 之外单独处理

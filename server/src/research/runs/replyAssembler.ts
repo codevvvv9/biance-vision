@@ -97,6 +97,11 @@ export interface TrustedReplyInput {
    句中数字必须 ⊆（模板 ∪ facts ∪ notes ∪ evidenceTexts）的数字集，违例句剔除。
    */
   evidenceTexts?: string[]
+  /**
+   * P1-8 免责文案（服务端 app_settings 配置，红线 #10：前端不内置）：非空时整体追加在
+   * 回复末尾。配置文案来源（三类可信来源之 3），原样透传豁免数字白名单。
+   */
+  disclaimer?: string
 }
 
 export interface AssembleResult {
@@ -197,21 +202,27 @@ export function assembleTrustedReply(input: TrustedReplyInput): AssembleResult {
   const offenders = [...rendered].filter((n) => !whitelist.has(n))
   if (offenders.length > 0) {
     checkNotes.push(`模板段出现白名单外数字：${offenders.slice(0, 5).join(', ')}`)
-    return { content: safeRender(), degraded: true, checkNotes }
+    return { content: appendDisclaimer(safeRender(), input.disclaimer), degraded: true, checkNotes }
   }
 
   // 残留未替换占位（调用方漏传槽位）→ 降级为安全形态（不静默露出 {{...}} 语法）
   const leftover = template.match(/\{\{[\w-]+\}\}/)
   if (leftover !== null) {
     checkNotes.push(`残留未替换占位：${leftover[0]}`)
-    return { content: safeRender(), degraded: true, checkNotes }
+    return { content: appendDisclaimer(safeRender(), input.disclaimer), degraded: true, checkNotes }
   }
 
   // 最终兜底：任何路径都不得产出空回复（空串＝用户看到无响应）
   if (template.trim() === '') {
     checkNotes.push('组装结果为空，回退拦截提示')
-    return { content: '（该回复未通过可信校验已被拦截：请稍后重试，或换一种问法。）', degraded: true, checkNotes }
+    return { content: appendDisclaimer('（该回复未通过可信校验已被拦截：请稍后重试，或换一种问法。）', input.disclaimer), degraded: true, checkNotes }
   }
 
-  return { content: template, degraded: degraded.value, checkNotes }
+  return { content: appendDisclaimer(template, input.disclaimer), degraded: degraded.value, checkNotes }
+}
+
+/** 免责追加（P1-8）：非空配置整体拼在回复末尾（原样透传，不参与白名单校验） */
+function appendDisclaimer(content: string, disclaimer: string | undefined): string {
+  const d = (disclaimer ?? '').trim()
+  return d === '' ? content : `${content}\n\n${d}`
 }
