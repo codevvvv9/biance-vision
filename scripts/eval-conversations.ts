@@ -22,6 +22,8 @@ import { bindCounterEvidence } from '../server/src/research/runs/countercasePars
 import { validateResearch } from '../server/src/services/validator.js'
 import type { ValidationCode } from '../server/src/services/validator.js'
 import { isPositionStale } from '../server/src/research/runs/stages.js'
+import { buildSynthesis } from '../server/src/research/runs/synthesis.js'
+import { resolveScene } from '../server/src/research/scenes.js'
 import { analyzeEvent } from '../server/src/services/eventAnalyzer.js'
 import type { EventQuoteInput } from '../server/src/services/eventAnalyzer.js'
 import { decideEventSubmitted } from '../server/src/services/decisionPolicy.js'
@@ -171,7 +173,7 @@ async function runRepairScenario(mode: RejectMode): Promise<PipelineOutcome> {
   }
   try {
     const ctx = mkCtx()
-    const stages = (['plan', 'snapshot', 'structures', 'retrieve', 'product_analysis', 'countercase', 'validate', 'publish'] as const).map(mkStage)
+    const stages = (['plan', 'snapshot', 'structures', 'retrieve', 'product_analysis', 'countercase', 'synthesis', 'validate', 'publish'] as const).map(mkStage)
     await runPipeline(ctx, stages, store, bus, {
       leaseOwner: 'eval',
       // 与 runner.runCheckpointOf 同口径的最小检查点（断言降级状态随检查点持久化）
@@ -187,7 +189,7 @@ async function runRepairScenario(mode: RejectMode): Promise<PipelineOutcome> {
   return out
 }
 
-const NOOP_STAGES: Stage[] = (['plan', 'snapshot', 'structures', 'retrieve', 'product_analysis', 'countercase', 'validate', 'publish'] as const).map(
+const NOOP_STAGES: Stage[] = (['plan', 'snapshot', 'structures', 'retrieve', 'product_analysis', 'countercase', 'synthesis', 'validate', 'publish'] as const).map(
   (name) => ({ name, async run() {} }),
 )
 
@@ -565,6 +567,75 @@ async function checkItem(item: EvalItem): Promise<void> {
       check(a.configHash === b.configHash, '同库连续两次 freezeRunConfig 哈希不一致（配置未变时必须一致）')
       return
     }
+    // G 类（P1）：语义支持校验——引用存在 ≠ 证据支持（2026-10-19 复核缺口②）
+    case 'validator_support': {
+      const result = validateResearch({
+        claims: (item.input.claims as never[]) ?? [],
+        counterClaims: (item.input.counterClaims as never[]) ?? [],
+        knownEvidenceIds: new Set(item.input.knownEvidenceIds as string[]),
+        evidenceTexts: new Map(Object.entries((item.input.evidenceTexts as Record<string, string>) ?? {})),
+        modelVersion: null,
+        frozenConfigHash: null,
+        runtimeConfigHash: null,
+      })
+      if (item.expect.ok === true) {
+        check(result.ok, `期望通过但被拒：${JSON.stringify(result.ok ? [] : result.issues.map((i) => i.code))}`)
+        return
+      }
+      check(!result.ok, '期望校验拒绝（证据不支持该声明），但通过了')
+      if (!result.ok) {
+        check(
+          result.issues.some((i: { code: ValidationCode }) => i.code === (item.expect.code as ValidationCode)),
+          `issues ${JSON.stringify(result.issues.map((i) => i.code))} 不含 ${String(item.expect.code)}`,
+        )
+      }
+      return
+    }
+    // G 类（P1-1）：意图×产品 → TaskScene 映射
+    case 'scene_resolve': {
+      const got = resolveScene(str(item.input.intent) as never, {
+        product: (item.input.product as never) ?? null,
+        hasPosition: item.input.hasPosition === true,
+        replay: item.input.replay === true,
+      })
+      check(got === item.expect.scene, `场景 ${got} ≠ 期望 ${item.expect.scene}`)
+      return
+    }
+    // H 类（P1-2）：受约束综合解释（可注入 mock LLM；句级校验钉住行为）
+    case 'synthesis_behavior': {
+      const llmSpec = item.input.llm as { kind: 'text' | 'throw' | 'none'; text?: string } | undefined
+      const llm =
+        llmSpec === undefined || llmSpec.kind === 'none'
+          ? null
+          : async () => {
+              if (llmSpec.kind === 'throw') throw new Error('mock LLM 故障（评测注入）')
+              return { text: llmSpec.text ?? '', usage: { promptTokens: 0, completionTokens: 0 } }
+            }
+      const result = await buildSynthesis(
+        {
+          question: (item.input.question as string) ?? null,
+          symbol: 'BTCUSDT',
+          horizon: '1h',
+          decision: item.input.decision as never,
+          claims: (item.input.claims as never[]) ?? [],
+          counterClaims: (item.input.counterClaims as never[]) ?? [],
+          scenarios: (item.input.scenarios as never[]) ?? [],
+          evidenceTexts: (item.input.evidenceTexts as string[]) ?? [],
+        },
+        { llm, system: '评测用系统提示词' },
+      )
+      check(result.source === item.expect.source, `source=${result.source} ≠ 期望 ${item.expect.source}`)
+      if (item.expect.degraded !== undefined) {
+        check(result.degraded === item.expect.degraded, `degraded=${String(result.degraded)} ≠ 期望 ${String(item.expect.degraded)}`)
+      }
+      for (const inc of (item.expect.includes as string[]) ?? []) {
+        check(result.text.includes(inc), `综合解释缺「${inc}」`)
+      }
+      for (const exc of (item.expect.excludes as string[]) ?? []) {
+        check(!result.text.includes(exc), `综合解释不得含「${exc}」`)
+      }
+      return
+    }
     default:
       throw new CheckError(`未知用例类型：${item.kind}`)
   }
@@ -572,10 +643,19 @@ async function checkItem(item: EvalItem): Promise<void> {
 
 // ---- 主流程 ----
 
+// f6 修复（2026-10-19 复核）：requires:'db' 用例此前进环境变量后直接调 freezeRunConfig，
+// 未初始化数据库连接（initDb 含自动迁移）——现在先 initDb；失败则全部 db 用例转 skip
+const hasDbEnv = process.env.DATABASE_URL !== undefined && process.env.DATABASE_URL !== ''
+let dbReady = false
+if (hasDbEnv && suite.items.some((i) => i.requires === 'db')) {
+  const { initDb } = await import('../server/src/db.js')
+  dbReady = await initDb()
+}
+
 const results: ItemResult[] = []
 for (const item of suite.items) {
-  if (item.requires === 'db' && (process.env.DATABASE_URL === undefined || process.env.DATABASE_URL === '')) {
-    results.push({ id: item.id, category: item.category, status: 'skip', reason: 'requires db' })
+  if (item.requires === 'db' && (!hasDbEnv || !dbReady)) {
+    results.push({ id: item.id, category: item.category, status: 'skip', reason: hasDbEnv ? 'db init failed' : 'requires db' })
     continue
   }
   try {
