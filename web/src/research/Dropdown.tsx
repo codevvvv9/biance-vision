@@ -2,16 +2,24 @@
  * 自绘下拉（替换原生 <select>）：macOS 上原生弹层是系统白色菜单，无法用 CSS 定制，
  * 与深色主题割裂。本组件与表单输入控件同源视觉（--bg-2/--line-2/6px 圆角），
  * 弹层 --bg-3 + 悬停 --cyan 高亮；纯前端展示选择，不改变数据语义。
- * 键盘：Enter/Space/↓ 打开，↑/↓ 导航（跳过禁用项），Home/End 首末，Enter 选中，Esc/Tab 关闭；
- * 点击外部关闭；焦点始终保留在按钮上，弹层用 aria-activedescendant 跟踪（listbox 模式）。
- * 选项在 pointerdown 阶段选中（click 前焦点转移会先触发 blur 收起弹层）。
+ * 键盘：Enter/Space/↓ 打开，↑/↓ 导航（跳过禁用项），Home/End 首末，Enter 选中，Esc/Tab 关闭。
+ * 弹层经 createPortal 渲染到 body + fixed 定位（anchoredPanel）：不受祖先 overflow 裁剪/撑开，
+ * 底部空间不足自动上翻，滚动时跟随；选项在 pointerdown 阶段选中（click 前焦点转移会先触发
+ * blur 收起弹层）。按钮 min-width 按最长选项计算——切换选项不改变按钮宽度，排版不跳。
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { useAnchoredPanel } from './anchoredPanel'
 
 export interface DropdownOption<T extends string | number> {
   value: T
   label: string
   disabled?: boolean
+}
+
+/** CJK 全角按 2 个字符宽估算（ch 单位），用于稳定按钮 min-width */
+function labelWidth(s: string): number {
+  return [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x2e7f ? 2 : 1), 0)
 }
 
 export function Dropdown<T extends string | number>(props: {
@@ -26,14 +34,17 @@ export function Dropdown<T extends string | number>(props: {
   const [active, setActive] = useState(-1)
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const pos = useAnchoredPanel(open, rootRef)
 
   const selected = options.find((o) => o.value === value)
   const activeId = active >= 0 && active < options.length ? `dd-opt-${active}` : undefined
+  const buttonMinWidth = Math.min(Math.max(...options.map((o) => labelWidth(o.label)), 4) + 6, 44)
 
   useEffect(() => {
     if (!open) return
     const close = (e: PointerEvent): void => {
-      if (rootRef.current !== null && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!rootRef.current?.contains(t) && !listRef.current?.contains(t)) setOpen(false)
     }
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
@@ -105,6 +116,7 @@ export function Dropdown<T extends string | number>(props: {
       <button
         type="button"
         className="dd-button"
+        style={{ minWidth: `${buttonMinWidth}ch` }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-activedescendant={open ? activeId : undefined}
@@ -119,8 +131,14 @@ export function Dropdown<T extends string | number>(props: {
           <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {open && (
-        <ul className="dd-list" role="listbox" ref={listRef} aria-label={ariaLabel}>
+      {open && pos !== null && createPortal(
+        <ul
+          className="dd-list"
+          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.minWidth, zIndex: 2000 }}
+          role="listbox"
+          ref={listRef}
+          aria-label={ariaLabel}
+        >
           {options.map((o, i) => (
             <li
               key={o.value}
@@ -137,7 +155,8 @@ export function Dropdown<T extends string | number>(props: {
               {o.value === value && <span className="dd-check" aria-hidden="true">✓</span>}
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   )

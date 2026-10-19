@@ -1,11 +1,14 @@
 /**
- * 自由输入 + 深色补全面板（替换原生 datalist：浏览器不给 datalist 弹层任何定制权限，
- * macOS/Windows 上都是系统白色菜单）。弹层复用 Dropdown 的 .dd-list/.dd-option 样式，
- * 视觉完全同源。过滤：前缀优先、其次包含（大小写不敏感），最多 10 项；空输入或与某项
- * 完全相等时展示前 10 个。键盘：↑/↓ 导航、Enter 选活动项（无活动项则收起保留输入）、
- * Esc/Tab 收起；选项在 pointerdown 阶段选中（click 前焦点转移会先触发 blur 收起面板）。
+ * 自由输入 + 深色补全面板（替换原生 datalist：浏览器不给 datalist 弹层任何定制权限）。
+ * 弹层复用 Dropdown 的 .dd-list/.dd-option 样式，并经 createPortal 渲染到 body + fixed
+ * 定位（anchoredPanel）——不受祖先 overflow 裁剪/撑开，底部空间不足自动上翻，滚动跟随。
+ * 过滤：前缀优先、其次包含（大小写不敏感），最多 10 项；空输入或与某项完全相等时展示
+ * 前 10 个。键盘：↑/↓ 导航、Enter 选活动项（无活动项则收起保留输入）、Esc/Tab 收起；
+ * 选项在 pointerdown 阶段选中（click 前焦点转移会先触发 blur 收起面板）。
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { useAnchoredPanel } from './anchoredPanel'
 
 const MAX_ITEMS = 10
 
@@ -23,6 +26,7 @@ export function Combobox(props: {
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const listId = useId()
+  const pos = useAnchoredPanel(open, rootRef)
 
   const query = value.trim().toUpperCase()
   const items = useMemo(() => {
@@ -36,7 +40,8 @@ export function Combobox(props: {
   useEffect(() => {
     if (!open) return
     const close = (e: PointerEvent): void => {
-      if (rootRef.current !== null && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!rootRef.current?.contains(t) && !listRef.current?.contains(t)) setOpen(false)
     }
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
@@ -107,8 +112,15 @@ export function Combobox(props: {
         onKeyDown={onKeyDown}
         onBlur={() => setOpen(false)}
       />
-      {open && items.length > 0 && (
-        <ul className="dd-list cb-list" id={listId} role="listbox" aria-label={ariaLabel} ref={listRef}>
+      {open && items.length > 0 && pos !== null && createPortal(
+        <ul
+          className="dd-list cb-list"
+          id={listId}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.minWidth, zIndex: 2000 }}
+          role="listbox"
+          aria-label={ariaLabel}
+          ref={listRef}
+        >
           {items.map((s, i) => (
             <li
               key={s}
@@ -123,7 +135,8 @@ export function Combobox(props: {
               <span>{s}</span>
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   )
