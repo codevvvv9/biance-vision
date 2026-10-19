@@ -733,3 +733,36 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* ===== 自绘下拉（Dropdown.tsx，替换原生 select：macOS 原生弹层无法定制，与深色主题统一） ===== */
+.dd { position: relative; display: inline-flex; max-width: 100%; }
+.dd-button {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; min-width: 0;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 6px;
+  padding: 6px 8px; font: inherit; line-height: 1.4; white-space: nowrap;
+  cursor: pointer;
+}
+.dd-button:hover { border-color: var(--line-3); }
+.dd-button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.dd-button:disabled { opacity: .45; cursor: not-allowed; }
+.dd-open .dd-button { border-color: var(--cyan); }
+.dd-chevron { flex: none; opacity: .55; transition: transform .15s ease; }
+.dd-open .dd-chevron { transform: rotate(180deg); }
+.dd-list {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  min-width: 100%; max-height: 260px; overflow: auto;
+  margin: 0; padding: 4px; list-style: none;
+  background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+}
+.dd-option {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 7px 10px; border-radius: 6px; color: var(--text-1);
+  cursor: pointer; white-space: nowrap;
+}
+.dd-option[data-active] { background: var(--cyan-soft); color: var(--text); }
+.dd-option[data-selected] { color: var(--cyan); }
+.dd-option[aria-disabled='true'] { opacity: .4; cursor: not-allowed; }
+.dd-check { flex: none; color: var(--cyan); font-size: 12px; }
