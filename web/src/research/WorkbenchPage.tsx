@@ -12,6 +12,8 @@ import { EvidenceDrawer } from './ResearchResult'
 import { RunBubble } from './RunBubble'
 import { UiModeSwitch } from './UiModeSwitch'
 import { Dropdown } from './Dropdown'
+import { ContextCard } from './ContextCard'
+import type { FollowUpAction } from 'biance-vision-brooks'
 import { Combobox } from './Combobox'
 import { authUrl } from './uiMode'
 import { useResearchConversation } from './useResearchConversation'
@@ -98,6 +100,8 @@ export default function WorkbenchPage(): JSX.Element {
   const [runLoading, setRunLoading] = useState(false), [retryBusy, setRetryBusy] = useState(false)
   const [contextLoading, setContextLoading] = useState(false)
   const [unread, setUnread] = useState(false)
+  /** P1-8 输入面板配置（服务端下发；缺失回退内置占位/2 条建议） */
+  const [inputCfg, setInputCfg] = useState<{ placeholder: Record<string, string>; suggestionLimit: number }>({ placeholder: {}, suggestionLimit: 2 })
   const navRef = useRef<HTMLElement>(null), panelRef = useRef<HTMLElement>(null), toolsRef = useRef<HTMLDivElement>(null)
   const logRef = useRef<HTMLDivElement>(null), inputRef = useRef<HTMLTextAreaElement>(null)
   const nearBottom = useRef(true), runGeneration = useRef(0)
@@ -135,6 +139,20 @@ export default function WorkbenchPage(): JSX.Element {
 
   useEffect(() => { try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ owner: user?.username ?? null, scene, symbol, horizon, drafts })) } catch { /* Storage can be disabled. */ } }, [user, scene, symbol, horizon, drafts])
   useEffect(() => { if (user) { void conv.refreshConversations(); void refreshTools() } }, [user, conv.refreshConversations, refreshTools])
+  // P1-8 输入面板配置（服务端 /config/research-ui；失败回退内置，不阻塞页面）
+  useEffect(() => {
+    let alive = true
+    void api<{ chatInput?: { scenes?: Record<string, { placeholder?: string; suggestionLimit?: number }> } }>('/config/research-ui')
+      .then((d) => {
+        if (!alive || d.chatInput?.scenes === undefined) return
+        const placeholder: Record<string, string> = {}
+        for (const [k, v] of Object.entries(d.chatInput.scenes)) if (v.placeholder !== undefined) placeholder[k] = v.placeholder
+        const limit = Object.values(d.chatInput.scenes).find((v) => v.suggestionLimit !== undefined)?.suggestionLimit
+        setInputCfg({ placeholder, suggestionLimit: typeof limit === 'number' && limit >= 0 && limit <= 8 ? limit : 2 })
+      })
+      .catch(() => { /* 配置拉取失败用内置默认 */ })
+    return () => { alive = false }
+  }, [])
   useEffect(() => {
     if (!toolsOpen) return
     void refreshTools()
@@ -205,17 +223,33 @@ export default function WorkbenchPage(): JSX.Element {
     inputRef.current?.focus()
   }
   const openPanel = (next: 'chart' | 'evidence', id: string | null = null): void => { setEvidenceId(id); setPanel(next) }
-  const retry = async (): Promise<void> => {
+  // P1-1 直建 run 的场景（与服务端 defaultSceneForProduct 同口径：产品+持仓引用推导）
+  const sceneOf = (product: string, hasPosition: boolean): string =>
+    product === 'perp' ? (hasPosition ? 'hold-review' : 'structure-scan') : product === 'event' ? 'quote-review' : 'structure-scan'
+  const HORIZON_ORDER: Horizon[] = ['10m', '30m', '1h', '1d', '1w']
+  const createRunDirect = async (horizonOverride?: Horizon): Promise<void> => {
     if (!run || retryBusy) return
     setRetryBusy(true)
     try {
-      const d = await api<{ run: ResearchRun }>('/research/runs', { method: 'POST', body: { product: run.product, symbol: run.symbol, marketType: run.marketType, horizon: run.horizon } })
+      const nextH = horizonOverride ?? run.horizon
+      const d = await api<{ run: ResearchRun }>('/research/runs', { method: 'POST', body: { product: run.product, symbol: run.symbol, marketType: run.marketType, horizon: nextH, sceneCode: run.sceneCode ?? sceneOf(run.product, positionId !== '') } })
       updateUrl({ run: d.run.id })
     } catch (e) { setPageError((e as Error).message) } finally { setRetryBusy(false) }
   }
+  const retry = async (): Promise<void> => { await createRunDirect() }
+  // P1-3 结构化追问分发（动作不转聊天消息；counter_search 例外——明确告知是新研究）
+  const onFollowUp = (a: FollowUpAction): void => {
+    if (a.action === 'open_evidence' || a.action === 'open_rule_card') { openPanel('evidence'); return }
+    if (a.action === 'switch_context') { setToolsOpen(true); return }
+    if (a.action === 'rerun_with') { void createRunDirect(HORIZON_ORDER[(HORIZON_ORDER.indexOf(run?.horizon ?? '1h') + 1) % HORIZON_ORDER.length]); return }
+    if (a.action === 'counter_search') {
+      void conv.send(`从反证角度重新研究 ${run?.symbol ?? symbol}（${run?.horizon ?? horizon}）：重点寻找不支持上一轮结论的证据`)
+      return
+    }
+  }
   const citationIds = [...new Set(tracker.result?.claims.flatMap(c => c.evidenceIds) ?? [])]
-  const bubble = run ? <RunBubble run={run} steps={tracker.steps} result={tracker.result} sseError={tracker.sseError} sseConn={tracker.sseConn} degraded={tracker.degraded}
-    onCancel={() => void tracker.cancelRun()} onRetry={() => void retry()} onCitation={id => openPanel('evidence', id)}
+  const bubble = run ? <RunBubble run={run} steps={tracker.steps} result={tracker.result} sseError={tracker.sseError} sseConn={tracker.sseConn} degraded={tracker.degraded} details={tracker.details} securityInterrupt={tracker.securityInterrupt}
+    onCancel={() => void tracker.cancelRun()} onRetry={() => void retry()} onCitation={id => openPanel('evidence', id)} onFollowUp={onFollowUp}
     footer={<div className="wb-run-actions"><button onClick={() => openPanel('evidence')}>查看证据 ↗</button><button onClick={() => openPanel('chart')}>查看图表 ↗</button><span>{run.symbol} · {run.horizon} · {new Date(run.asOf).toLocaleString()}</span></div>} /> : null
   const visibleMessages = conv.messages.filter(m => m.text || m.card || m.runId)
   const hasInlineRun = conv.messages.some(m => m.runId === run?.id)
@@ -256,7 +290,7 @@ export default function WorkbenchPage(): JSX.Element {
             if (nearBottom.current) setUnread(false)
           }}>
           <div className="wb-thread">
-            {welcome && <section className="wb-welcome"><div className="wb-welcome-icon"><Logo /></div><div className="wb-eyebrow">从问题出发，让证据说话</div><h1>你的比特币<br /><span>研究伙伴</span></h1><p>看清市场结构，检查交易假设，理解每一条依据。</p><div className="wb-suggestions">{SCENES[scene].examples.map(q => <button key={q} onClick={() => { setDrafts(d => ({ ...d, [scene]: q })); inputRef.current?.focus() }}>{q}<span aria-hidden>↗</span></button>)}</div></section>}
+            {welcome && <section className="wb-welcome"><div className="wb-welcome-icon"><Logo /></div><div className="wb-eyebrow">从问题出发，让证据说话</div><h1>你的比特币<br /><span>研究伙伴</span></h1><p>看清市场结构，检查交易假设，理解每一条依据。</p><div className="wb-suggestions">{SCENES[scene].examples.slice(0, inputCfg.suggestionLimit).map(q => <button key={q} onClick={() => { setDrafts(d => ({ ...d, [scene]: q })); inputRef.current?.focus() }}>{q}<span aria-hidden>↗</span></button>)}</div></section>}
             {conv.loadingConversation && <p role="status" className="wb-caption">正在恢复对话…</p>}
             {!conv.loadingConversation && conv.messages.map((m, i) => (!m.text && !m.card && !m.runId) ? null : <article key={i} className={`wb-message ${m.role}`}>
               <div className="wb-message-label">{m.role === 'user' ? '你' : 'VISION'}</div><div className="wb-message-body">{m.text && (m.role === 'user' ? <p className="wb-user-text">{m.text}</p> : <MiniMarkdown text={m.text} />)}
@@ -272,6 +306,10 @@ export default function WorkbenchPage(): JSX.Element {
         <div className="wb-compose-wrap">
           {pageError && <p className="wb-alert" role="alert">{pageError}</p>}
           {conv.historyError && selectedConversation && <p className="wb-alert" role="alert">无法恢复会话：{conv.historyError}</p>}
+          <ContextCard symbol={symbol} horizon={horizon} product={SCENES[scene].product}
+            position={scene === 'perp' ? positions.find(p => p.id === positionId) ?? null : null}
+            quote={scene === 'event' ? quotes.find(q => q.id === quoteId) ?? null : null}
+            onOpenTools={() => setToolsOpen(true)} loggedIn={!!user} />
           <div className="wb-composer"><div className="wb-scenes" role="tablist" aria-label="研究场景" onKeyDown={e => {
             if (locked || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
             e.preventDefault()
@@ -279,7 +317,7 @@ export default function WorkbenchPage(): JSX.Element {
             const next = scenes[e.key === 'Home' ? 0 : e.key === 'End' ? 2 : (scenes.indexOf(scene) + (e.key === 'ArrowRight' ? 1 : 2)) % 3]
             changeScene(next); document.getElementById(`scene-${next}`)?.focus()
           }}>{(Object.keys(SCENES) as Scene[]).map(s => <button key={s} id={`scene-${s}`} role="tab" tabIndex={scene === s ? 0 : -1} aria-selected={scene === s} aria-controls="wb-composer-panel" disabled={locked} onClick={() => changeScene(s)}>{SCENES[s].label}</button>)}</div>
-            <div role="tabpanel" id="wb-composer-panel" aria-labelledby={`scene-${scene}`}><textarea ref={inputRef} aria-label="研究问题" value={drafts[scene]} placeholder={SCENES[scene].hint} maxLength={2000} rows={3} onChange={e => setDrafts(d => ({ ...d, [scene]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
+            <div role="tabpanel" id="wb-composer-panel" aria-labelledby={`scene-${scene}`}><textarea ref={inputRef} aria-label="研究问题" value={drafts[scene]} placeholder={inputCfg.placeholder[scene] ?? SCENES[scene].hint} maxLength={2000} rows={3} onChange={e => setDrafts(d => ({ ...d, [scene]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
               <div className="wb-compose-tools"><div className="wb-context"><label><span className="sr-only">交易对</span><Combobox ariaLabel="交易对" value={symbol} disabled={locked} onChange={v => { setSymbol(v.toUpperCase()); setPositionId(''); setQuoteId('') }} suggestions={['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']} /></label><label><span className="sr-only">研究期限</span><Dropdown ariaLabel="研究期限" value={horizon} disabled={locked} onChange={v => setHorizon(v)} options={(['10m', '30m', '1h', '1d', '1w'] as Horizon[]).map(h => ({ value: h, label: `${h}${h === '1w' ? ' · 研究模式' : ''}` }))} /></label></div>
                 <div className="wb-send-tools">{scene !== 'spot' && <button className="wb-tool" disabled={locked} onClick={() => user ? setToolsOpen(true) : login()}>{scene === 'perp' ? (positionId ? '已关联持仓' : '持仓 / 风险') : (quoteId ? '已关联报价' : '报价 / 结算')}</button>}<button className="wb-send" aria-label={user ? '发送研究问题' : '登录后发起研究'} disabled={locked || !drafts[scene].trim()} onClick={() => void send()}>{conv.busy ? '…' : '↑'}</button></div>
               </div>

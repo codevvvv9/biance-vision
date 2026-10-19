@@ -787,3 +787,28 @@
 @media (max-width: 900px) {
   .kb-import { grid-template-columns: 1fr; }
 }
+/* ===== P1-6 提示词注册表管理页 + P1-8 文案配置 ===== */
+.prompt-form-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.prompt-form-row label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 260px; }
+.prompt-editor { width: 100%; margin: 8px 0; font: inherit; font-size: 13px; line-height: 1.6; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--bg-2); color: var(--text); resize: vertical; }
+.prompt-note-input { width: 100%; margin: 0 0 8px; font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--bg-2); color: var(--text); }
+.prompt-group { border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+.prompt-group-head { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.prompt-group-scene { color: var(--muted); font-size: 12px; }
+.prompt-active-tag { color: var(--up); border: 1px solid var(--up); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.prompt-version-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.prompt-version { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 3px 0; flex-wrap: wrap; }
+.prompt-status { font-size: 11px; border-radius: 4px; padding: 0 5px; border: 1px solid; }
+.ps-draft { color: var(--amber); border-color: var(--amber); }
+.ps-published { color: var(--up); border-color: var(--up); }
+.ps-retired { color: var(--muted); border-color: var(--line-2); }
+.prompt-note-text { color: var(--muted); font-size: 11.5px; flex: 1; min-width: 120px; }
+.prompt-actions { display: flex; gap: 6px; margin-left: auto; }
+.prompt-diff { margin-top: 8px; border-top: 1px dashed var(--line-2); padding-top: 8px; }
+.prompt-diff-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.prompt-diff pre { margin: 0; font-size: 12px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+.diff-add { color: var(--up); }
+.diff-del { color: var(--down); }
+.diff-same { color: var(--muted); }
+.admin-hint-list { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.8; }
+.admin-hint-list code { background: var(--bg-2); padding: 0 4px; border-radius: 3px; }

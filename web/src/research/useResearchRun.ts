@@ -27,8 +27,25 @@ export const STEP_LABEL: Record<string, string> = {
   retrieve: '知识检索',
   product_analysis: '产品分析',
   countercase: '反证审查',
+  synthesis: '综合解释',
   validate: '风险校验',
   publish: '发布',
+}
+
+/** P1-7 过程播报行（step_detail 事件）：真实阶段/工具状态/计数（服务端承诺无正文） */
+export interface StepDetailRow {
+  key: string
+  step: string
+  kind: string
+  label: string
+  status: 'started' | 'finished'
+  count?: number
+}
+
+/** P1-7 安全中断（security_interrupt 事件）：仅 version_mismatch 硬中断场景 */
+export interface SecurityInterruptInfo {
+  code: string
+  reason: string
 }
 
 export interface UseResearchRunOptions {
@@ -46,6 +63,10 @@ export interface ResearchRunTracker {
   sseConn: SseConnState
   /** P0-5 受控降级（task_degraded 事件）：修复耗尽等场景的降级说明；正常运行为 null */
   degraded: { code: string; handling: string; reason: string } | null
+  /** P1-7 过程播报行（step_detail 事件；真实状态与计数，非思维链） */
+  details: StepDetailRow[]
+  /** P1-7 安全中断（security_interrupt 事件）；正常运行为 null */
+  securityInterrupt: SecurityInterruptInfo | null
   openRun: (run: ResearchRun) => void
   clearRun: () => void
   cancelRun: () => Promise<void>
@@ -61,6 +82,10 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
   const [sseConn, setSseConn] = useState<SseConnState>('idle')
   /** P0-5 受控降级（task_degraded）：随 run 生命周期，openRun 清空 */
   const [degraded, setDegraded] = useState<ResearchRunTracker['degraded']>(null)
+  /** P1-7 过程播报行（step_detail）：按 step+kind 键 upsert，openRun 清空 */
+  const [details, setDetails] = useState<StepDetailRow[]>([])
+  /** P1-7 安全中断（security_interrupt）：version_mismatch 硬中断横幅，openRun 清空 */
+  const [securityInterrupt, setSecurityInterrupt] = useState<SecurityInterruptInfo | null>(null)
   const esRef = useRef<EventSource | null>(null)
   /** SSE 重放游标（事件 id）：同一 run 重新订阅时以 ?after= 续发，避免丢事件/重复事件 */
   const lastSeqRef = useRef<number>(0)
@@ -82,6 +107,8 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
     setResult(null)
     setSseError('')
     setDegraded(null)
+    setDetails([])
+    setSecurityInterrupt(null)
     setSseConn('idle')
     optsRef.current.onOpen?.(run)
     esRef.current?.close()
@@ -159,6 +186,33 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
       const data = JSON.parse((ev as MessageEvent).data) as { payload?: { code?: string; handling?: string; reason?: string } }
       if (data.payload !== undefined) setDegraded({ code: data.payload.code ?? 'unknown', handling: data.payload.handling ?? 'partial_output', reason: data.payload.reason ?? '' })
     })
+    // P1-7 过程播报（step_detail）：真实阶段/工具状态/计数，按 step+kind upsert 覆盖
+    es.addEventListener('step_detail', (ev) => {
+      if (!isCurrent()) return
+      trackSeq(ev)
+      const data = JSON.parse((ev as MessageEvent).data) as { payload?: { step?: string; kind?: string; label?: string; status?: 'started' | 'finished'; detail?: { count?: number } } }
+      const p = data.payload
+      if (p === undefined || p.step === undefined || p.kind === undefined) return
+      const row: StepDetailRow = {
+        key: `${p.step}:${p.kind}`,
+        step: p.step,
+        kind: p.kind,
+        label: p.label ?? p.kind,
+        status: p.status ?? 'finished',
+        ...(p.detail?.count !== undefined ? { count: p.detail.count } : {}),
+      }
+      setDetails((prev) => {
+        const next = [...prev.filter((r) => r.key !== row.key), row]
+        return next.length > 14 ? next.slice(next.length - 14) : next
+      })
+    })
+    // P1-7 安全中断（security_interrupt）：version_mismatch 硬中断醒目横幅
+    es.addEventListener('security_interrupt', (ev) => {
+      if (!isCurrent()) return
+      trackSeq(ev)
+      const data = JSON.parse((ev as MessageEvent).data) as { payload?: { code?: string; reason?: string } }
+      if (data.payload !== undefined) setSecurityInterrupt({ code: data.payload.code ?? 'version_mismatch', reason: data.payload.reason ?? '' })
+    })
     es.addEventListener('run_cancelled', (ev) => {
       if (!isCurrent()) return
       trackSeq(ev)
@@ -194,6 +248,8 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
     setSteps([])
     setSseError('')
     setDegraded(null)
+    setDetails([])
+    setSecurityInterrupt(null)
     setSseConn('idle')
   }, [])
 
@@ -225,5 +281,5 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
 
   useEffect(() => () => { ++genRef.current; esRef.current?.close() }, [])
 
-  return { activeRun, steps, result, sseError, sseConn, degraded, openRun, clearRun, cancelRun, setSseError }
+  return { activeRun, steps, result, sseError, sseConn, degraded, details, securityInterrupt, openRun, clearRun, cancelRun, setSseError }
 }

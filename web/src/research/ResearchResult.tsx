@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import type { ResearchResult } from 'biance-vision-brooks'
+import type { FollowUpAction, ResearchResult } from 'biance-vision-brooks'
 import MiniMarkdown from '../components/MiniMarkdown'
 
 const DECISION_LABEL: Record<string, string> = {
@@ -18,6 +18,25 @@ const DECISION_LABEL: Record<string, string> = {
   long: '做多',
   short: '做空',
   insufficient_evidence: '证据不足',
+}
+
+// ---- P1-8 免责文案（红线 #10：服务端下发，前端只渲染不内置）----
+// 模块级单次拉取（GET /api/config/research-ui），失败静默不显示（不硬编码文案兜底）。
+let disclaimerCache: Record<string, string> | null = null
+let disclaimerFetching: Promise<Record<string, string>> | null = null
+function fetchDisclaimers(): Promise<Record<string, string>> {
+  if (disclaimerCache !== null) return Promise.resolve(disclaimerCache)
+  if (disclaimerFetching !== null) return disclaimerFetching
+  disclaimerFetching = api<{ disclaimers?: Record<string, string> }>('/config/research-ui')
+    .then((d) => {
+      disclaimerCache = d.disclaimers ?? {}
+      return disclaimerCache
+    })
+    .catch(() => {
+      disclaimerFetching = null
+      return {} as Record<string, string>
+    })
+  return disclaimerFetching
 }
 
 interface EvidenceItem {
@@ -64,10 +83,21 @@ function ExpiryCountdown({ expiryAt, asOfRemainingMs }: { expiryAt: number; asOf
   )
 }
 
-export function ResultCard({ result, horizon, runId, onCitation }: { result: ResearchResult; horizon?: string; runId?: string; onCitation?: (evidenceId: string) => void }): JSX.Element {
+export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: { result: ResearchResult; horizon?: string; runId?: string; onCitation?: (evidenceId: string) => void; onFollowUp?: (action: FollowUpAction) => void }): JSX.Element {
   // 论断引用定位（P2）：evidenceIds → 可点击标记，展开冻结原文（页码/来源/文档）
   const [evidenceMap, setEvidenceMap] = useState<Map<string, EvidenceItem> | null>(null)
   const [openEvidence, setOpenEvidence] = useState<string | null>(null)
+  // P1-8 免责文案（服务端配置，按产品；失败静默）
+  const [disclaimer, setDisclaimer] = useState('')
+  useEffect(() => {
+    let alive = true
+    void fetchDisclaimers().then((d) => {
+      if (!alive) return
+      const kind = (result as unknown as { payload?: { kind?: string } }).payload?.kind
+      setDisclaimer(kind === 'perp' ? d.perp ?? '' : kind === 'event' ? d.event ?? '' : d.common ?? '')
+    })
+    return () => { alive = false }
+  }, [result])
   const hasCitations = result.claims.some((c) => c.evidenceIds.length > 0)
   const citationIds = [...new Set(result.claims.flatMap((c) => c.evidenceIds))]
   useEffect(() => {
@@ -96,6 +126,10 @@ export function ResultCard({ result, horizon, runId, onCitation }: { result: Res
     /** P0-5 受控降级：修复耗尽后仅保留代码计算内容发布 */
     degraded?: boolean
     degradedReasons?: string[]
+    /** P1-2 受约束综合解释（回应原问题） */
+    synthesis?: { text: string; source: 'llm' | 'template'; degraded?: boolean } | null
+    /** P1-3 结构化追问动作集 */
+    followUpActions?: FollowUpAction[]
     payload: Record<string, unknown>
   }
   const pp = r2?.payload ?? {}
@@ -125,6 +159,15 @@ export function ResultCard({ result, horizon, runId, onCitation }: { result: Res
             <li key={x}>· {x}</li>
           ))}
         </ul>
+      )}
+      {r2?.synthesis != null && r2.synthesis.text !== '' && (
+        <div className="synthesis-block" aria-label="回应你的问题">
+          <div className="synthesis-head">
+            <span>回应你的问题</span>
+            <span className="synthesis-src">{r2.synthesis.source === 'llm' ? (r2.synthesis.degraded === true ? '模型归纳（部分句被校验剔除）' : '模型归纳（受约束引用）') : '代码装配'}</span>
+          </div>
+          <MiniMarkdown text={r2.synthesis.text} className="synthesis-md" />
+        </div>
       )}
       {r2?.probability === null || r2?.probability === undefined ? (
         <p className="prob-note">概率：不可用（{r2?.unavailableCode ?? 'model_not_published'}；不由 AI 编造）</p>
@@ -202,6 +245,15 @@ export function ResultCard({ result, horizon, runId, onCitation }: { result: Res
           </div>
         </>
       )}
+      {onFollowUp !== undefined && (r2?.followUpActions ?? []).length > 0 && (
+        <div className="follow-up-chips" aria-label="可执行的下一步">
+          {(r2?.followUpActions ?? []).map((a) => (
+            <button key={`${a.action}:${a.label}`} className="follow-up-chip" onClick={() => onFollowUp(a)}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
       {pp.kind === 'perp' && Array.isArray(pp.pnlPoints) && (
         <>
           <h5>
@@ -274,6 +326,7 @@ export function ResultCard({ result, horizon, runId, onCitation }: { result: Res
           </table>
         </>
       )}
+      {disclaimer !== '' && <p className="disclaimer-line" role="note">{disclaimer}</p>}
     </div>
   )
 }
