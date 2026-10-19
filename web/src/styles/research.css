@@ -766,3 +766,8 @@
 .dd-option[data-selected] { color: var(--cyan); }
 .dd-option[aria-disabled='true'] { opacity: .4; cursor: not-allowed; }
 .dd-check { flex: none; color: var(--cyan); font-size: 12px; }
+
+/* ===== 自由输入补全面板（Combobox.tsx，替换原生 datalist 弹层；列表样式复用 .dd-list/.dd-option） ===== */
+.cb { position: relative; display: inline-flex; max-width: 100%; }
+.cb input { width: 100%; min-width: 0; }
+.cb .dd-list { min-width: 120px; }
