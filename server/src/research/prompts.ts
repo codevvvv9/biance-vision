@@ -201,29 +201,36 @@ export async function resolvePromptTemplate(
       log.warn('prompts', '文件 promptRef 解析失败（回退指针→默认）', kv({ name, promptRef }))
     }
   }
-  // 2) 指针 → published
-  const published = await pointerPublished(name, scene)
+  // 2) 指针 → published（2026-10-20 评审 #5：scene 非空先查场景作用域，未发布回退全局指针）
+  let published = scene !== '' ? await pointerPublished(name, scene) : null
+  if (published === null) published = await pointerPublished(name, '')
   if (published !== null) {
-    return { name, scene, content: published.content, templateId: published.id, version: published.version, source: 'registry' }
+    return { name, scene: published.scene, content: published.content, templateId: published.id, version: published.version, source: 'registry' }
   }
   // 3) 工程默认
   return fallback(name, scene)
 }
 
 /**
- * freezeRunConfig 终解析：五个模板全部解析并冻结。
+ * freezeRunConfig 终解析：七个模板全部解析并冻结。
  * counter-reviewer 尊重 agent 配置 roles 里反证审查者的显式 promptRef
  * （旧 run 的 inline:/文件引用语义不变）；其余走指针→默认。
+ * scene（2026-10-20 评审 #5）：run 的任务场景——指针按 (name, scene) 场景作用域解析，
+ * 场景未发布时 resolvePromptTemplate 内部回退全局指针→工程默认。
  */
-export async function freezePromptSet(agentRaw: { roles?: { name?: string; promptRef?: string }[] } | null | undefined): Promise<Record<string, ResolvedPrompt>> {
+export async function freezePromptSet(
+  agentRaw: { roles?: { name?: string; promptRef?: string }[] } | null | undefined,
+  scene?: string,
+): Promise<Record<string, ResolvedPrompt>> {
   const roles = agentRaw?.roles ?? []
   const counterRole = roles.find((r) => /counter|反证/i.test(r.name ?? '')) ?? null
+  const runScene = scene ?? ''
   const out: Record<string, ResolvedPrompt> = {}
   for (const name of PROMPT_NAMES) {
     out[name] =
       name === 'counter-reviewer' && counterRole?.promptRef !== undefined
         ? await resolvePromptTemplate(name, { promptRef: counterRole.promptRef })
-        : await resolvePromptTemplate(name)
+        : await resolvePromptTemplate(name, { scene: runScene })
   }
   return out
 }
@@ -252,6 +259,22 @@ export async function writePromptPointer(name: string, scene: string, publishedI
     .insert(promptTemplatePointers)
     .values({ name, scene, publishedId })
     .onConflictDoUpdate({ target: [promptTemplatePointers.name, promptTemplatePointers.scene], set: { publishedId, updatedAt: new Date() } })
+}
+
+/** 指针删除（回归脚本清理测试指针用；生产指针由发布/回滚路径覆写，不走删除） */
+export async function deletePromptPointer(name: string, scene: string): Promise<void> {
+  const d = getDb()
+  if (d === null) return
+  await d
+    .delete(promptTemplatePointers)
+    .where(and(eq(promptTemplatePointers.name, name), eq(promptTemplatePointers.scene, scene)))
+}
+
+/** 模板行删除（回归脚本清理测试草稿/发布行用） */
+export async function deletePromptRow(id: string): Promise<void> {
+  const d = getDb()
+  if (d === null) return
+  await d.delete(promptTemplates).where(eq(promptTemplates.id, id))
 }
 
 /** 同 (name,scene) 下一个版本号（新草稿用） */

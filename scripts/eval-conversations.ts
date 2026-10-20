@@ -1,6 +1,6 @@
 /**
  * 会话评测基线 runner（P0-1，vertical-agent-architecture.md §6）：
- * 加载 server/data/evals/conversations-baseline.json，按六类场景执行确定性断言，
+ * 加载 scripts/evals/conversations-baseline.json（受版本控制），按六类场景执行确定性断言，
  * 产出结构化报告（通过率/分类指标）。
  *
  * 运行：pnpm eval:conversations [-- --tag baseline] [-- --against <report.json>]
@@ -52,7 +52,9 @@ interface ItemResult {
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const suitePath = join(root, 'server/data/evals/conversations-baseline.json')
+// 评测输入受版本控制（2026-10-20 评审 #8：原放被整体忽略的 server/data/ 下，新 clone/CI
+// 缺文件直接退出——输入随仓库交付，运行报告仍写 server/data/evals/）
+const suitePath = join(root, 'scripts/evals/conversations-baseline.json')
 const suite = JSON.parse(readFileSync(suitePath, 'utf8')) as { items: EvalItem[]; fixedNow: number }
 
 const args = process.argv.slice(2)

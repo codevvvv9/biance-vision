@@ -25,6 +25,8 @@ import { hashFrozenConfig } from '../server/src/research/runs/store.js'
 import { runPipeline } from '../server/src/research/orchestrator/pipeline.js'
 import { LeaseLostError } from '../server/src/research/orchestrator/types.js'
 import type { RunContext, RunStore, StageName } from '../server/src/research/orchestrator/types.js'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 let passed = 0
 let failed = 0
@@ -642,6 +644,154 @@ console.log('\n[四轮-1] 时刻解析不截断表达：「半」=30 分；「N�
   assert(typeof t3 === 'number' && new Date(t3).toISOString() === '2026-10-01T02:30:25.000Z', '10点30分25秒 → 10:30:25')
   const t4 = parseReplayAsOf('复盘 2026-10-01 10点30分')
   assert(typeof t4 === 'number' && new Date(t4).toISOString() === '2026-10-01T02:30:00.000Z', '10点30分 → 10:30（不回归）')
+}
+
+// ===========================================================================
+// 2026-10-20 评审八项修复回归（P1 终验补充：隔离性 / 上下文继承 / 预算约束）
+// ===========================================================================
+
+console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一致性（不只带 [k] 的句子）')
+{
+  const { checkSynthesisText } = await import('../server/src/research/runs/synthesis.js')
+  const input = {
+    question: '现在的结构如何',
+    symbol: 'BTCUSDT',
+    horizon: '1h',
+    decision: { action: 'wait', side: null as 'long' | 'short' | null, reasons: ['等待回调确认'], conditions: [] },
+    claims: [{ text: 'BTC 15m：状态 多头趋势', kind: 'fact' as const, evidenceIds: [] }],
+    counterClaims: [],
+    scenarios: [],
+    evidenceTexts: ['多头趋势延续，执行周期不断创新高，关键支撑 60000'],
+  }
+  // 评审复现句 1：无引用、无数字、与任何来源（问题/证据/facts/决策）无词项重叠 → 无来源剔除
+  const a = checkSynthesisText('天气晴朗，适合外出旅行。', input)
+  assert(a.by.unsupported === 1 && a.kept.length === 0, '「天气晴朗，适合外出旅行」被来源锚定剔除（修复前无 [k] 句不检查）')
+  // 评审复现句 2：满仓 + 无止损指令 → 决策红线剔除
+  const b = checkSynthesisText('现在立即满仓做多，无需设置止损。', input)
+  assert(b.by.decision === 1 && b.kept.length === 0, '「立即满仓做多，无需止损」被决策红线剔除（修复前照常发布）')
+  // 无条件方向矛盾（决策 wait/side=null，句含开多指令且无条件词）
+  const c = checkSynthesisText('建议做多入场。', input)
+  assert(c.by.decision === 1, '决策 wait 下无条件「建议做多」被方向矛盾剔除')
+  // 条件句允许讨论反向/反向证据情形（有「若/跌破」条件词 + 数字在证据白名单内）
+  const d = checkSynthesisText('若跌破 60000 支撑，可考虑做空。', input)
+  assert(d.kept.length === 1, '条件句讨论反向情形不被误伤（条件词 + 白名单数字）')
+  // 合法转述句保留（与问题/决策/证据词项重叠）
+  const e = checkSynthesisText('结构支持继续持有。', input)
+  assert(e.kept.length === 1, '与问题/决策词项重叠的转述句保留（不误伤）')
+}
+
+console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
+{
+  const { buildSynthesis } = await import('../server/src/research/runs/synthesis.js')
+  const input = {
+    question: '还能持有吗',
+    symbol: 'BTCUSDT',
+    horizon: '1h',
+    decision: { action: 'hold' as const, side: 'long' as const, reasons: ['结构支持持仓方向'], conditions: [] },
+    claims: [],
+    counterClaims: [],
+    scenarios: [],
+    evidenceTexts: ['多头趋势延续，执行周期不断创新高'],
+  }
+  const r = await buildSynthesis(input, {
+    llm: async () => ({ text: '结构支持继续持有。', usage: { promptTokens: 120, completionTokens: 80 } }),
+    system: 's',
+  })
+  assert(r.didCallLlm && r.usage !== null && r.usage.promptTokens === 120 && r.usage.completionTokens === 80, 'LLM 成功调用透出 usage（调用方可累计 tokens/costUsd；修复前恒为 null）')
+  const fail = await buildSynthesis(input, {
+    llm: async () => { throw new Error('boom') },
+    system: 's',
+  })
+  assert(fail.usage === null && fail.source === 'template' && fail.degraded === true, '调用失败 usage=null 回退模板（degraded）')
+}
+
+console.log('\n[R-评审#3] 事件追问语义：到期临近重估不再冒充换周期')
+{
+  const { buildFollowUpActions } = await import('../server/src/research/scenes.js')
+  const evt = buildFollowUpActions({ scene: 'quote-review', product: 'event', runId: 'r1', evidenceRefIds: [], searchEnabled: false })
+  const evtRerun = evt.find((a) => a.action === 'rerun_with')
+  assert(evtRerun?.parameters?.interval === 'same', '事件「到期临近时重估」interval=same（保持原报价与周期，当前时刻重估）')
+  const perp = buildFollowUpActions({ scene: 'hold-review', product: 'perp', runId: 'r2', evidenceRefIds: [], searchEnabled: false })
+  const perpRerun = perp.find((a) => a.action === 'rerun_with')
+  assert(perpRerun?.parameters?.interval === 'next', 'perp「换个周期再跑一次」interval=next（语义不变）')
+}
+
+console.log('\n[R-评审#8] 评测输入随仓库交付（新 clone / CI 可复现）')
+{
+  const { existsSync } = await import('node:fs')
+  const suite = join(dirname(fileURLToPath(import.meta.url)), 'evals/conversations-baseline.json')
+  assert(existsSync(suite), 'scripts/evals/conversations-baseline.json 在版本控制目录（原 server/data/ 被整体忽略）')
+  const { execFileSync } = await import('node:child_process')
+  const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
+  let ignored = false
+  try {
+    execFileSync('git', ['check-ignore', '-q', 'scripts/evals/conversations-baseline.json'], { cwd: rootDir, stdio: 'ignore' })
+    ignored = true
+  } catch {
+    ignored = false
+  }
+  assert(!ignored, '评测输入未被 .gitignore 忽略（git check-ignore 通过）')
+}
+
+// ---- 需要 DB 的用例（冻结隔离 / 场景提示词冻结）：无 DATABASE_URL 时跳过 ----
+const hasDb = process.env.DATABASE_URL !== undefined && process.env.DATABASE_URL !== ''
+let dbOk = false
+if (hasDb) {
+  const { initDb } = await import('../server/src/db.js')
+  dbOk = await initDb()
+}
+if (!hasDb || !dbOk) {
+  console.log('\n[R-评审#1/#5/#6] 冻结隔离与场景冻结：DATABASE_URL 未配置或 DB 不可用 → 跳过')
+} else {
+  console.log('\n[R-评审#1] 冻结配置隔离：深拷贝 + 缺失画像清空（B 不继承 A；先返冻结对象不被改写）')
+  {
+    const { freezeRunConfig, hashFrozenConfig } = await import('../server/src/research/runs/store.js')
+    const f1 = await freezeRunConfig()
+    const h1 = f1.configHash
+    const f2 = await freezeRunConfig()
+    assert(f1.raw !== f2.raw, '两次冻结的 raw 不共享对象（深拷贝；修复前引用同一发布配置缓存）')
+    assert(hashFrozenConfig(f1) === h1, '后续冻结不改写先前返回的冻结对象（hash 不漂移；修复前 C 冻结会改写 A 的对象）')
+    assert((f1.raw as { traderProfile?: unknown }).traderProfile === undefined, '无 userId 冻结不含 traderProfile（缺失画像显式清空，不残留缓存旧值）')
+    assert((f1.raw as { memoryBlock?: unknown }).memoryBlock === '', '无 userId 冻结 memoryBlock 为空串（评审 #6 记忆快照字段存在）')
+    assert(typeof (f1.raw as { prompts?: Record<string, { content?: string }> }).prompts?.['synthesis-writer']?.content === 'string', '冻结集含 synthesis-writer 全文（不回归）')
+  }
+
+  console.log('\n[R-评审#5] 场景提示词进入冻结配置：freezePromptSet 按 (name, scene) 解析')
+  {
+    const { freezePromptSet, resolvePromptTemplate, writePromptPointer, deletePromptPointer, deletePromptRow, nextPromptVersion } = await import('../server/src/research/prompts.js')
+    const { promptTemplates } = await import('../server/src/models.js')
+    const { getDb } = await import('../server/src/db.js')
+    const d = getDb()!
+    const scene = 'p1-regression-scene'
+    const created: string[] = []
+    try {
+      // 全局缺省解析（不回归）：内容非空
+      const global = await freezePromptSet(null)
+      assert(Object.values(global).every((p) => p.content.length > 0), '全局冻结集每个模板内容非空（不回归）')
+      // 场景未发布 → 回退全局（与全局解析同内容）
+      const fallback = await freezePromptSet(null, scene)
+      assert(fallback['synthesis-writer'].content === global['synthesis-writer'].content, '场景未发布回退全局模板（不误伤）')
+      // 发布场景模板 + 指针 → 场景冻结命中场景版本
+      const version = await nextPromptVersion('synthesis-writer', scene)
+      const [tpl] = await d
+        .insert(promptTemplates)
+        .values({ name: 'synthesis-writer', scene, content: 'P1 场景回归专用模板：{{vertical}}', status: 'published', version, note: 'p1-regression', createdBy: 'p1-check' })
+        .returning({ id: promptTemplates.id })
+      created.push(tpl.id)
+      await writePromptPointer('synthesis-writer', scene, tpl.id)
+      const scoped = await freezePromptSet(null, scene)
+      assert(scoped['synthesis-writer'].content === 'P1 场景回归专用模板：{{vertical}}', '场景已发布时冻结命中场景模板（修复前恒解析全局）')
+      assert(scoped['synthesis-writer'].templateId === tpl.id, '冻结记录场景模板 id（可审计）')
+      const stillGlobal = await freezePromptSet(null)
+      assert(stillGlobal['synthesis-writer'].content === global['synthesis-writer'].content, '全局冻结不受场景发布影响（作用域隔离）')
+      // resolvePromptTemplate 单点：显式场景解析
+      const single = await resolvePromptTemplate('synthesis-writer', { scene })
+      assert(single.content.includes('P1 场景回归专用模板'), 'resolvePromptTemplate 按 (name, scene) 命中场景指针')
+    } finally {
+      await deletePromptPointer('synthesis-writer', scene)
+      if (created.length > 0) await deletePromptRow(created[0])
+    }
+  }
 }
 
 console.log(`\n结果：${passed} 通过 / ${failed} 失败`)

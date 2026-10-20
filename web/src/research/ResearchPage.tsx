@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { analyzeBrooks } from 'biance-vision-brooks'
-import type { BrooksDisplay, EventQuote, Position, ResearchRun } from 'biance-vision-brooks'
+import type { BrooksDisplay, EventQuote, FollowUpAction, Position, ResearchRun } from 'biance-vision-brooks'
 import { useMarket } from '../market/MarketContext'
 import BrooksChart from '../brooks/BrooksChart'
 import type { BrooksChartLevel } from '../brooks/BrooksChart'
@@ -247,10 +247,14 @@ export default function ResearchPage(): JSX.Element {
     }
   }
 
-  /** run 失败重试：以该 run 的 product/symbol/marketType/horizon + 当前关联（持仓/报价/问题）重新创建 */
-  const retryRun = async (): Promise<void> => {
+  /** run 失败重试 / 追问重跑（2026-10-20 评审 #3 同口径）：优先从 run.input（创建请求
+   * 快照）恢复 question/positionId/quoteId/positionOverride/asOf——持仓复查仍是持仓
+   * 复查、报价评估仍带报价、历史复盘不变成当前研究；无 input 的旧 run 退回当前关联。
+   * interval:'same'（事件到期临近重估）保持原周期并按当前时刻重估。 */
+  const rerunFrom = async (opts: { horizon?: Horizon; asOfNow?: boolean } = {}): Promise<void> => {
     const activeRun = tracker.activeRun
     if (activeRun === null) return
+    const src = (activeRun.input ?? {}) as Partial<NonNullable<ResearchRun['input']>>
     try {
       const r = await api<{ run: ResearchRun }>('/research/runs', {
         method: 'POST',
@@ -258,10 +262,13 @@ export default function ResearchPage(): JSX.Element {
           product: activeRun.product,
           symbol: activeRun.symbol,
           marketType: activeRun.marketType,
-          horizon: activeRun.horizon,
-          question: question === '' ? undefined : question,
-          positionId: activeRun.product === 'perp' && selectedPosition !== '' ? selectedPosition : undefined,
-          quoteId: activeRun.product === 'event' && selectedQuote !== '' ? selectedQuote : undefined,
+          horizon: opts.horizon ?? activeRun.horizon,
+          question: typeof src.question === 'string' ? src.question : question === '' ? undefined : question,
+          positionId: typeof src.positionId === 'string' ? src.positionId : activeRun.product === 'perp' && selectedPosition !== '' ? selectedPosition : undefined,
+          quoteId: typeof src.quoteId === 'string' ? src.quoteId : activeRun.product === 'event' && selectedQuote !== '' ? selectedQuote : undefined,
+          positionOverride: src.positionOverride,
+          asOf: opts.asOfNow === true ? undefined : (typeof src.asOf === 'number' ? src.asOf : activeRun.asOf),
+          sceneCode: activeRun.sceneCode,
         },
       })
       tracker.setSseError('')
@@ -270,6 +277,25 @@ export default function ResearchPage(): JSX.Element {
       void refreshLeft()
     } catch (e) {
       tracker.setSseError((e as Error).message)
+    }
+  }
+
+  const retryRun = async (): Promise<void> => { await rerunFrom() }
+
+  /** P1-3 结构化追问分发（2026-10-20 评审 #7：旧版研究台入口接通，与工作台同语义） */
+  const onFollowUp = (a: FollowUpAction): void => {
+    if (a.action === 'open_evidence' || a.action === 'open_rule_card') { setDrawerOpen(true); setTab('evidence'); return }
+    if (a.action === 'switch_context') { setToolsOpen(true); setTab('run'); return }
+    if (a.action === 'rerun_with') {
+      const interval = (a.parameters?.interval as string | undefined) ?? 'next'
+      if (interval === 'same') { void rerunFrom({ asOfNow: true }); return }
+      const order: Horizon[] = ['10m', '30m', '1h', '1d', '1w']
+      void rerunFrom({ horizon: order[(order.indexOf(tracker.activeRun?.horizon ?? '1h') + 1) % order.length] })
+      return
+    }
+    if (a.action === 'counter_search') {
+      void conv.send(`从反证角度重新研究 ${tracker.activeRun?.symbol ?? symbol}（${tracker.activeRun?.horizon ?? horizon}）：重点寻找不支持上一轮结论的证据`)
+      return
     }
   }
 
@@ -561,8 +587,11 @@ export default function ResearchPage(): JSX.Element {
                   sseError={tracker.sseError}
                   sseConn={tracker.sseConn}
                   degraded={tracker.degraded}
+                  details={tracker.details}
+                  securityInterrupt={tracker.securityInterrupt}
                   onCancel={() => void tracker.cancelRun()}
                   onRetry={() => void retryRun()}
+                  onFollowUp={onFollowUp}
                   footer={
                     result !== null ? (
                       <button className="btn btn-ghost btn-sm" onClick={() => setDrawerOpen(true)}>
