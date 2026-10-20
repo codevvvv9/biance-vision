@@ -1,3 +1,5 @@
+import { currentLocale } from './i18n'
+
 export function fmtPrice(v: number | null | undefined): string {
   if (v == null || Number.isNaN(+v)) return '--'
   const n = +v
@@ -15,6 +17,13 @@ export function fmtPct(v: number | null | undefined): string {
 export function fmtVol(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(+v)) return '--'
   const n = +v
+  // 中文习惯 万/亿/万亿；英文 T/B/K
+  if (currentLocale() === 'en-US') {
+    if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`
+    if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`
+    if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K`
+    return n.toFixed(0)
+  }
   if (n >= 1e12) return `${(n / 1e12).toFixed(2)}万亿`
   if (n >= 1e8) return `${(n / 1e8).toFixed(2)}亿`
   if (n >= 1e4) return `${(n / 1e4).toFixed(2)}万`
@@ -22,11 +31,11 @@ export function fmtVol(v: number | null | undefined): string {
 }
 
 export function fmtTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
+  return new Date(ts).toLocaleTimeString(currentLocale(), { hour12: false })
 }
 
 export function fmtDateTime(ts: number): string {
-  return new Date(ts).toLocaleString('zh-CN', {
+  return new Date(ts).toLocaleString(currentLocale(), {
     hour12: false,
     month: '2-digit',
     day: '2-digit',

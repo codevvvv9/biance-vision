@@ -1,16 +1,23 @@
 import type { CSSProperties } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { Trans, useTranslation } from 'react-i18next'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import SplitText from '../components/fx/SplitText'
 import { authReturnTo, authUrl, researchUiMode } from '../research/uiMode'
 
 /** 注册页：暂不开放注册，仅提示联系超级管理员 */
 export default function RegisterPage(): JSX.Element {
   const { search } = useLocation()
+  const { t } = useTranslation('auth')
+  const { t: tc } = useTranslation('common')
   return (
     <div className="auth-wrap">
       <AuthFx />
+      <div className="auth-lang">
+        <LanguageSwitcher />
+      </div>
       <div className="auth-card fx-beam" style={{ '--fx-beam-t': '5.2s' } as CSSProperties}>
         <div className="auth-brand fx-in">
           <Logo />
@@ -18,7 +25,7 @@ export default function RegisterPage(): JSX.Element {
             <span className="auth-title">
               <SplitText text="BIANCE VISION" delay={0.12} gradient={['#00e5ff', '#a78bfa']} />
             </span>
-            <span className="auth-sub fx-in" style={{ '--fx-i': 8 } as CSSProperties}>币安大盘监控终端</span>
+            <span className="auth-sub fx-in" style={{ '--fx-i': 8 } as CSSProperties}>{tc('brand.sub')}</span>
           </div>
         </div>
 
@@ -28,18 +35,21 @@ export default function RegisterPage(): JSX.Element {
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <h2>暂未开放注册</h2>
+          <h2>{t('register.noticeTitle')}</h2>
           <p>
-            本系统不开放自助注册。
+            {t('register.noticeLine1')}
             <br />
-            如需开通账号，请联系超级管理员<span className="mono auth-admin">admin</span>，
-            由管理员在服务端执行 <code>pnpm user:add</code> 为您创建账号。
+            <Trans
+              i18nKey="register.noticeLine2"
+              ns="auth"
+              components={{ mono: <span className="mono auth-admin" />, code: <code /> }}
+            />
           </p>
         </div>
 
         <div className="auth-foot center">
           <Link to={authUrl('/login', authReturnTo(search), researchUiMode(search))} className="btn btn-ghost">
-            ← 返回登录
+            {t('register.backToLogin')}
           </Link>
         </div>
       </div>

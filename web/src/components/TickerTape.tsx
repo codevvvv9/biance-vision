@@ -1,20 +1,22 @@
+import { useTranslation } from 'react-i18next'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice } from '../utils'
 
 export default function TickerTape(): JSX.Element {
+  const { t } = useTranslation()
   const { tickers, order, status } = useMarket()
   const items = order.slice(0, 22)
   const doubled = [...items, ...items]
 
   return (
-    <div className="tape" aria-label="实时行情滚动条">
+    <div className="tape" aria-label={t('dashboard:tape.label')}>
       <span className="tape-label">
         <i className="conn-dot live" />
         LIVE
       </span>
       {items.length === 0 ? (
         <span className="tape-empty">
-          {status === 'connected' ? '正在接收币安实时行情…' : '正在连接币安行情流…'}
+          {status === 'connected' ? t('dashboard:tape.connected') : t('dashboard:tape.connecting')}
         </span>
       ) : (
         <div className="tape-track">

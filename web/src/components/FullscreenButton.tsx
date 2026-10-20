@@ -1,19 +1,23 @@
+import { useTranslation } from 'react-i18next'
+
 interface Props {
   on: boolean
   onClick: () => void
-  /** 未全屏时的提示文案（如「全屏显示 K 线」） */
+  /** 未全屏时的提示文案（已翻译文本，如 t('dashboard:kline.fullscreen')） */
   label?: string
 }
 
 /** 面板头部的全屏切换按钮，图标随状态在展开/收起间切换 */
-export default function FullscreenButton({ on, onClick, label = '全屏显示' }: Props): JSX.Element {
+export default function FullscreenButton({ on, onClick, label }: Props): JSX.Element {
+  const { t } = useTranslation()
+  const labelText = label ?? t('common:fullscreen.enter')
   return (
     <button
       type="button"
       className="fs-btn"
       onClick={onClick}
-      title={on ? '退出全屏（Esc）' : label}
-      aria-label={on ? '退出全屏' : label}
+      title={on ? t('common:fullscreen.exit') : labelText}
+      aria-label={on ? t('common:fullscreen.exit') : labelText}
     >
       {on ? (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

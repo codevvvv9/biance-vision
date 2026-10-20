@@ -1,3 +1,4 @@
+import i18n from './i18n'
 import type {
   AdminConversationDetail,
   AdminConversationSummary,
@@ -31,7 +32,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     } catch {
       /* noop */
     }
-    throw new Error(detail || `请求失败 (HTTP ${res.status})`)
+    throw new Error(detail || i18n.t('common:api.requestFailed', { code: res.status }))
   }
   return (await res.json()) as T
 }
