@@ -697,6 +697,27 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(e.kept.length === 1, '与证据/决策词项重叠的转述句保留（不误伤）')
   const e2 = checkSynthesisText('结构支持继续持有。', input)
   assert(e2.kept.length === 0 && e2.by.unsupported === 1, '仅与问题措辞重叠的断言句被剔除（问题 ≠ 事实支撑，2026-10-20 第二轮 #3）')
+  // ---- 第三轮（子句级 + 否定语义）：与评审复现脚本 /tmp/bv-731c6b7-boundary-review.mts 同源 ----
+  // #1 「等待」绕过：「无需等待…立即做多」与「决策为等待，但建议立即做多」不再被「等待」豁免
+  const f1 = checkSynthesisText('无需等待回调确认，立即做多。', input)
+  assert(f1.by.decision === 1 && f1.kept.length === 0, '「无需等待回调确认，立即做多」被剔除（等待须带后继动作标记才算条件；修复前裸「等待」放行）')
+  const f2 = checkSynthesisText('当前决策为等待，但建议立即做多。', input)
+  assert(f2.by.decision === 1 && f2.kept.length === 0, '「决策为等待，但建议立即做多」被剔除（转折后子句不受前文条件约束）')
+  // 合法条件句不误伤：「等待…后」精确模式
+  const f3 = checkSynthesisText('等待回调确认后再考虑入场。', input)
+  assert(f3.kept.length === 1 && f3.dropped === 0, '「等待回调确认后再考虑入场」保留（等待…后 = 真条件表达，不降级）')
+  // #2 exit 下「建议继续持有」= 明确动作建议，与退出结论校验一致性
+  const f4 = checkSynthesisText('多头趋势延续，建议继续持有。', exitInput)
+  assert(f4.by.decision === 1 && f4.kept.length === 0, 'exit 下「建议继续持有」被剔除（持有指令形态 vs {hold,conditional_entry}；描述性「持有」不查）')
+  // #3 否定语义不误删：「不能保证收益」/「暂不减仓」是安全表述
+  const f5 = checkSynthesisText('多头趋势延续，但不能保证收益。', input)
+  assert(f5.kept.length === 1 && f5.dropped === 0, '「不能保证收益」保留（否定剥离；修复前误判收益承诺整句删除）')
+  const holdInput = { ...input, decision: { action: 'hold' as const, side: null as 'long' | 'short' | null, reasons: ['结构支持持仓方向'], conditions: [] } }
+  const f6 = checkSynthesisText('多头趋势延续，暂不减仓。', holdInput)
+  assert(f6.kept.length === 1 && f6.dropped === 0, 'hold 下「暂不减仓」保留（否定剥离；修复前误判动作冲突整句删除）')
+  // 问题复述与来源锚定不回归
+  const f7 = checkSynthesisText('热气球适合旅行。', { ...input, question: '热气球是否适合旅行？' })
+  assert(f7.by.unsupported === 1 && f7.kept.length === 0, '「热气球适合旅行」被剔除（问题措辞不算事实支撑，不回归）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
