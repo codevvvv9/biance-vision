@@ -806,6 +806,15 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(m5.by.decision === 1 && m5.kept.length === 0, '「条件再次不成立，立即做多」被剔除（再(?!次|现|者…)；修复前「再次」命中时间标记豁免）')
   const m6 = checkSynthesisText('当回调确认时，再评估入场。', input)
   assert(m6.kept.length === 1 && m6.dropped === 0, '对照：「当回调确认时，再评估入场」保留（当…时 完整结构仍豁免）')
+  // ---- 第十轮（连接词词内字符：若干的若、适当…时机的跨词命中），与 /tmp/bv-f12d710-boundary-review.mts 同源 ----
+  const n1 = checkSynthesisText('多头趋势延续，若干指标支持立即做多。', input)
+  assert(n1.by.decision === 1 && n1.kept.length === 0, '「若干指标支持立即做多」被剔除（若(?!干)；修复前「若干」的若命中连接词豁免）')
+  const n2 = checkSynthesisText('多头趋势延续，但不是适当的入场时机，立即做多。', input)
+  assert(n2.by.decision === 1 && n2.kept.length === 0, '「不是适当的入场时机，立即做多」被剔除（当前排除「适」+ 时复用 WHEN_MARK；修复前「适当…时机」跨词命中当…时）')
+  const n3 = checkSynthesisText('若回调确认，再评估入场。', input)
+  assert(n3.kept.length === 1 && n3.dropped === 0, '对照：「若回调确认，再评估入场」保留（真假设若 不受若干排除影响）')
+  const n4 = checkSynthesisText('多头趋势延续，指标支持立即做多。', input)
+  assert(n4.by.decision === 1, '对照：去掉「若干」后同样剔除（剔除来自立即指令本身）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
