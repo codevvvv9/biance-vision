@@ -137,16 +137,17 @@ const CLAUSE_SPLIT_RE = /([,，;；]|但是|然而|不过|却|只是|但)/
 const CLAUSE_TURN_RE = /但是|然而|不过|却|只是|但/
 const CLAUSE_PUNCT_RE = /[,，;；]/
 /**
- * 条件子句判定（第八轮统一重构）：所有分支共同经过「否定检查、时间标记完整结构」，
- * 不再各自维护独立豁免模式——
- * - 假设连接词（若/如果/一旦/除非/当…（非当前/当时）/届时/否则）独立成立；
- * - 推迟表达（先等待 / 等待…时间标记）：「等待」锚点前 0-4 字内有否定前缀
- *   （无需/不用/不必/不/没）= 条件被否定（比无条件句更激进），不豁免；
- *   时间标记复用 TIME_MARK（「后果」「时间」等名词内的后/时不算）；
+ * 条件子句判定（第八轮统一重构 / 第九轮补统一否定短路与完整语法位置）：
+ * - 假设连接词独立成立；「当」必须是「当…时/之际」完整结构且前非「应/正」（应当/正当
+ *   是情态/时间副词，不是假设连接词）；
+ * - 推迟表达（先等待 / 等待…时间标记）优先判定：锚点前 0-4 字内有否定前缀
+ *   （无需/不用/不必/不/没）= **整子句非条件并短路返回**——后续条件名词/事件词分支
+ *   不得捞回（「无需等待条件满足后再参与」「无需等待突破后入场」的条件/事件标记
+ *   同属被否定的推迟结构）；
  * - 条件名词/事件词（触发/跌破/突破）必须配完整时间标记（第六/七轮），裸词不豁免。
  */
-const TIME_MARK_SRC = '(?:后(?!市|果|续)|时(?!间|候|刻|长|段|效|区|序|限|机)|再)'
-const CONN_RE = /若|如果|一旦|除非|当(?!前|时)|届时|否则/
+const TIME_MARK_SRC = '(?:后(?!市|果|续)|时(?!间|候|刻|长|段|效|区|序|限|机)|再(?!次|现|者|也|三|说|不))'
+const CONN_RE = /若|如果|一旦|除非|(?<!应|正)当(?!前|时)[^，。;；]{0,10}(?:时|之际)|届时|否则/
 const DEFER_ANCHOR_RE = /先?等待/
 const DEFER_MARK_RE = new RegExp(`等待[^，。;；]{0,12}${TIME_MARK_SRC}`)
 const DEFER_NEG_TAIL_RE = /(?:无需|不用|不必|没|不)$/
@@ -154,15 +155,15 @@ const COND_NOUN_RE = new RegExp(`条件[^，。;；]{0,8}${TIME_MARK_SRC}`)
 const EVENT_MARK_RE = new RegExp(`(?:触发|跌破|突破)[^，。;；]{0,6}${TIME_MARK_SRC}`)
 
 function isConditionalClause(clause: string): boolean {
-  if (CONN_RE.test(clause)) return true
   const defer = DEFER_ANCHOR_RE.exec(clause)
   if (defer !== null) {
     const at = defer.index ?? 0
     const prefix = clause.slice(Math.max(0, at - 4), at)
-    if (!DEFER_NEG_TAIL_RE.test(prefix)) {
-      if (defer[0] === '先等待' || DEFER_MARK_RE.test(clause)) return true
-    }
+    // 统一否定拒绝（第九轮）：被否定的推迟表达使整子句非条件，短路后续全部分支
+    if (DEFER_NEG_TAIL_RE.test(prefix)) return false
+    if (defer[0] === '先等待' || DEFER_MARK_RE.test(clause)) return true
   }
+  if (CONN_RE.test(clause)) return true
   if (COND_NOUN_RE.test(clause)) return true
   if (EVENT_MARK_RE.test(clause)) return true
   return false
