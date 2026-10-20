@@ -21,6 +21,7 @@ const PROMPT_DESC: Record<string, string> = {
   'query-rewrite': '检索查询改写（run 内变体）',
   'synthesis-writer': '受约束综合解释（run 内第 6 调用点；只引用已计算事实/条件/证据）',
   'memory-extraction': '研究记忆提取（run 发布后后台任务）',
+  'translate': '翻译主翻（会话层；内置 Brooks 术语表，Argos 兜底不经提示词）',
 }
 
 interface TemplateDto {

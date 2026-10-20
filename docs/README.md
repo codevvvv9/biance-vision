@@ -6,8 +6,10 @@
 
 | 文档 | 说明 |
 | --- | --- |
-| [user-manual.md](user-manual.md) | 最终用户使用手册：登录上手、现货/永续/事件合约三场景操作步骤、AI Brooks 原理联动、异常状态与 FAQ |
-| [admin-manual.md](admin-manual.md) | 管理后台操作手册（超管）：上手与两套 AI 配置辨析、AI 设置档案、用户管控与限量、知识库导入/发布/检索调试、Agent 能力与版本流、评测与模型训练、故障排查 |
+| [user-manual-v2.md](user-manual-v2.md) | **用户手册 v2（v0.9.x 现行界面）**：双语切换、经典版/新版研究工作台双布局、三场景操作、翻译三种用法（消息按钮/会话指令/slash）、异常与 FAQ |
+| [admin-manual-v2.md](admin-manual-v2.md) | **管理手册 v2（v0.9.x 现行界面）**：六页后台速查、提示词与文案页（八模板版本治理/免责/输入配置）、翻译能力运维、意图升级红线 |
+| [user-manual.md](user-manual.md) | 用户手册 v0.8 版：三场景操作细节与 AI Brooks 原理展开（v2 保留索引） |
+| [admin-manual.md](admin-manual.md) | 管理手册 v0.8 版：AI 设置/管控/知识库/Agent/评测完整操作（v2 保留索引） |
 
 ## specs（正式规格）
 
