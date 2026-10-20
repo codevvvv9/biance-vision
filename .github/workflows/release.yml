@@ -85,6 +85,10 @@ jobs:
           context: ./research-py
           push: true
           tags: ${{ steps.meta-py.outputs.tags }}
+          # WITH_DOCLING=1：含 Docling+torch 的全量镜像（PDF/DOCX 解析）；
+          # 轻量镜像无 Docling 时上传 PDF 会显式 failed（知识库主用途即 Brooks PDF）
+          build-args: |
+            WITH_DOCLING=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
