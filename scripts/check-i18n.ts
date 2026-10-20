@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+/**
+ * i18n 防回归检查（方案 Part 1 §1.6）：
+ * 1. 扫描 web/src 下所有 .ts/.tsx 中字符串字面量与 JSX 文本里的 CJK 字符，
+ *    白名单豁免（注释、词典文件、双语术语表、服务端 fact 契约前缀匹配等），
+ *    输出剩余未迁移文案清单；--strict 时非零退出（CI 用）。
+ * 2. 词典一致性：zh-CN 与 en-US 同命名空间的 key 集合必须一致（缺 key 会
+ *    fallback 中文不出空白，但会漏翻译——提前暴露）。
+ *
+ * 用法：pnpm check:i18n [-- --strict]
+ */
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const ROOT = path.join(__dirname, '..')
+const WEB_SRC = path.join(ROOT, 'web/src')
+const LOCALES = path.join(WEB_SRC, 'locales')
+
+const strict = process.argv.includes('--strict')
+
+/** 豁免文件（相对 web/src）：双语数据源/服务端契约匹配/装饰性图形字符场景 */
+const EXEMPT_FILES = new Set([
+  'brooks/terms.tsx', // 双语术语词典本体（zh key 索引 + 双语字段）
+  'locales', // 词典目录（整目录豁免）
+])
+
+/** 豁免的行内模式（服务端 fact 契约前缀匹配等，中文为协议常量而非 UI 文案） */
+const EXEMPT_LINE_RE: RegExp[] = [
+  /周期冲突/, // 服务端 structure fact 的前缀匹配契约（ResearchPage mtf 条）
+  /：状态 /, // 同上：服务端 fact 文本结构匹配
+  /term="[^"]*[\u4e00-\u9fff][^"]*"/, // BrooksTerm 的 term prop：BROOKS_TERMS 中文索引 key（数据，非显示文案）
+]
+
+const CJK_RE = /[\u4e00-\u9fff]/
+
+function* walk(dir: string): Generator<string> {
+  for (const name of readdirSync(dir)) {
+    const full = path.join(dir, name)
+    const st = statSync(full)
+    if (st.isDirectory()) yield* walk(full)
+    else if (/\.(ts|tsx)$/.test(name)) yield full
+  }
+}
+
+/** 粗剥离注释：块注释/行注释整行剔除后仍含 CJK 才算文案 */
+function stripComments(src: string): string[] {
+  const out: string[] = []
+  let inBlock = false
+  for (const raw of src.split('\n')) {
+    let line = raw
+    if (inBlock) {
+      const end = line.indexOf('*/')
+      if (end === -1) continue
+      line = line.slice(end + 2)
+      inBlock = false
+    }
+    // 残余块注释头
+    line = line.replace(/\/\*[\s\S]*?\*\//g, '')
+    if (line.includes('/*')) {
+      inBlock = true
+      line = line.slice(0, line.indexOf('/*'))
+    }
+    line = line.replace(/(^|[^:])\/\/.*$/, '$1')
+    if (line.trim() !== '') out.push(line)
+  }
+  return out
+}
+
+let total = 0
+for (const file of walk(WEB_SRC)) {
+  const rel = path.relative(WEB_SRC, file)
+  if (EXEMPT_FILES.has(rel) || rel.startsWith('locales') || rel.startsWith('i18n')) continue
+  const lines = stripComments(readFileSync(file, 'utf8'))
+  const hits: string[] = []
+  lines.forEach((line, i) => {
+    if (!CJK_RE.test(line)) return
+    if (EXEMPT_LINE_RE.some((re) => re.test(line))) return
+    hits.push(`  ${rel}:${i + 1}: ${line.trim().slice(0, 100)}`)
+  })
+  if (hits.length > 0) {
+    total += hits.length
+    console.log(hits.join('\n'))
+  }
+}
+
+// ---- 词典一致性 ----
+function flatKeys(obj: Record<string, unknown>, prefix = ''): string[] {
+  const keys: string[] = []
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix === '' ? k : `${prefix}.${k}`
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) keys.push(...flatKeys(v as Record<string, unknown>, key))
+    else keys.push(key)
+  }
+  return keys
+}
+
+let keyMismatch = 0
+for (const ns of readdirSync(path.join(LOCALES, 'zh-CN'))) {
+  const zh = JSON.parse(readFileSync(path.join(LOCALES, 'zh-CN', ns), 'utf8'))
+  const enPath = path.join(LOCALES, 'en-US', ns)
+  if (!existsSync(enPath)) {
+    console.log(`[dict] en-US 缺少命名空间文件: ${ns}`)
+    keyMismatch++
+    continue
+  }
+  const en = JSON.parse(readFileSync(enPath, 'utf8'))
+  const zhKeys = new Set(flatKeys(zh))
+  const enKeys = new Set(flatKeys(en))
+  const missingEn = [...zhKeys].filter((k) => !enKeys.has(k))
+  const missingZh = [...enKeys].filter((k) => !zhKeys.has(k))
+  if (missingEn.length > 0) {
+    console.log(`[dict] ${ns}: en-US 缺 key → ${missingEn.join(', ')}`)
+    keyMismatch += missingEn.length
+  }
+  if (missingZh.length > 0) {
+    console.log(`[dict] ${ns}: zh-CN 缺 key → ${missingZh.join(', ')}`)
+    keyMismatch += missingZh.length
+  }
+}
+
+console.log('---')
+console.log(`未迁移文案行: ${total}（波次4 admin/AiSettingsModal 管理面按方案允许最后迁移）`)
+console.log(`词典 key 不一致: ${keyMismatch}`)
+if (keyMismatch > 0) process.exit(1)
+if (strict && total > 0) process.exit(1)

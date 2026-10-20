@@ -207,11 +207,14 @@ export async function loadAllFromDb(): Promise<{
   }
 }
 
-/** 规则全量替换（规则量级小，简单可靠） */
+/** 规则全量替换（规则量级小，简单可靠）。
+ * 事务级 advisory lock 序列化：启动时 initStorage 的合并回写与运行时 persistAll
+ * 的后台回写可能并发执行 delete+insert，两事务交错会撞 alert_rules_pkey（实测复现） */
 export async function persistRules(rules: AlertRule[]): Promise<void> {
   const conn = guard()
   if (!conn) return
   await conn.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(913001)`)
     await tx.delete(alertRules)
     if (rules.length) await tx.insert(alertRules).values(rules.map(ruleToRow))
   })
