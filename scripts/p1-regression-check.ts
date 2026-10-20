@@ -756,6 +756,21 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(h6.kept.length === 1 && h6.dropped === 0, '对照：「不应满仓参与」保留（真否定仍剥离）')
   const h7 = checkSynthesisText('若跌破关键支撑，再评估退出。', input)
   assert(h7.kept.length === 1 && h7.dropped === 0, '对照：「若跌破关键支撑，再评估退出」保留（真假设表达仍豁免）')
+  // ---- 第六轮（裸事件词豁免移除 + 强调结构子句级化），与 /tmp/bv-2f79536-boundary-review.mts 同源 ----
+  // #1 后缀完成态「了」不再绕过：裸触发/跌破/突破已移除，事件词只在「…时/后/再」结构中算假设
+  const i1 = checkSynthesisText('止损触发了，立即加仓。', exitInput)
+  assert(i1.by.decision === 1 && i1.kept.length === 0, '「止损触发了，立即加仓」被剔除（裸事件词豁免已移除；修复前「了」绕过完成态断言）')
+  const i2 = checkSynthesisText('关键支撑跌破了，立即加仓。', exitInput)
+  assert(i2.by.decision === 1 && i2.kept.length === 0, '「关键支撑跌破了，立即加仓」被剔除（同上）')
+  const i3 = checkSynthesisText('若触发止损，再评估退出。', exitInput)
+  assert(i3.kept.length === 1 && i3.dropped === 0, '对照：「若触发止损，再评估退出」保留（假设连接词仍豁免）')
+  // #2 强调结构只保护它所在的子句：无关子句的「不能保证收益」照常剥离
+  const i4 = checkSynthesisText('多头趋势延续，不能不注意风险，但不能保证收益。', input)
+  assert(i4.kept.length === 1 && i4.dropped === 0, '「不能不注意风险，但不能保证收益」整句保留（EMPHATIC 子句级化；修复前句级短路误删）')
+  const i5 = checkSynthesisText('多头趋势延续，应注意风险，但不能保证收益。', input)
+  assert(i5.kept.length === 1 && i5.dropped === 0, '对照：无强调结构版本同样保留（不回归）')
+  const i6 = checkSynthesisText('多头趋势延续，保证收益。', input)
+  assert(i6.by.decision === 1 && i6.kept.length === 0, '对照：「保证收益」无否定前缀仍剔除（承诺红线不受剥离影响）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')

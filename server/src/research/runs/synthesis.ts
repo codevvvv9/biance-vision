@@ -137,12 +137,11 @@ const CLAUSE_SPLIT_RE = /([,，;；]|但是|然而|不过|却|只是|但)/
 const CLAUSE_TURN_RE = /但是|然而|不过|却|只是|但/
 const CLAUSE_PUNCT_RE = /[,，;；]/
 /** 条件子句识别（豁免其后的动作/方向检查直到转折或句末）。
- * 第五轮收紧：只有**明确的假设表达**才开启豁免——裸名词「条件」改为「条件…后/时/再」；
- * 价位事件词（触发/跌破/突破）带完成态负向断言（已/经/曾/被/正/未 + 事件词 = 既成
- * 事实或现状，如「已经跌破」「被触发」「尚未跌破」——「已经被触发」紧邻字是「被」，
- * 单查「已/经/曾」挡不住被动式）；「等待」须带后继动作标记；「当」须非「当前/当时」。 */
+ * 第六轮定稿：**明确假设结构才豁免**——裸事件词（触发/跌破/突破）已移除（后缀完成态
+ * 「触发了/跌破了」无法穷举排除），事件词只在后置时间结构「…时/…后/…再」中出现才算
+ * 假设（「触发止损时」「跌破 60000 后」）；无假设标记的事件子句按既成事实从严检查。 */
 const COND_CLAUSE_RE =
-  /若|如果|一旦|除非|当(?!前|时)|届时|否则|等待.{0,12}[后再]|先等待|(?<!已|经|曾|被|正|未)触发|(?<!已|经|曾|被|正|未)跌破|(?<!已|经|曾|被|正|未)突破|条件[^，。;；]{0,8}[后时再]/
+  /若|如果|一旦|除非|当(?!前|时)|届时|否则|等待.{0,12}[后再]|先等待|条件[^，。;；]{0,8}[后时再]|(?:触发|跌破|突破)[^，。;；]{0,6}[后时再]/
 /** 被否定的承诺/动作目标词（第四轮 #4 补 持有/开仓——「不建议继续持有」「暂不开仓」
  * 是安全表述）。「止损」不在表内——「不必止损」本身就是无止损建议，不得剥离。 */
 const NEGATED_TARGETS = '保证|稳赚|必赚|包赚|无风险|零风险|万无一失|必涨|必跌|满仓|全仓|梭哈|加仓|减仓|清仓|平仓|退出|离场|入场|进场|开仓|做多|做空|买入|卖出|持有'
@@ -170,12 +169,11 @@ const ACTION_ALLOW: ReadonlyArray<readonly [RegExp, ReadonlySet<string>]> = [
 ]
 
 function decisionConflict(bare: string, decision: SynthesisInput['decision']): boolean {
-  // 否定剥离：先排除强调结构（不得不/非…不可 = 肯定语义，不做剥离），再移除被否定
-  // 的目标词组合（「不能保证收益」→ 不再命中承诺红线）
-  const text = EMPHATIC_RE.test(bare) ? bare : bare.replace(NEGATED_RE, '')
   // 子句遍历（第四轮 #1）：捕获组 split 保留分隔词——普通分隔延续条件作用域，
-  // 转折分隔（但/然而/不过/却）显式重置，转折后的子句不再受前文条件豁免
-  const parts = text.split(CLAUSE_SPLIT_RE)
+  // 转折分隔（但/然而/不过/却）显式重置，转折后的子句不再受前文条件豁免。
+  // 否定剥离按子句独立进行（第六轮 #2）：强调结构（双重否定=肯定）只保护它所在的
+  // 子句——句级短路会让无关子句的「不能保证收益」失去剥离被误判为承诺。
+  const parts = bare.split(CLAUSE_SPLIT_RE)
   let inConditional = false
   for (const part of parts) {
     if (part === '') continue
@@ -184,8 +182,9 @@ function decisionConflict(bare: string, decision: SynthesisInput['decision']): b
       continue
     }
     if (CLAUSE_PUNCT_RE.test(part)) continue
-    const clause = part.trim()
+    let clause = part.trim()
     if (clause === '') continue
+    if (!EMPHATIC_RE.test(clause)) clause = clause.replace(NEGATED_RE, '')
     // 无条件红线：任何子句（含条件子句）都检查
     if (OVERSIZE_RE.test(clause) || NO_STOP_RE.test(clause) || PROMISE_RE.test(clause)) return true
     if (COND_CLAUSE_RE.test(clause)) {
