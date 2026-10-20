@@ -144,7 +144,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     // 按交互次数宽松口径：postMessage 的 10s 同内容幂等重放走到这里会重复计数，可接受
     recordChatMessage(session.username)
     return reply.code(202).send({
-      message: { id: r.message.id, role: r.message.role, content: r.message.content, intent: r.message.intent, runId: r.message.runId, card: r.message.card, createdAt: r.message.createdAt.getTime() },
+      message: { id: r.message.id, role: r.message.role, content: r.message.content, intent: r.message.intent, sceneCode: r.message.sceneCode ?? undefined, promptRefs: r.message.promptRefs ?? undefined, runId: r.message.runId, card: r.message.card, createdAt: r.message.createdAt.getTime() },
       runId: r.runId,
       needCompletion: r.needCompletion,
     })
@@ -162,6 +162,23 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       return badRequest(reply, '持仓草稿字段不完整（需 symbol/side/qty/entryPrice/riskBudget）')
     }
     return { context: r.context, confirmedPositionId: r.confirmedPositionId }
+  })
+
+  // ---- UI 辅助翻译：消息级「翻译」按钮（X 式内联展开）。不落会话历史、
+  // 不创建研究 run；翻译消耗 LLM/离线引擎，计入用户级每日交互口径防刷。
+  app.post('/api/translate', async (req, reply) => {
+    const session = deps.requireSession(req)
+    if (!ensureStorage(reply)) return reply
+    assertChatAllowed(session.username)
+    const body = (req.body ?? {}) as { text?: unknown; targetLang?: unknown }
+    const text = typeof body.text === 'string' ? body.text.trim() : ''
+    if (text === '') return badRequest(reply, 'text 不能为空')
+    if (text.length > 4000) return badRequest(reply, 'text 过长（≤4000 字符）')
+    const targetLang = typeof body.targetLang === 'string' && /^[a-z]{2}$/.test(body.targetLang) ? body.targetLang : 'en'
+    const { translateWithFallback } = await import('../translate.js')
+    const out = await translateWithFallback(text, { text, targetLang, sourceLang: targetLang === 'zh' ? 'en' : 'zh' })
+    recordChatMessage(session.username)
+    return { text: out.text, engine: out.engine }
   })
 
   // ---- P1-4 用户画像：长期研究偏好（独立 PG 表；leverageHabitMax 为描述性字段非授权上限） ----

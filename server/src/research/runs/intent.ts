@@ -21,7 +21,7 @@ export interface OrchestratedIntent {
   promptRef: Pick<ResolvedPrompt, 'name' | 'templateId' | 'version'> | null
 }
 
-const INTENTS: readonly Intent[] = ['concept', 'structure', 'perp', 'event', 'replay', 'news', 'system']
+const INTENTS: readonly Intent[] = ['concept', 'structure', 'perp', 'event', 'replay', 'news', 'system', 'translate']
 
 /**
  * 编排后的意图：LLM 输出通过枚举与格式校验才覆盖确定性结果；

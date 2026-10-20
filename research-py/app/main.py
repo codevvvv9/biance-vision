@@ -3,7 +3,7 @@
 import sklearn
 from fastapi import FastAPI, HTTPException
 
-from . import modeling, parsing
+from . import modeling, parsing, translation
 from .schemas import (
     CalibrationReportRequest,
     CalibrationReportResponse,
@@ -13,6 +13,8 @@ from .schemas import (
     PredictResponse,
     TrainRequest,
     TrainResponse,
+    TranslateRequest,
+    TranslateResponse,
 )
 
 app = FastAPI(title="research-py", version="0.1.0")
@@ -23,6 +25,8 @@ def health():
     return {
         "status": "ok",
         "docling": parsing.docling_available(),
+        "argos": translation._argos_available(),
+        "argosPairs": sorted(["->".join(p) for p in translation._installed_pairs()]),
         "sklearnVersion": sklearn.__version__,
     }
 
@@ -55,3 +59,11 @@ def predict(req: PredictRequest) -> PredictResponse:
 @app.post("/tasks/calibration-report", response_model=CalibrationReportResponse)
 def calibration_report(req: CalibrationReportRequest) -> CalibrationReportResponse:
     return modeling.calibration_report(req)
+
+
+@app.post("/tasks/translate", response_model=TranslateResponse)
+def translate(req: TranslateRequest) -> TranslateResponse:
+    # 400/500 raise HTTPException; a missing offline language pair returns
+    # status="failed" + error="package_missing" (structured, not an exception),
+    # so the Node side can degrade explicitly.
+    return translation.translate(req)

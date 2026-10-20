@@ -142,6 +142,33 @@ export async function researchPyHealthy(): Promise<boolean> {
   }
 }
 
+// ---- /tasks/translate（Argos 离线翻译；Part 2 翻译 Agent 的兜底引擎） ----
+
+export interface PyTranslateResponse {
+  status: 'ok' | 'failed'
+  /** 失败原因码：package_missing = 语言对离线包未下载；unsupported = 语言不在 Argos 支持集 */
+  error?: 'package_missing' | 'unsupported' | string | null
+  text?: string | null
+  /** sourceLang='auto' 时的检测结果 */
+  detectedLang?: string | null
+}
+
+/**
+ * Argos 离线翻译（zh↔en；语言包缺失抛 ResearchPyError('remote_error') 且
+ * 错误信息含 package_missing，由调用方降级）。翻译文本量小，30s 超时足够。
+ */
+export function translateViaArgos(text: string, sourceLang: string, targetLang: string, timeoutMs = 30_000): Promise<string> {
+  return call<PyTranslateResponse>('/tasks/translate', { text, sourceLang, targetLang }, timeoutMs).then((r) => {
+    if (r.status !== 'ok' || r.text === null || r.text === undefined) {
+      throw new ResearchPyError(
+        `research-py /tasks/translate → ${r.error ?? 'failed'}`,
+        r.error === 'package_missing' || r.error === 'unsupported' ? 'bad_request' : 'remote_error',
+      )
+    }
+    return r.text
+  })
+}
+
 export function logResearchPyDown(context: string, err: unknown): void {
   log.warn('researchpy', `${context} 失败（research-py 服务未启动或超时）`, kv({ 错误: (err as Error).message }))
 }

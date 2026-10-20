@@ -689,6 +689,9 @@ const SLASH_ALIASES: Record<string, string> = {
   correlation: 'corr',
   calc: 'calc',
   news: 'news',
+  translate: 'translate',
+  trans: 'translate',
+  fy: 'translate',
   remember: 'remember',
   forget: 'forget',
   mem: 'mem',
@@ -785,6 +788,22 @@ export async function runSlashCommand(username: string, text: string): Promise<S
       if (!args) throw badRequest('用法：/calc 算式，如 /calc 10000*3% 或 /calc (90000-85000)/85000*100')
       const r = await executeAiTool('calc', JSON.stringify({ expression: args }))
       return { reply: `🧮 ${r.result}` }
+    }
+    case 'translate': {
+      // /translate [目标语言] <文本>：与链路 B 翻译意图共用三级降级链（LLM 主翻 + Argos 兜底）
+      if (!args) throw badRequest('用法：/translate [目标语言] 文本，如 /translate english BTC 冲刺通道；缺省中文↔英文自动判断')
+      const { parseTranslateRequest, translateWithFallback } = await import('./research/translate.js')
+      // 首词是语言名则吃掉作为目标语言（parseTranslateRequest 也支持句内「译成 X」）
+      const langWord = args.match(/^([a-zA-Z\u4e00-\u9fff]+)\s+([\s\S]+)$/)
+      const head = langWord !== null ? langWord[1] : ''
+      const headIsLang = /^(english|中文|chinese|日文|日语|japanese|韩文|韩语|korean|法文|法语|french|德文|德语|german)$/i.test(head)
+      const rest = headIsLang && langWord !== null ? `翻译成 ${head} ${langWord[2]}` : args
+      const out = await translateWithFallback(rest, parseTranslateRequest(rest))
+      if (out.text === null) {
+        return { reply: '翻译能力暂不可用（大模型与离线引擎均未就绪或调用失败），请稍后重试或联系管理员。' }
+      }
+      const note = out.engine === 'argos' ? '\n\n> 由离线翻译引擎（Argos）产出，金融术语译法可能与主引擎有人工差距。' : ''
+      return { reply: `🌐 ${out.text}${note}` }
     }
     case 'news': {
       const r = await executeAiTool('get_news', '{}')

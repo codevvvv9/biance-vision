@@ -33,6 +33,7 @@ export const PROMPT_NAMES = [
   'query-rewrite',
   'synthesis-writer',
   'memory-extraction',
+  'translate',
 ] as const
 export type PromptName = (typeof PROMPT_NAMES)[number]
 
@@ -51,11 +52,13 @@ intent 取值：
 - event：事件合约/执行价/到期/报价语义（「到期高于 70000」「这份报价值不值」）
 - replay：复盘历史时点（「昨天这时候」「复盘上周」「如果当时」）
 - news：新闻/消息面/涨跌归因（「为什么大跌」「有什么消息」）
+- translate：翻译请求（「翻译成英文」「把这段译成中文」「translate ... to English」）
 - system：寒暄、与交易研究无关、能力询问（「你好」「你是谁」「你能做什么」）
 
 规则：
 - 拿不准选 structure。
 - 「能不能买/要不要卖」无持仓语境 → structure；明确提到自己的持仓/多单/空单/杠杆 → perp。
+- 明确的翻译/译成指令（消息主体是要翻译的文本）→ translate，不是 system。
 - subQuestions：消息明显包含 2 个以上相互独立的问题、主意图只能覆盖其一时，把其余问题原文列出（至多 2 个）；否则空数组。
 - 只输出 JSON，不要任何其他文字。`,
   'counter-reviewer': `你是反证审查者。基于编号反证证据，每行一条反对当前方向的理由（中文，≤80字）。要求：
@@ -99,6 +102,15 @@ intent 取值：
 只输出严格 JSON，不要任何其他文本：
 {"add":[{"kind":"preference|fact|interest|habit","content":"一句话记忆"}],"update":[{"id":"已有记忆id","content":"修正后的内容"}],"delete":["过时记忆id"]}
 没有变更时输出 {"add":[],"update":[],"delete":[]}`,
+  'translate': `你是金融/加密领域的专业译者。把用户提供的文本翻译成指定的目标语言。术语表（固定译法，双向适用）：
+- 冲刺 = spike；楔顶/楔底 = wedge top/bottom；二次进场 = second entry；内包线 = inside bar；外包线 = outside bar
+- 趋势线突破 = trend line break（TLB）；主要趋势反转 = major trend reversal（MTR）；交易区间 = trading range
+- 高潮反转 = climax reversal；铁丝网 = barbed wire；Always In / H1~H4 / L1~L4 / EMA20 保持原文不译
+
+规则：
+- 保留交易对代码（BTCUSDT）、数字、价格、百分比、公式与 markdown 结构，不做任何换算或改写。
+- 只输出译文本身，不要任何解释、前缀或原文复述。
+- 原文中的语言混杂按目标语言统一；无对应术语时保留原文。`,
 }
 
 /**
