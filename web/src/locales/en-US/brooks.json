@@ -1,0 +1,123 @@
+{
+  "interval": {
+    "1m": "1m",
+    "5m": "5m",
+    "15m": "15m",
+    "1h": "1h",
+    "4h": "4h",
+    "1d": "1D"
+  },
+  "symbolPlaceholder": "Pair, e.g. BTCUSDT",
+  "analyze": "Analyze",
+  "swingScale": "Swing scale",
+  "barCount": "Bar count",
+  "barsUnit": "{{count}} bars",
+  "scales": {
+    "1": { "t": "Micro", "hint": "k=1: micro swings, noisy, close to bar-by-bar reading" },
+    "2": { "t": "Fine", "hint": "k=2: fine-grained structure" },
+    "3": { "t": "Standard", "hint": "k=3: the consensus default scale" },
+    "5": { "t": "Major", "hint": "k=5: major swings only — cleaner structure but more lag" }
+  },
+  "toggles": {
+    "regime": "Regime bar",
+    "ema": "EMA20",
+    "legs": "Legs",
+    "swings": "Swing labels",
+    "io": "In/Out bars",
+    "signals": "Signals"
+  },
+  "helpButton": "? Legend & rules",
+  "title": "{{base}}/USDT · Price Action Structure · {{interval}}",
+  "titleScale": "(scale k={{k}})",
+  "note": "Structure only · No direction forecast · Closed bars only",
+  "ai": {
+    "button": "🤖 AI read",
+    "hintOk": "Send the current structure summary to the AI assistant for a Brooks-framework read",
+    "hintNo": "AI not configured (a superadmin must configure it in AI Settings)"
+  },
+  "fullscreen": "Show price action structure full screen (more overlays appear when zoomed)",
+  "refresh": "Refresh",
+  "loading": "Loading {{symbol}} candles…",
+  "loadFailed": "Failed to load candles",
+  "retry": "Retry",
+  "summary": {
+    "title": "Current Structure",
+    "marketState": "Market state",
+    "structureVerdict": "Structure verdict",
+    "swingSequence": "Swing sequence",
+    "lastLeg": "Last leg",
+    "signalStat": "Signal stats",
+    "alwaysIn": {
+      "bull": "Bull",
+      "bear": "Bear",
+      "none": "Unclear"
+    },
+    "sinceBar": "(since bar {{n}})",
+    "lastLegLine": "{{dir}} {{count}} bars · {{trend}} trend bars",
+    "lastLegRetrace": " · {{pct}}% of prior leg",
+    "signalCount": "{{total}} total · {{bull}} bull · {{bear}} bear",
+    "empty": "Loading or not enough candles (at least 30 closed bars required)…"
+  },
+  "signals": {
+    "title": "Signals (new→old)",
+    "filter": {
+      "all": "All",
+      "bull": "Bull",
+      "bear": "Bear"
+    },
+    "empty": "No signals (no rule fired for this timeframe's structure)",
+    "locate": "Click to locate the bar on the chart",
+    "empirical": "Empirical: {{note}}",
+    "empiricalTitle": "Brooks' statistics from his US stock index futures market — not a validated win rate for this instrument",
+    "ref": {
+      "entry": "Breakout {{v}}",
+      "stop": "Stop {{v}}",
+      "target": "Target {{v}}"
+    }
+  },
+  "help": {
+    "title": "Legend & Rule Reference (Al Brooks Price Action)",
+    "close": "Close",
+    "structureTitle": "Structure overlays",
+    "structure": [
+      "HH / LH (above bars): higher high / lower high; HL / LL (below bars): higher low / lower low. Alternating HH+HL = bull structure, LH+LL = bear structure.",
+      "i / O / ii / oo / ioi: inside bar / outside bar / consecutive inside / consecutive outside / inside-outside-inside. Inside = breakout mode (stand aside); ii is one of the most reliable intraday breakout patterns.",
+      "Top regime bar: green = bull channel (bright green = spike), red = bear channel (bright red = spike), amber = trading range, purple = tight range / barbed wire.",
+      "EMA20 (cyan dashed): Brooks' trend benchmark — ≥70% of the last 20 closes on one side = trend, otherwise range."
+    ],
+    "signalTitle": "Signals",
+    "signalList": [
+      "H1~H4 / L1~L4: entry counts within a bull/bear pullback. H2/L2 = second entry, the highest-probability Brooks setup (prior ≈60%).",
+      "Wedge top/bottom: three-push reversal (span ≤40 bars); more reliable when the third push loses momentum.",
+      "Double top/bottom: two swing points at nearly the same level (tolerance 0.3×ATR, gap ≥3 bars).",
+      "TLB ↓/↑ (trend line break): a close through the trend line — a warning only: ~50% of trends resume, ~50% reverse.",
+      "MTR: major trend reversal = trend line break + test + reversal signal, all three in place.",
+      "Range break ↑/↓: trading-range breakout. Prior: 80% of breakout attempts fail and first breakouts only survive ~50% — research watch only.",
+      "Spike ↑/↓: ≥5 consecutive same-direction trend bars (spike), the origin of a spike and channel."
+    ],
+    "aiTitle": "AI integration",
+    "aiList": [
+      "🤖 AI read: one-click send of the current structure summary to the AI assistant for a Brooks-framework interpretation (requires AI configured by a superadmin).",
+      "/brooks PAIR TIMEFRAME: a slash command in AI chat (e.g. /brooks BTC 1h) that outputs the structure read directly; asking naturally \"what structure is BTC in now\" also triggers the structure engine tool."
+    ],
+    "scaleTitle": "Swing scale k",
+    "scaleList": [
+      "A swing needs k bars to its right to confirm (signals lag k bars by nature and never repaint). k=1 micro (noisy) → k=3 standard (recommended) → k=5 major swings. Brooks himself stresses that structure is fractal: viewing the same candles at multiple scales is itself the exercise."
+    ],
+    "disclaimer": "This tool quantifies the bar-structure rules of Brooks' three-book series into deterministic code, for study and review only; signals are structural annotations, not trade instructions, and nothing here is investment advice."
+  },
+  "aiPrompt": {
+    "dir": { "bull": "bull", "bear": "bear", "neutral": "neutral" },
+    "legDir": { "up": "up", "down": "down" },
+    "none": "none",
+    "header": "Interpret the following structure data using the framework of Al Brooks' Trading Price Action trilogy (from the built-in Brooks structure engine: {{symbol}} {{interval}}, {{barCount}} closed bars, swing scale k={{swingK}}):",
+    "regime": "Market state",
+    "alwaysIn": "Always In",
+    "alwaysInLine": "- Always In: {{dir}} ({{reason}})",
+    "structureLine": "- Structure verdict: {{verdict}}; swing sequence (old→new): {{sequence}}",
+    "lastLegLine": "- Last leg: {{dir}} {{count}} bars ({{trend}} trend bars{{retracement}})",
+    "retracement": ", retraced {{pct}}% of the prior leg",
+    "recentSignals": "Recent signals (new→old):",
+    "requirements": "Cover: 1) what the current structure means and the bull/bear balance; 2) how the signals confirm or contradict each other; 3) using Brooks' probability priors (80% of range breakouts fail, H2 second entry ≈60%, trend line breaks 50/50), separate high-quality signals from those that are probably just pullbacks; 4) the biggest trap to watch in the current state. You may call tools for live market data."
+  }
+}

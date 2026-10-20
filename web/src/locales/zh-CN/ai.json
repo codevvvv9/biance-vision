@@ -1,0 +1,35 @@
+{
+  "fab": {
+    "open": "打开 AI 研究助手",
+    "title": "AI 研究助手",
+    "hide": "隐藏 AI 助手入口",
+    "hideTitle": "隐藏（可从右上角用户菜单重新唤起）"
+  },
+  "chat": {
+    "aria": "AI 助手对话",
+    "title": "AI 研究助手",
+    "expand": "展开",
+    "minimize": "最小化",
+    "history": "历史会话",
+    "historyShort": "历史",
+    "newChatTitle": "开启新对话（历史会话仍可从「历史」找回）",
+    "newChat": "✚ 新对话",
+    "close": "关闭",
+    "historyPopTitle": "🕘 历史会话",
+    "historyEmpty": "还没有历史会话",
+    "untitled": "未命名会话",
+    "typing": "分析中…",
+    "openInWorkbench": "在研究工作台打开",
+    "welcomeSub": "直接描述问题，我会自动识别场景并启动完整研究。试试：",
+    "suggestions": [
+      "BTC 永续现在是什么结构？还能追多吗？",
+      "10 分钟后高于 60000 的事件合约值得参与吗？",
+      "什么是铁丝网（Barb Wire）？怎么识别？",
+      "帮我录入一笔 BTCUSDT 多头持仓"
+    ],
+    "placeholder": "描述你的问题，自动启动研究…",
+    "send": "发送",
+    "disclaim": "AI 输出仅供参考，不构成投资建议",
+    "counterFollowUp": "从反证角度重新研究 {{symbol}}（{{horizon}}）：重点寻找不支持上一轮结论的证据"
+  }
+}

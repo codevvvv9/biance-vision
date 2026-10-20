@@ -7,6 +7,8 @@
  * 3. 每条信号都携带 reason（量化触发细节）与 concept（Brooks 概念出处），供复盘学习对照。
  */
 
+import type { SharedLocale } from './i18n.js'
+
 
 
 /** 引擎输入的最小K线结构（web 的 KlineBar 结构兼容，可直接传入） */
@@ -225,6 +227,8 @@ export interface BrooksOptions {
    * 否则引擎入口抛错——回放/研究不得混入截止后才收盘的数据。
    */
   asOf?: number
+  /** 用户可见文案语言（label/title/reason/concept/事件备注/摘要文本），缺省中文 */
+  locale?: SharedLocale
 }
 
 export interface BrooksSummary {

@@ -30,6 +30,8 @@ import type {
   StructureEvent,
   SwingPoint,
 } from './types.js'
+import { msg } from './i18n.js'
+import type { SharedLocale } from './i18n.js'
 import { maxHighBetween, minLowBetween } from './swings.js'
 import { ENGINE_VERSION } from './version.js'
 
@@ -60,30 +62,11 @@ function fmt(v: number): string {
 // H1~H4 / L1~L4 回调计数状态机（Brooks 核心信号）
 // ---------------------------------------------------------------------------
 
-const HL_TITLES: Record<number, { h: string; l: string; note: string }> = {
-  1: {
-    h: 'H1 · 多头第一次进场尝试',
-    l: 'L1 · 空头第一次进场尝试',
-    note: 'Brooks 经验统计：趋势中首次反转尝试大多只是回调（美股股指期货口径，非本品种验证结论）',
-  },
-  2: {
-    h: 'H2 · 多头二次进场',
-    l: 'L2 · 空头二次进场',
-    note: 'H2/L2 是 Brooks 体系中最常用的顺势回调二次进场（其美股股指期货经验统计约 60%，非本品种验证胜率）',
-  },
-  3: {
-    h: 'H3 · 多头第三次进场尝试',
-    l: 'L3 · 空头第三次进场尝试',
-    note: '计数越高动能越弱；趋势惯性强时仍可顺势，但失败率上升（经验描述）',
-  },
-  4: {
-    h: 'H4 · 多头第四次进场尝试（警惕趋势衰竭）',
-    l: 'L4 · 空头第四次进场尝试（警惕趋势衰竭）',
-    note: 'H4/L4 常出现在趋势末期或震荡中，Brooks 建议降低预期（经验描述）',
-  },
+function hlTitle(side: 'bull' | 'bear', count: number, locale: SharedLocale): string {
+  return msg(`hl.title.${side === 'bull' ? 'h' : 'l'}${count}`, {}, locale)
 }
 
-function detectHL(input: SignalInput, signals: BrooksSignal[], events: StructureEvent[]): void {
+function detectHL(input: SignalInput, signals: BrooksSignal[], events: StructureEvent[], locale: SharedLocale): void {
   const { bars, features, ema20, regime } = input
   const n = bars.length
 
@@ -135,14 +118,13 @@ function detectHL(input: SignalInput, signals: BrooksSignal[], events: Structure
             knownAtIndex: i,
             knownAtTime: b.time,
             barIndices: [i],
-            note: `多头回调开始（第 ${i + 1} 根高点低于前一根），进入 H/L 计数上下文`,
+            note: msg('hl.setup.bull', { bar: i + 1 }, locale),
           })
         } else if (inPullback) {
           pullbackExtreme = Math.min(pullbackExtreme, b.low)
           if (b.high > bars[i - 1].high) {
             count++
             if (count <= 4) {
-              const t = HL_TITLES[count]
               const entry = b.high
               const stop = pullbackExtreme
               const target = entry + (extreme - stop)
@@ -152,10 +134,10 @@ function detectHL(input: SignalInput, signals: BrooksSignal[], events: Structure
                 index: i,
                 time: b.time,
                 label: `H${count}`,
-                title: t.h,
-                reason: `第 ${i + 1} 根K线高点 ${fmt(b.high)} 上穿前一根高点，为本轮多头回调的第 ${count} 次进场尝试；回调低点 ${fmt(stop)}，趋势极值 ${fmt(extreme)}`,
-                concept: '《价格行为交易》：多头腿中突破前一根K线高点 = H1；失败后的第二次尝试 = H2（二次进场）',
-                empiricalNote: t.note,
+                title: hlTitle('bull', count, locale),
+                reason: msg('hl.reason.bull', { bar: i + 1, price: fmt(b.high), count, stop: fmt(stop), extreme: fmt(extreme) }, locale),
+                concept: msg('hl.concept.bull', {}, locale),
+                empiricalNote: msg(`hl.note.${count}`, {}, locale),
                 strength: count === 2 ? 'high' : count <= 3 ? 'medium' : 'low',
                 ref: { entry, stop, target },
                 knownAtIndex: i,
@@ -179,14 +161,13 @@ function detectHL(input: SignalInput, signals: BrooksSignal[], events: Structure
             knownAtIndex: i,
             knownAtTime: b.time,
             barIndices: [i],
-            note: `空头回调开始（第 ${i + 1} 根低点高于前一根），进入 L 计数上下文`,
+            note: msg('hl.setup.bear', { bar: i + 1 }, locale),
           })
         } else if (inPullback) {
           pullbackExtreme = Math.max(pullbackExtreme, b.high)
           if (b.low < bars[i - 1].low) {
             count++
             if (count <= 4) {
-              const t = HL_TITLES[count]
               const entry = b.low
               const stop = pullbackExtreme
               const target = entry - (stop - extreme)
@@ -196,10 +177,10 @@ function detectHL(input: SignalInput, signals: BrooksSignal[], events: Structure
                 index: i,
                 time: b.time,
                 label: `L${count}`,
-                title: t.l,
-                reason: `第 ${i + 1} 根K线低点 ${fmt(b.low)} 跌破前一根低点，为本轮空头回调的第 ${count} 次进场尝试；回调高点 ${fmt(stop)}，趋势极值 ${fmt(extreme)}`,
-                concept: '《价格行为交易》：空头腿中跌破前一根K线低点 = L1；失败后的第二次尝试 = L2（二次进场）',
-                empiricalNote: t.note,
+                title: hlTitle('bear', count, locale),
+                reason: msg('hl.reason.bear', { bar: i + 1, price: fmt(b.low), count, stop: fmt(stop), extreme: fmt(extreme) }, locale),
+                concept: msg('hl.concept.bear', {}, locale),
+                empiricalNote: msg(`hl.note.${count}`, {}, locale),
                 strength: count === 2 ? 'high' : count <= 3 ? 'medium' : 'low',
                 ref: { entry, stop, target },
                 knownAtIndex: i,
@@ -219,7 +200,7 @@ function detectHL(input: SignalInput, signals: BrooksSignal[], events: Structure
 // 冲刺（Spike）：≥5 根连续同向趋势棒
 // ---------------------------------------------------------------------------
 
-function detectSpikes(input: SignalInput, signals: BrooksSignal[]): void {
+function detectSpikes(input: SignalInput, signals: BrooksSignal[], locale: SharedLocale): void {
   const { bars, features, atr14 } = input
   for (let i = 0; i < bars.length; i++) {
     let runDir: 'up' | 'down' | null = null
@@ -246,11 +227,11 @@ function detectSpikes(input: SignalInput, signals: BrooksSignal[]): void {
         direction: bull ? 'bull' : 'bear',
         index: i,
         time: bars[i].time,
-        label: bull ? '冲刺↑' : '冲刺↓',
-        title: bull ? '多头冲刺启动（Spike）' : '空头冲刺启动（Spike）',
-        reason: `连续 5 根同向趋势棒（实体占比 ≥55%），累计幅度 ${fmt(runHigh - runLow)} ≈ ${((runHigh - runLow) / a).toFixed(1)}×ATR`,
-        concept: '《高级趋势技术分析》spike and channel：冲刺腿是趋势最强阶段，回调通常止于通道起点',
-        empiricalNote: 'Brooks 经验统计：冲刺后进入通道的概率高；逆冲刺的首次交易大多失败（美股股指期货口径）',
+        label: msg(bull ? 'spike.label.bull' : 'spike.label.bear', {}, locale),
+        title: msg(bull ? 'spike.title.bull' : 'spike.title.bear', {}, locale),
+        reason: msg('spike.reason', { range: fmt(runHigh - runLow), atrMult: ((runHigh - runLow) / a).toFixed(1) }, locale),
+        concept: msg('spike.concept', {}, locale),
+        empiricalNote: msg('spike.note', {}, locale),
         strength: 'high',
         ref: { entry: bull ? bars[i].high : bars[i].low, stop: bull ? runLow : runHigh },
         knownAtIndex: i,
@@ -264,7 +245,7 @@ function detectSpikes(input: SignalInput, signals: BrooksSignal[]): void {
 // 楔形（Wedge）：三推反转，跨度 ≤40 根
 // ---------------------------------------------------------------------------
 
-function detectWedges(input: SignalInput, signals: BrooksSignal[]): void {
+function detectWedges(input: SignalInput, signals: BrooksSignal[], locale: SharedLocale): void {
   const { bars, swings, atr14 } = input
   const highs = swings.filter((s) => s.kind === 'high')
   const lows = swings.filter((s) => s.kind === 'low')
@@ -294,11 +275,13 @@ function detectWedges(input: SignalInput, signals: BrooksSignal[]): void {
       direction: 'bear',
       index: h3.confirmIndex,
       time: bars[h3.confirmIndex]?.time ?? h3.time,
-      label: '楔顶',
-      title: `三推楔形顶（第3推 ${fmt(h3.price)}）${fading ? '· 动能衰减' : ''}`,
-      reason: `三个摆动高点依次抬升 ${fmt(h1.price)} → ${fmt(h2.price)} → ${fmt(h3.price)}（跨度 ${span} 根）；第三推幅度 ${fmt(push2)}${fading ? ` 小于第一推 ${fmt(push1)}（动能递减）` : ''}`,
-      concept: '《高级反转技术分析》：任意三推形态都当楔形交易；第三推常由微型趋势通道线延伸产生，反转目标为楔形起点',
-      empiricalNote: 'Brooks 经验统计：楔形反转后常见两腿回调；测量目标 = 楔形全幅回到起点（形态学目标，非胜率）',
+      label: msg('wedge.label.top', {}, locale),
+      title: msg('wedge.title.top', { price: fmt(h3.price) }, locale) + (fading ? msg('wedge.fading', {}, locale) : ''),
+      reason:
+        msg('wedge.reason.top', { h1: fmt(h1.price), h2: fmt(h2.price), h3: fmt(h3.price), span, push2: fmt(push2) }, locale) +
+        (fading ? msg('wedge.reasonFading', { push1: fmt(push1) }, locale) : ''),
+      concept: msg('wedge.concept.top', {}, locale),
+      empiricalNote: msg('wedge.note.top', {}, locale),
       strength: fading ? 'high' : 'medium',
       ref: { entry: h3.price, stop: h3.price + 0.5 * atr, target: h3.price - (h3.price - h1.price) },
       knownAtIndex: h3.confirmIndex,
@@ -331,11 +314,13 @@ function detectWedges(input: SignalInput, signals: BrooksSignal[]): void {
       direction: 'bull',
       index: l3.confirmIndex,
       time: bars[l3.confirmIndex]?.time ?? l3.time,
-      label: '楔底',
-      title: `三推楔形底（第3推 ${fmt(l3.price)}）${fading ? '· 动能衰减' : ''}`,
-      reason: `三个摆动低点依次下移 ${fmt(l1.price)} → ${fmt(l2.price)} → ${fmt(l3.price)}（跨度 ${span} 根）；第三推幅度 ${fmt(push2)}${fading ? ` 小于第一推 ${fmt(push1)}（动能递减）` : ''}`,
-      concept: '《高级反转技术分析》：下跌三推衰竭后的楔形底，是空头趋势转多的经典反转结构',
-      empiricalNote: 'Brooks 经验统计：楔形底反转后常见两腿上涨；测量目标 = 楔形全幅回到起点（形态学目标，非胜率）',
+      label: msg('wedge.label.bottom', {}, locale),
+      title: msg('wedge.title.bottom', { price: fmt(l3.price) }, locale) + (fading ? msg('wedge.fading', {}, locale) : ''),
+      reason:
+        msg('wedge.reason.bottom', { l1: fmt(l1.price), l2: fmt(l2.price), l3: fmt(l3.price), span, push2: fmt(push2) }, locale) +
+        (fading ? msg('wedge.reasonFading', { push1: fmt(push1) }, locale) : ''),
+      concept: msg('wedge.concept.bottom', {}, locale),
+      empiricalNote: msg('wedge.note.bottom', {}, locale),
       strength: fading ? 'high' : 'medium',
       ref: { entry: l3.price, stop: l3.price - 0.5 * atr, target: l3.price + (l1.price - l3.price) },
       knownAtIndex: l3.confirmIndex,
@@ -348,7 +333,7 @@ function detectWedges(input: SignalInput, signals: BrooksSignal[]): void {
 // 双顶 / 双底：两摆动点近似等高 + 明显回落
 // ---------------------------------------------------------------------------
 
-function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
+function detectDoubles(input: SignalInput, signals: BrooksSignal[], locale: SharedLocale): void {
   const { bars, swings, atr14 } = input
   const highs = swings.filter((s) => s.kind === 'high')
   const lows = swings.filter((s) => s.kind === 'low')
@@ -368,11 +353,11 @@ function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
       direction: 'bear',
       index: h2.confirmIndex,
       time: bars[h2.confirmIndex]?.time ?? h2.time,
-      label: '双顶',
-      title: `双顶 ${fmt(h2.price)}`,
-      reason: `两个摆动高点近似等高（${fmt(h1.price)} / ${fmt(h2.price)}，差 ${fmt(Math.abs(h1.price - h2.price))} ≤ 0.3×ATR），中间回落至 ${fmt(dip)}`,
-      concept: '《高级反转技术分析》双顶：第二高点测试前高失败（1 tick 更高也算），跌破颈线（中间低点）确认',
-      empiricalNote: '形态学测量目标 = 双顶高度自颈线下投（目标位约定，非胜率）',
+      label: msg('double.label.top', {}, locale),
+      title: msg('double.title.top', { price: fmt(h2.price) }, locale),
+      reason: msg('double.reason.top', { p1: fmt(h1.price), p2: fmt(h2.price), diff: fmt(Math.abs(h1.price - h2.price)), dip: fmt(dip) }, locale),
+      concept: msg('double.concept.top', {}, locale),
+      empiricalNote: msg('double.note.top', {}, locale),
       strength: 'medium',
       ref: { entry: h2.price, stop: h2.price + 0.5 * a, target: dip - (Math.max(h1.price, h2.price) - dip) },
       knownAtIndex: h2.confirmIndex,
@@ -395,11 +380,11 @@ function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
       direction: 'bull',
       index: l2.confirmIndex,
       time: bars[l2.confirmIndex]?.time ?? l2.time,
-      label: '双底',
-      title: `双底 ${fmt(l2.price)}`,
-      reason: `两个摆动低点近似等低（${fmt(l1.price)} / ${fmt(l2.price)}，差 ${fmt(Math.abs(l1.price - l2.price))} ≤ 0.3×ATR），中间反弹至 ${fmt(bump)}`,
-      concept: '《高级反转技术分析》双底：第二低点测试前低失败，收破中间高点（颈线）确认反转',
-      empiricalNote: '形态学测量目标 = 双底高度自颈线上投（目标位约定，非胜率）',
+      label: msg('double.label.bottom', {}, locale),
+      title: msg('double.title.bottom', { price: fmt(l2.price) }, locale),
+      reason: msg('double.reason.bottom', { p1: fmt(l1.price), p2: fmt(l2.price), diff: fmt(Math.abs(l1.price - l2.price)), bump: fmt(bump) }, locale),
+      concept: msg('double.concept.bottom', {}, locale),
+      empiricalNote: msg('double.note.bottom', {}, locale),
       strength: 'medium',
       ref: { entry: l2.price, stop: l2.price - 0.5 * a, target: bump + (bump - Math.min(l1.price, l2.price)) },
       knownAtIndex: l2.confirmIndex,
@@ -412,7 +397,7 @@ function detectDoubles(input: SignalInput, signals: BrooksSignal[]): void {
 // ii 突破 + 外包线反转（突破模式）
 // ---------------------------------------------------------------------------
 
-function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], events: StructureEvent[]): void {
+function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], events: StructureEvent[], locale: SharedLocale): void {
   const { bars, features } = input
   interface Pending {
     high: number
@@ -441,7 +426,7 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
           knownAtIndex: i,
           knownAtTime: b.time,
           barIndices: [p.bornIndex - 1, p.bornIndex, i],
-          note: `ii 形态（第 ${p.bornIndex + 1} 根登记）5 根内未被收盘突破，形态失效`,
+          note: msg('ii.expiry', { bornBar: p.bornIndex + 1 }, locale),
         })
         continue
       }
@@ -452,11 +437,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
           direction: 'bull',
           index: i,
           time: b.time,
-          label: 'ii↑',
-          title: 'ii 形态向上突破',
-          reason: `第 ${p.bornIndex + 1} 根出现连续内包（ii）后，第 ${i + 1} 根收盘 ${fmt(b.close)} 上破形态高点 ${fmt(p.high)}`,
-          concept: '《价格行为交易》：ii = 连续两根内包线，突破模式；ii 突破属日内最可靠的突破形态之一',
-          empiricalNote: 'Brooks 经验描述：ii 突破沿突破方向延续的概率显著高于单根内包线（定性描述，非数值胜率）',
+          label: msg('ii.label.up', {}, locale),
+          title: msg('ii.title.up', {}, locale),
+          reason: msg('ii.reason.up', { bornBar: p.bornIndex + 1, bar: i + 1, close: fmt(b.close), high: fmt(p.high) }, locale),
+          concept: msg('ii.concept.up', {}, locale),
+          empiricalNote: msg('ii.note', {}, locale),
           strength: 'medium',
           ref: { entry: b.high, stop: p.low },
           knownAtIndex: i,
@@ -469,11 +454,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
           direction: 'bear',
           index: i,
           time: b.time,
-          label: 'ii↓',
-          title: 'ii 形态向下突破',
-          reason: `第 ${p.bornIndex + 1} 根出现连续内包（ii）后，第 ${i + 1} 根收盘 ${fmt(b.close)} 跌破形态低点 ${fmt(p.low)}`,
-          concept: '《价格行为交易》：ii = 连续两根内包线，突破模式；向下突破常引发空头趋势腿',
-          empiricalNote: 'Brooks 经验描述：ii 突破沿突破方向延续的概率显著高于单根内包线（定性描述，非数值胜率）',
+          label: msg('ii.label.down', {}, locale),
+          title: msg('ii.title.down', {}, locale),
+          reason: msg('ii.reason.down', { bornBar: p.bornIndex + 1, bar: i + 1, close: fmt(b.close), low: fmt(p.low) }, locale),
+          concept: msg('ii.concept.down', {}, locale),
+          empiricalNote: msg('ii.note', {}, locale),
           strength: 'medium',
           ref: { entry: b.low, stop: p.high },
           knownAtIndex: i,
@@ -500,7 +485,7 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
         knownAtIndex: i,
         knownAtTime: b.time,
         barIndices: [i - 1, i],
-        note: `ii 形态登记（第 ${i}、${i + 1} 根连续内包），等待 5 根内收盘突破 ${fmt(Math.max(b.high, bars[i - 1].high))} / ${fmt(Math.min(b.low, bars[i - 1].low))}`,
+        note: msg('ii.setup', { barA: i, barB: i + 1, high: fmt(Math.max(b.high, bars[i - 1].high)), low: fmt(Math.min(b.low, bars[i - 1].low)) }, locale),
       })
     }
 
@@ -513,11 +498,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
           direction: 'bull',
           index: i + 1,
           time: nx.time,
-          label: '外包↑',
-          title: '外包线多头反转跟随',
-          reason: `第 ${i + 1} 根外包线吞没前一根后，下一根收盘 ${fmt(nx.close)} 站上外包线高点 ${fmt(b.high)}`,
-          concept: '《价格行为交易》：外包线（outside bar）之后常出现二次突破（H2/L2），多头跟随确认',
-          empiricalNote: 'Brooks 经验描述：外包线后的反向突破可靠性中等，常演变为两段式行情（定性描述）',
+          label: msg('ob.label.up', {}, locale),
+          title: msg('ob.title.up', {}, locale),
+          reason: msg('ob.reason.up', { bar: i + 1, close: fmt(nx.close), high: fmt(b.high) }, locale),
+          concept: msg('ob.concept.up', {}, locale),
+          empiricalNote: msg('ob.note', {}, locale),
           strength: 'low',
           ref: { entry: nx.high, stop: b.low },
           knownAtIndex: i + 1,
@@ -529,11 +514,11 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
           direction: 'bear',
           index: i + 1,
           time: nx.time,
-          label: '外包↓',
-          title: '外包线空头反转跟随',
-          reason: `第 ${i + 1} 根外包线吞没前一根后，下一根收盘 ${fmt(nx.close)} 跌破外包线低点 ${fmt(b.low)}`,
-          concept: '《价格行为交易》：外包线（outside bar）之后常出现二次突破（H2/L2），空头跟随确认',
-          empiricalNote: 'Brooks 经验描述：外包线后的反向突破可靠性中等，常演变为两段式行情（定性描述）',
+          label: msg('ob.label.down', {}, locale),
+          title: msg('ob.title.down', {}, locale),
+          reason: msg('ob.reason.down', { bar: i + 1, close: fmt(nx.close), low: fmt(b.low) }, locale),
+          concept: msg('ob.concept.down', {}, locale),
+          empiricalNote: msg('ob.note', {}, locale),
           strength: 'low',
           ref: { entry: nx.low, stop: b.high },
           knownAtIndex: i + 1,
@@ -548,7 +533,7 @@ function detectBreakoutPatterns(input: SignalInput, signals: BrooksSignal[], eve
 // 趋势线突破（TLB）→ 测试 → 主要趋势反转（MTR）
 // ---------------------------------------------------------------------------
 
-function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): void {
+function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[], locale: SharedLocale): void {
   const { bars, swings, features, ema20, atr14, regime } = input
   const n = bars.length
   // 各方向的前缀 bull/bear 状态计数，用于「此前确实是趋势」的上下文过滤
@@ -621,11 +606,15 @@ function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): voi
             direction: side === 'bull' ? 'bear' : 'bull',
             index: i,
             time: bars[i].time,
-            label: side === 'bull' ? '破线↓' : '破线↑',
-            title: side === 'bull' ? '多头趋势线被收盘跌穿（警戒）' : '空头趋势线被收盘上穿（警戒）',
-            reason: `连接摆动${kind === 'low' ? '低点' : '高点'} ${fmt(p1.price)}(第${p1.index + 1}根) 与 ${fmt(p2.price)}(第${p2.index+1}根) 的趋势线，在第 ${i + 1} 根被收盘穿越（线值 ${fmt(lv)}，收盘 ${fmt(bars[i].close)}）`,
-            concept: '《高级反转技术分析》：趋势线突破是趋势减弱的第一个信号，但需要「测试 + 反转信号」确认',
-            empiricalNote: 'Brooks 经验统计：趋势线被突破后约半数最终反转、半数恢复原趋势（美股股指期货口径，只作警戒）',
+            label: msg(side === 'bull' ? 'tlb.label.down' : 'tlb.label.up', {}, locale),
+            title: msg(side === 'bull' ? 'tlb.title.bull' : 'tlb.title.bear', {}, locale),
+            reason: msg(
+              'tlb.reason',
+              { pivot: msg(kind === 'low' ? 'tlb.pivot.low' : 'tlb.pivot.high', {}, locale), p1: fmt(p1.price), b1: p1.index + 1, p2: fmt(p2.price), b2: p2.index + 1, bar: i + 1, line: fmt(lv), close: fmt(bars[i].close) },
+              locale,
+            ),
+            concept: msg('tlb.concept', {}, locale),
+            empiricalNote: msg('tlb.note', {}, locale),
             strength: 'low',
             knownAtIndex: i,
             status: 'triggered',
@@ -655,10 +644,21 @@ function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): voi
             index: i,
             time: bars[i].time,
             label: 'MTR',
-            title: side === 'bull' ? '主要趋势反转（多头 → 空头）' : '主要趋势反转（空头 → 多头）',
-            reason: `第 ${brokenIndex + 1} 根趋势线破位${testSeen ? '、出现回测' : ''}后，第 ${i + 1} 根${originBreak ? `收盘 ${fmt(bars[i].close)} 击穿趋势线起点摆动${kind === 'low' ? '低' : '高'}点` : '以强反转趋势棒收盘确认'}，MTR 序列完成`,
-            concept: '《高级反转技术分析》MTR：趋势线突破 → 测试 → 反转信号（HL/LH），三者齐备才是主要趋势反转',
-            empiricalNote: 'Brooks 经验统计：MTR 成立后市场大多至少演变为区间，反向两腿是最低预期（美股股指期货口径）',
+            title: msg(side === 'bull' ? 'mtr.title.bull' : 'mtr.title.bear', {}, locale),
+            reason: msg(
+              'mtr.reason',
+              {
+                breakBar: brokenIndex + 1,
+                tested: testSeen ? msg('mtr.tested', {}, locale) : '',
+                bar: i + 1,
+                confirm: originBreak
+                  ? msg(kind === 'low' ? 'mtr.confirm.origin.low' : 'mtr.confirm.origin.high', { close: fmt(bars[i].close) }, locale)
+                  : msg('mtr.confirm.strong', {}, locale),
+              },
+              locale,
+            ),
+            concept: msg('mtr.concept', {}, locale),
+            empiricalNote: msg('mtr.note', {}, locale),
             strength: 'high',
             knownAtIndex: i,
             status: 'triggered',
@@ -673,7 +673,7 @@ function detectTrendLineBreaks(input: SignalInput, signals: BrooksSignal[]): voi
 // 交易区间突破（研究关注；Brooks 经验统计中大多失败）
 // ---------------------------------------------------------------------------
 
-function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments: { from: number; to: number; type: RegimeType }[]): void {
+function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments: { from: number; to: number; type: RegimeType }[], locale: SharedLocale): void {
   const { bars, features } = input
   for (const seg of segments) {
     if (seg.type !== 'trading_range') continue
@@ -694,11 +694,11 @@ function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments
           direction: 'bull',
           index: j,
           time: bars[j].time,
-          label: '区间破↑',
-          title: '交易区间向上突破',
-          reason: `第 ${seg.from + 1}~${seg.to + 1} 根构成 ${len} 根交易区间（${fmt(lo)}~${fmt(hi)}），第 ${j + 1} 根以趋势棒收盘 ${fmt(bars[j].close)} 上破区间高点`,
-          concept: '《高级区间技术分析》：区间突破需强趋势棒确认；突破后回测区间顶（突破测试）是低风险二次进场',
-          empiricalNote: 'Brooks 经验统计：区间突破尝试大多失败、首次突破约半数存活（美股股指期货口径）——本信号仅作结构研究',
+          label: msg('tr.label.up', {}, locale),
+          title: msg('tr.title.up', {}, locale),
+          reason: msg('tr.reason.up', { from: seg.from + 1, to: seg.to + 1, len, lo: fmt(lo), hi: fmt(hi), bar: j + 1, close: fmt(bars[j].close) }, locale),
+          concept: msg('tr.concept.up', {}, locale),
+          empiricalNote: msg('tr.note', {}, locale),
           strength: 'medium',
           ref: { entry: bars[j].high, stop: hi, target: hi + (hi - lo) },
           knownAtIndex: j,
@@ -711,11 +711,11 @@ function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments
           direction: 'bear',
           index: j,
           time: bars[j].time,
-          label: '区间破↓',
-          title: '交易区间向下突破',
-          reason: `第 ${seg.from + 1}~${seg.to + 1} 根构成 ${len} 根交易区间（${fmt(lo)}~${fmt(hi)}），第 ${j + 1} 根以趋势棒收盘 ${fmt(bars[j].close)} 跌破区间低点`,
-          concept: '《高级区间技术分析》：区间突破需强趋势棒确认；突破后回测区间底（突破测试）是低风险二次进场',
-          empiricalNote: 'Brooks 经验统计：区间突破尝试大多失败、首次突破约半数存活（美股股指期货口径）——本信号仅作结构研究',
+          label: msg('tr.label.down', {}, locale),
+          title: msg('tr.title.down', {}, locale),
+          reason: msg('tr.reason.down', { from: seg.from + 1, to: seg.to + 1, len, lo: fmt(lo), hi: fmt(hi), bar: j + 1, close: fmt(bars[j].close) }, locale),
+          concept: msg('tr.concept.down', {}, locale),
+          empiricalNote: msg('tr.note', {}, locale),
           strength: 'medium',
           ref: { entry: bars[j].low, stop: lo, target: lo - (hi - lo) },
           knownAtIndex: j,
@@ -729,7 +729,7 @@ function detectTRBreakouts(input: SignalInput, signals: BrooksSignal[], segments
 // ---------------------------------------------------------------------------
 
 /** 失效扫描：触发后收盘击穿结构止损 → invalidation 事件（因果：扫描窗右端即已知） */
-function scanInvalidations(bars: BrooksCandle[], signals: BrooksSignal[], events: StructureEvent[]): void {
+function scanInvalidations(bars: BrooksCandle[], signals: BrooksSignal[], events: StructureEvent[], locale: SharedLocale): void {
   const MAX_SCAN = 100
   for (const s of signals) {
     const stop = s.ref?.stop
@@ -748,24 +748,24 @@ function scanInvalidations(bars: BrooksCandle[], signals: BrooksSignal[], events
         knownAtIndex: i,
         knownAtTime: bars[i].time,
         barIndices: [s.index, i],
-        note: `${s.label}（第 ${s.index + 1} 根触发）后第 ${i + 1} 根收盘 ${fmt(bars[i].close)} 击穿结构止损 ${fmt(stop)}，结构失效`,
+        note: msg('invalidation.note', { label: s.label, triggerBar: s.index + 1, bar: i + 1, close: fmt(bars[i].close), stop: fmt(stop) }, locale),
       })
       break
     }
   }
 }
 
-export function detectSignals(input: SignalInput, segments: { from: number; to: number; type: RegimeType }[]): SignalOutput {
+export function detectSignals(input: SignalInput, segments: { from: number; to: number; type: RegimeType }[], locale: SharedLocale = 'zh-CN'): SignalOutput {
   const signals: BrooksSignal[] = []
   const events: StructureEvent[] = []
-  detectHL(input, signals, events)
-  detectSpikes(input, signals)
-  detectWedges(input, signals)
-  detectDoubles(input, signals)
-  detectBreakoutPatterns(input, signals, events)
-  detectTrendLineBreaks(input, signals)
-  detectTRBreakouts(input, signals, segments)
-  scanInvalidations(input.bars, signals, events)
+  detectHL(input, signals, events, locale)
+  detectSpikes(input, signals, locale)
+  detectWedges(input, signals, locale)
+  detectDoubles(input, signals, locale)
+  detectBreakoutPatterns(input, signals, events, locale)
+  detectTrendLineBreaks(input, signals, locale)
+  detectTRBreakouts(input, signals, segments, locale)
+  scanInvalidations(input.bars, signals, events, locale)
 
   signals.sort((a, b) => a.index - b.index)
   // 去重：同一根K线上同一种信号只保留一条

@@ -1,0 +1,20 @@
+{
+  "layout": {
+    "title": "管理后台",
+    "back": "返回主站"
+  },
+  "menu": {
+    "panel": "管理面板",
+    "panelHint": "用户 / 日志",
+    "ai": "AI 会话",
+    "aiHint": "上下文 / 记忆",
+    "knowledge": "知识库",
+    "knowledgeHint": "导入 / 发布 / 检索调试",
+    "agents": "Agent 配置",
+    "agentsHint": "能力 / 版本 / 回滚",
+    "prompts": "提示词与文案",
+    "promptsHint": "模板版本 / 免责 / 输入配置",
+    "evals": "评测与模型",
+    "evalsHint": "数据集 / 训练 / 指标"
+  }
+}

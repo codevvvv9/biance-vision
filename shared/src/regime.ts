@@ -16,6 +16,8 @@
  */
 
 import type { AlwaysIn, BarFeature, Direction, RegimeSegment, RegimeType, StructureEvent } from './types.js'
+import { msg } from './i18n.js'
+import type { SharedLocale } from './i18n.js'
 
 const WINDOW = 20
 const BULL_RATIO = 0.7
@@ -167,6 +169,7 @@ export function regimeChangeEvents(
   changes: RegimeChange[],
   bars: { time: number }[],
   ruleVersion: string,
+  locale: SharedLocale = 'zh-CN',
 ): StructureEvent[] {
   return changes.map((c) => ({
     kind: 'regime_change' as const,
@@ -177,7 +180,7 @@ export function regimeChangeEvents(
     knownAtIndex: c.knownAtIndex,
     knownAtTime: bars[c.knownAtIndex]?.time ?? null,
     barIndices: [c.atIndex, c.knownAtIndex],
-    note: `市场状态确认为 ${c.type}（raw 自第 ${c.atIndex + 1} 根翻转，第 ${c.knownAtIndex + 1} 根收盘确认）`,
+    note: msg('regime.confirmNote', { type: c.type, atBar: c.atIndex + 1, knownBar: c.knownAtIndex + 1 }, locale),
   }))
 }
 
@@ -189,10 +192,10 @@ const REGIME_DIR: Partial<Record<RegimeType, Direction>> = {
 }
 
 /** Always In：同向状态连续 ≥4 根才翻转；翻转时记录原因 */
-export function computeAlwaysIn(perBar: RegimeType[], features: BarFeature[]): AlwaysIn {
+export function computeAlwaysIn(perBar: RegimeType[], features: BarFeature[], locale: SharedLocale = 'zh-CN'): AlwaysIn {
   let direction: Direction = 'neutral'
   let sinceIndex = 0
-  let reason = '初始状态未定（数据不足或处于震荡）'
+  let reason = msg('alwaysIn.initial', {}, locale)
   const history: AlwaysIn['history'] = []
 
   let consecDir: Direction = 'neutral'
@@ -216,9 +219,10 @@ export function computeAlwaysIn(perBar: RegimeType[], features: BarFeature[]): A
       direction = d
       sinceIndex = i
       const isSpike = perBar[i].startsWith('spike')
+      const dir = msg(d === 'bull' ? 'alwaysIn.dir.bull' : 'alwaysIn.dir.bear', {}, locale)
       reason = isSpike
-        ? `${d === 'bull' ? '多头' : '空头'}冲刺（连续同向强趋势棒）确立新方向`
-        : `${d === 'bull' ? '多头' : '空头'}趋势环境持续 ≥${consecCount} 根（收盘价持续位于 EMA20 ${d === 'bull' ? '上方' : '下方'}）`
+        ? msg('alwaysIn.reason.spike', { dir }, locale)
+        : msg('alwaysIn.reason.trend', { dir, count: consecCount, side: msg(d === 'bull' ? 'alwaysIn.side.above' : 'alwaysIn.side.below', {}, locale) }, locale)
       history.push({ index: i, time: features[i]?.time ?? 0, direction: d, reason })
       // 翻转后重新计数，避免抖动
       consecCount = 0
@@ -229,11 +233,16 @@ export function computeAlwaysIn(perBar: RegimeType[], features: BarFeature[]): A
 }
 
 export const REGIME_TEXT: Record<RegimeType, string> = {
-  spike_bull: '多头冲刺（Spike）：连续强趋势棒上攻',
-  channel_bull: '多头通道：收盘价大部分位于 EMA20 上方',
-  spike_bear: '空头冲刺（Spike）：连续强趋势棒下杀',
-  channel_bear: '空头通道：收盘价大部分位于 EMA20 下方',
-  trading_range: '交易区间（震荡）：多空拉锯，80% 突破尝试失败',
-  tight_range: '紧凑交易区间：K线大幅重叠，突破质量差',
-  barbwire: '铁丝网（Barbwire）：重叠+doji，Brooks 建议不交易',
+  spike_bull: msg('regime.text.spike_bull'),
+  channel_bull: msg('regime.text.channel_bull'),
+  spike_bear: msg('regime.text.spike_bear'),
+  channel_bear: msg('regime.text.channel_bear'),
+  trading_range: msg('regime.text.trading_range'),
+  tight_range: msg('regime.text.tight_range'),
+  barbwire: msg('regime.text.barbwire'),
+}
+
+/** 按语言取状态文案；缺省与 REGIME_TEXT 一致（中文） */
+export function regimeText(type: RegimeType, locale: SharedLocale = 'zh-CN'): string {
+  return msg(`regime.text.${type}`, {}, locale)
 }

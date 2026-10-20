@@ -1,0 +1,123 @@
+{
+  "interval": {
+    "1m": "1分",
+    "5m": "5分",
+    "15m": "15分",
+    "1h": "1时",
+    "4h": "4时",
+    "1d": "日线"
+  },
+  "symbolPlaceholder": "交易对，如 BTCUSDT",
+  "analyze": "分析",
+  "swingScale": "摆动尺度",
+  "barCount": "K线数量",
+  "barsUnit": "{{count}}根",
+  "scales": {
+    "1": { "t": "微观", "hint": "k=1：微观摆动，噪音多，贴近逐根K线读法" },
+    "2": { "t": "精细", "hint": "k=2：偏微观的结构" },
+    "3": { "t": "标准", "hint": "k=3：社区共识的默认尺度（AxisJu/ByteBard 均用 3）" },
+    "5": { "t": "主要", "hint": "k=5：只看主要摆动点，结构更干净但更滞后" }
+  },
+  "toggles": {
+    "regime": "状态条",
+    "ema": "EMA20",
+    "legs": "腿连线",
+    "swings": "摆动标签",
+    "io": "内/外包",
+    "signals": "信号"
+  },
+  "helpButton": "? 图例与规则",
+  "title": "{{base}}/USDT · 价格行为结构 · {{interval}}",
+  "titleScale": "（尺度 k={{k}}）",
+  "note": "只识别结构 · 不预测涨跌 · 仅收盘K线计入信号",
+  "ai": {
+    "button": "🤖 AI 解读",
+    "hintOk": "把当前结构摘要发给 AI 助手，按 Brooks 框架解读",
+    "hintNo": "AI 未配置（需超管在「AI 设置」中完成配置）"
+  },
+  "fullscreen": "全屏查看价格行为结构（放大后自动显示更多标注）",
+  "refresh": "刷新",
+  "loading": "加载 {{symbol}} K 线…",
+  "loadFailed": "K 线加载失败",
+  "retry": "重试",
+  "summary": {
+    "title": "当前结构",
+    "marketState": "市场状态",
+    "structureVerdict": "结构判定",
+    "swingSequence": "摆动序列",
+    "lastLeg": "最近一腿",
+    "signalStat": "信号统计",
+    "alwaysIn": {
+      "bull": "多头",
+      "bear": "空头",
+      "none": "方向不明"
+    },
+    "sinceBar": "（自第 {{n}} 根）",
+    "lastLegLine": "{{dir}} {{count}} 根 · 趋势棒 {{trend}}",
+    "lastLegRetrace": " · 相对前腿 {{pct}}%",
+    "signalCount": "共 {{total}} 条 · 多头 {{bull}} · 空头 {{bear}}",
+    "empty": "加载中或K线不足（至少需要 30 根收盘K线）…"
+  },
+  "signals": {
+    "title": "研究信号（新→旧）",
+    "filter": {
+      "all": "全部",
+      "bull": "多头",
+      "bear": "空头"
+    },
+    "empty": "暂无信号（该周期结构未触发规则）",
+    "locate": "点击定位到图上对应K线",
+    "empirical": "经验统计：{{note}}",
+    "empiricalTitle": "Brooks 在其美股股指期货市场的经验统计，非本品种验证胜率",
+    "ref": {
+      "entry": "突破 {{v}}",
+      "stop": "止损 {{v}}",
+      "target": "目标 {{v}}"
+    }
+  },
+  "help": {
+    "title": "图例与规则速查（Al Brooks 价格行为）",
+    "close": "关闭",
+    "structureTitle": "结构标注",
+    "structure": [
+      "HH / LH（K线上方）：更高高顶 / 更低高顶；HL / LL（K线下方）：更高低底 / 更低低底。HH+HL 交替 = 多头结构，LH+LL 交替 = 空头结构。",
+      "i / O / ii / oo / ioi：内包线 / 外包线 / 连续内包 / 连续外包 / 内包-外包-内包。内包 = 突破模式（观望），ii 是日内最可靠的突破形态之一。",
+      "顶部状态条：绿=多头通道（亮绿=冲刺）、红=空头通道（亮红=冲刺）、琥珀=交易区间、紫=紧凑区间/铁丝网。",
+      "EMA20（青色虚线）：Brooks 判定趋势的基准——20 根收盘 ≥70% 在一侧 = 趋势，否则震荡。"
+    ],
+    "signalTitle": "信号",
+    "signalList": [
+      "H1~H4 / L1~L4：多头/空头回调中的进场计数。H2/L2 = 二次进场，是 Brooks 体系中胜率最高的结构（先验 ≈60%）。",
+      "楔顶/楔底：三推反转（跨度 ≤40 根），第三推动能衰减时可靠性更高。",
+      "双顶/双底：两个摆动点近似等高/等低（容差 0.3×ATR，间隔 ≥3 根）。",
+      "破线↓/↑（TLB）：趋势线被收盘穿越——只是警戒：约 50% 概率趋势恢复、50% 走向反转。",
+      "MTR：主要趋势反转 = 趋势线突破 + 测试 + 反转信号三步齐备。",
+      "区间破↑/↓：交易区间突破。先验：80% 的区间突破尝试失败，首次突破仅约 50% 存活——只作研究关注。",
+      "冲刺↑/↓：连续 ≥5 根同向趋势棒（spike），spike and channel 的起点。"
+    ],
+    "aiTitle": "AI 联动",
+    "aiList": [
+      "🤖 AI 解读：把当前结构摘要一键发给 AI 助手，按 Brooks 框架解读（需超管配置 AI）。",
+      "/brooks 币 周期：AI 聊天里的斜杠命令（如 /brooks BTC 1h），直接输出结构识别结果；自然语言问「BTC 现在什么结构」时 AI 也会自动调用结构引擎工具。"
+    ],
+    "scaleTitle": "摆动尺度 k",
+    "scaleList": [
+      "摆动点需右侧 k 根K线确认（信号天然滞后 k 根，且不重绘）。k=1 微观（噪音多）→ k=3 标准（推荐）→ k=5 主要摆动。Brooks 本人强调结构是分形的：换尺度看同一份K线，本身就是练习。"
+    ],
+    "disclaimer": "本工具把 Brooks 三部曲的K线结构规则量化为确定性代码，仅供学习复盘研究；信号是结构标注而非交易指令，不构成任何投资建议。"
+  },
+  "aiPrompt": {
+    "dir": { "bull": "多头", "bear": "空头", "neutral": "中性" },
+    "legDir": { "up": "上", "down": "下" },
+    "none": "无",
+    "header": "请用 Al Brooks《价格行为交易》三部曲的框架解读以下结构数据（来自内置 Brooks 结构引擎：{{symbol}} {{interval}}，{{barCount}} 根收盘K线，摆动尺度 k={{swingK}}）：",
+    "regime": "市场状态",
+    "alwaysIn": "Always In",
+    "alwaysInLine": "- Always In：{{dir}}（{{reason}}）",
+    "structureLine": "- 结构判定：{{verdict}}；摆动序列（旧→新）：{{sequence}}",
+    "lastLegLine": "- 最近一腿：{{dir}} {{count}} 根（趋势棒 {{trend}}{{retracement}}）",
+    "retracement": "，幅度为前腿 {{pct}}%",
+    "recentSignals": "最近信号（新→旧）：",
+    "requirements": "解读要点：1) 当前结构的含义与多空力量对比；2) 信号之间的印证与矛盾；3) 按 Brooks 概率先验（区间突破 80% 失败、H2 二次进场 ≈60%、趋势线破位 50/50）区分高质量信号与大概率只是回调的信号；4) 当前状态下最需要警惕的陷阱。可调用工具补充实时行情。"
+  }
+}

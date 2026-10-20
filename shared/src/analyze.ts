@@ -10,9 +10,10 @@
  */
 
 import { atr, computeBarFeatures, ema } from './bars.js'
-import { computeAlwaysIn, computeRegime, regimeChangeEvents, REGIME_TEXT } from './regime.js'
+import { computeAlwaysIn, computeRegime, regimeChangeEvents, regimeText } from './regime.js'
 import { buildLegs, buildZigzag, findSwings, swingSequenceText, trendStructureText } from './swings.js'
 import { detectSignals } from './signals.js'
+import { msg } from './i18n.js'
 import { ENGINE_VERSION } from './version.js'
 import type { BrooksAnalysis, BrooksCandle, BrooksOptions, StructureEvent } from './types.js'
 
@@ -39,6 +40,7 @@ export function analyzeBrooks(bars: BrooksCandle[], options: BrooksOptions = DEF
   const k = Math.max(1, Math.min(5, Math.round(options.swingK)))
   if (bars.length < Math.max(30, k * 6)) return null
   assertClosedBars(bars, options.asOf)
+  const locale = options.locale ?? 'zh-CN'
 
   const features = computeBarFeatures(bars)
   const ema20 = ema(
@@ -53,11 +55,12 @@ export function analyzeBrooks(bars: BrooksCandle[], options: BrooksOptions = DEF
 
   const regime = computeRegime(features, ema20, atr14)
   const perBar = regime.perBar
-  const alwaysIn = computeAlwaysIn(perBar, features)
+  const alwaysIn = computeAlwaysIn(perBar, features, locale)
 
   const { signals, events: signalEvents } = detectSignals(
     { bars, features, ema20, atr14, swings, legs, regime: perBar },
     regime.segments,
+    locale,
   )
 
   // 统一结构事件流：摆动/腿/状态切换 + 信号层的 setup/失效/过期
@@ -71,7 +74,7 @@ export function analyzeBrooks(bars: BrooksCandle[], options: BrooksOptions = DEF
       knownAtIndex: s.confirmIndex,
       knownAtTime: bars[s.confirmIndex]?.time ?? null,
       barIndices: [s.index],
-      note: `摆动${s.kind === 'high' ? '高' : '低'}点 ${s.label || ''}（第 ${s.index + 1} 根，第 ${s.confirmIndex + 1} 根收盘确认）`,
+      note: msg(s.kind === 'high' ? 'event.swing.high' : 'event.swing.low', { label: s.label || '', bar: s.index + 1, confirmBar: s.confirmIndex + 1 }, locale),
     })),
     ...legs.map((l) => ({
       kind: 'leg' as const,
@@ -84,9 +87,9 @@ export function analyzeBrooks(bars: BrooksCandle[], options: BrooksOptions = DEF
       knownAtTime: l.knownAtIndex !== null ? bars[l.knownAtIndex]?.time ?? null : null,
       barIndices: [l.fromIndex, l.toIndex],
       provisional: l.provisional,
-      note: l.provisional ? '未完成腿（进行中，可延伸，不可作为回放依据）' : undefined,
+      note: l.provisional ? msg('event.legProvisional', {}, locale) : undefined,
     })),
-    ...regimeChangeEvents(regime.changes, bars, ENGINE_VERSION),
+    ...regimeChangeEvents(regime.changes, bars, ENGINE_VERSION, locale),
     ...signalEvents,
     ...signals.map((s) => ({
       kind: 'trigger' as const,
@@ -108,13 +111,13 @@ export function analyzeBrooks(bars: BrooksCandle[], options: BrooksOptions = DEF
   const summary = {
     barCount: bars.length,
     regime: perBar[lastIndex],
-    regimeText: REGIME_TEXT[perBar[lastIndex]],
+    regimeText: regimeText(perBar[lastIndex], locale),
     pendingRegime: regime.pendingAt[lastIndex] ?? null,
     alwaysIn: alwaysIn.direction,
     alwaysInReason: alwaysIn.reason,
     alwaysInSince: alwaysIn.sinceIndex,
-    swingSequence: swingSequenceText(zigzag),
-    trendStructure: trendStructureText(zigzag),
+    swingSequence: swingSequenceText(zigzag, 6, locale),
+    trendStructure: trendStructureText(zigzag, locale),
     lastLeg: legs.length > 0 ? legs[legs.length - 1] : null,
   }
 

@@ -27,6 +27,8 @@ export type {
   SwingPoint,
 } from './types.js'
 export { ENGINE_VERSION } from './version.js'
+export type { SharedLocale } from './i18n.js'
+export { SIGNAL_MESSAGES, msg } from './i18n.js'
 export { computeBarFeatures, ema, atr, TREND_BAR_RATIO, DOJI_RATIO } from './bars.js'
 export {
   findSwings,
@@ -37,7 +39,7 @@ export {
   swingSequenceText,
   trendStructureText,
 } from './swings.js'
-export { computeRegime, computeAlwaysIn, regimeChangeEvents, REGIME_TEXT } from './regime.js'
+export { computeRegime, computeAlwaysIn, regimeChangeEvents, regimeText, REGIME_TEXT } from './regime.js'
 export type { RegimeChange, RegimeResult } from './regime.js'
 export { detectSignals } from './signals.js'
 export type { SignalInput, SignalOutput } from './signals.js'

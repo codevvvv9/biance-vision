@@ -1,0 +1,35 @@
+{
+  "fab": {
+    "open": "Open the AI research assistant",
+    "title": "AI research assistant",
+    "hide": "Hide the AI assistant entry",
+    "hideTitle": "Hide (summon it again from the user menu, top right)"
+  },
+  "chat": {
+    "aria": "AI assistant conversation",
+    "title": "AI Research Assistant",
+    "expand": "Expand",
+    "minimize": "Minimize",
+    "history": "Conversation history",
+    "historyShort": "History",
+    "newChatTitle": "Start a new conversation (past ones stay reachable via History)",
+    "newChat": "✚ New chat",
+    "close": "Close",
+    "historyPopTitle": "🕘 Conversations",
+    "historyEmpty": "No conversations yet",
+    "untitled": "Untitled conversation",
+    "typing": "Analyzing…",
+    "openInWorkbench": "Open in the research workbench",
+    "welcomeSub": "Describe your question and I'll detect the scene and start a full research run. Try:",
+    "suggestions": [
+      "What structure is BTC perp in right now? Still OK to chase longs?",
+      "Is the 10-minute above-60000 event contract worth joining?",
+      "What is barbed wire and how do I spot it?",
+      "Help me record a BTCUSDT long position"
+    ],
+    "placeholder": "Describe your question — research starts automatically…",
+    "send": "Send",
+    "disclaim": "AI output is for reference only and is not investment advice",
+    "counterFollowUp": "Re-research {{symbol}} ({{horizon}}) from the counter-evidence angle: focus on evidence that does not support the previous conclusion"
+  }
+}

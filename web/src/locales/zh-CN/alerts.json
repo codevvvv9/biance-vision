@@ -1,0 +1,103 @@
+{
+  "type": {
+    "price_above": "价格突破",
+    "price_below": "价格跌破",
+    "change_above": "24h涨幅超过",
+    "change_below": "24h跌幅超过"
+  },
+  "form": {
+    "symbol": "交易对",
+    "cond": "条件",
+    "targetPrice": "目标价",
+    "threshold": "阈值 (%)",
+    "note": "备注（可选）",
+    "notePlaceholder": "例如：突破压力位，关注回踩",
+    "submit": "+ 添加规则",
+    "busy": "添加中…",
+    "hint": "价格类规则按「突破 / 跌破」边缘触发：创建时若价格已在目标位另一侧，需回落复位后再次突破才会提醒；涨跌幅类规则在超过阈值时立即提醒一次，回落低于阈值后可再次触发。"
+  },
+  "toast": {
+    "loadFailed": "规则加载失败",
+    "added": "规则已添加",
+    "addFailed": "添加失败",
+    "toggleFailed": "操作失败",
+    "deleteFailed": "删除失败",
+    "saved": "推送接口已保存",
+    "cleared": "已清空 Webhook",
+    "saveFailed": "保存失败",
+    "testFailed": "测试发送失败"
+  },
+  "rules": {
+    "title": "预警规则",
+    "col": {
+      "symbol": "交易对",
+      "cond": "条件",
+      "note": "备注",
+      "status": "状态",
+      "lastTriggered": "最近触发"
+    },
+    "switchOn": "点击停用",
+    "switchOff": "点击启用",
+    "remove": "删除",
+    "empty": "还没有预警规则，用上方表单添加第一条"
+  },
+  "history": {
+    "title": "触发历史",
+    "empty": "暂无触发记录",
+    "nowPrice": "现价"
+  },
+  "webhook": {
+    "title": "实时推送接口",
+    "desc": "触发预警时，除页面弹窗 + 系统通知 + 提示音外，服务端还会向该 Webhook 地址 POST 一条 JSON，自动适配 Server 酱 / 企业微信 / 飞书机器人格式（自定义地址为 {{payload}}），实现手机推送。",
+    "help": "查看各平台绑定步骤",
+    "save": "保存",
+    "test": "测试推送"
+  },
+  "help": {
+    "title": "Webhook 推送绑定步骤",
+    "close": "关闭",
+    "sample": "地址示例：",
+    "custom": {
+      "name": "自己的服务",
+      "chip": "自定义",
+      "steps": [
+        "填入任意可公网访问的 http(s) 地址，服务端会 POST {{payload}}，JSON 格式，超时 5 秒"
+      ]
+    }
+  },
+  "guides": {
+    "ftqq": {
+      "name": "Server酱",
+      "chip": "微信",
+      "badge": "推荐",
+      "steps": [
+        "打开 sct.ftqq.com，用微信扫码登录",
+        "进入「SendKey」页面，复制你的 Key",
+        "把 https://sctapi.ftqq.com/你的Key.send 填入上方输入框，点「保存」",
+        "点「测试推送」，微信里的「方糖」服务号会收到一条测试消息"
+      ]
+    },
+    "wecom": {
+      "name": "企业微信群机器人",
+      "chip": "企微",
+      "badge": "",
+      "steps": [
+        "在企业微信目标群里：右键群名 → 添加群机器人 → 新建，随意命名",
+        "复制生成的 Webhook 地址",
+        "填入上方输入框，点「保存」",
+        "点「测试推送」，群里会收到一条预警测试消息"
+      ]
+    },
+    "feishu": {
+      "name": "飞书自定义机器人",
+      "chip": "飞书",
+      "badge": "",
+      "steps": [
+        "飞书目标群 → 设置 → 群机器人 → 添加「自定义机器人」",
+        "安全设置选「自定义关键词」，填「预警」",
+        "复制生成的 Webhook 地址，填入上方输入框并「保存」",
+        "点「测试推送」，群里会收到一条预警测试消息"
+      ]
+    }
+  }
+}

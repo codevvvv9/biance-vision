@@ -1,0 +1,62 @@
+{
+  "brand": {
+    "sub": "Binance Market Monitor"
+  },
+  "nav": {
+    "overview": "Market Overview",
+    "priceAction": "Price Action",
+    "research": "Research Terminal"
+  },
+  "status": {
+    "connected": "Live",
+    "connecting": "Connecting",
+    "offline": "Offline · Reconnecting"
+  },
+  "header": {
+    "notifyOn": "System notifications enabled",
+    "notifyEnable": "Enable system notifications",
+    "notifyBlocked": "Notifications blocked by the browser",
+    "soundOn": "Sound: on",
+    "soundOff": "Sound: off",
+    "roleSuper": "Super administrator",
+    "roleUser": "Standard user",
+    "superTag": "Admin",
+    "aiSettings": "AI Settings",
+    "aiConfigured": "Configured",
+    "aiNotConfigured": "Not configured",
+    "aiAssistant": "AI Assistant",
+    "aiChatting": "In conversation",
+    "aiSummon": "Summon",
+    "upColor": "Up/down colors",
+    "upColorGreen": "Green up · red down",
+    "upColorRed": "Red up · green down",
+    "logout": "Sign out"
+  },
+  "lang": {
+    "label": "Language",
+    "zh": "简体中文",
+    "en": "English"
+  },
+  "app": {
+    "verifying": "Verifying your session…",
+    "loadingAdmin": "Loading the admin console…",
+    "pageLoading": "Loading page"
+  },
+  "footer": {
+    "disclaimer": "Data source: Binance public market data (REST + WebSocket, 1s push) · For educational and research use only; not investment advice"
+  },
+  "fullscreen": {
+    "enter": "Full screen",
+    "exit": "Exit full screen (Esc)"
+  },
+  "toast": {
+    "close": "Close"
+  },
+  "error": {
+    "pageFailed": "Page failed to load",
+    "reload": "Reload"
+  },
+  "api": {
+    "requestFailed": "Request failed (HTTP {{code}})"
+  }
+}
