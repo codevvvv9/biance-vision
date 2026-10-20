@@ -737,6 +737,25 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(g4.kept.length === 1 && g4.dropped === 0, 'exit 下「不建议继续持有」保留（持有入否定目标表；修复前误删回退模板）')
   const g5 = checkSynthesisText('多头趋势延续，暂不开仓。', input)
   assert(g5.kept.length === 1 && g5.dropped === 0, 'wait 下「暂不开仓」保留（开仓入否定目标表；修复前误判动作冲突）')
+  // ---- 第五轮（条件豁免只认明确假设表达 + 强调结构不做否定剥离），与 /tmp/bv-5fbb7c6-boundary-review.mts 同源 ----
+  // #1a 裸「条件」不再开启豁免：现状描述（条件尚未满足）之后照常检查
+  const h1 = checkSynthesisText('多头趋势延续，入场条件尚未满足，立即做多。', input)
+  assert(h1.by.decision === 1 && h1.kept.length === 0, '「入场条件尚未满足，立即做多」被剔除（「条件」须带 后/时/再 才算假设；修复前裸词豁免）')
+  // #1b 完成态负向断言补「被/正/未」：「已经被触发」「已经跌破」是既成事实不豁免
+  const h2 = checkSynthesisText('止损已经被触发，立即加仓。', exitInput)
+  assert(h2.by.decision === 1 && h2.kept.length === 0, '「止损已经被触发，立即加仓」被剔除（被动式紧邻字「被」；修复前只查已/经/曾）')
+  const h3 = checkSynthesisText('关键支撑已经跌破，立即加仓。', exitInput)
+  assert(h3.by.decision === 1 && h3.kept.length === 0, '「关键支撑已经跌破，立即加仓」被剔除（「跌破」带完成态断言；修复前裸词豁免）')
+  // #2 强调结构（双重否定）= 肯定语义，不做否定剥离
+  const h4 = checkSynthesisText('多头趋势延续，不得不满仓参与。', input)
+  assert(h4.by.decision === 1 && h4.kept.length === 0, '「不得不满仓参与」被剔除（EMPHATIC 结构不剥离；修复前剥「不满仓」放行）')
+  const h5 = checkSynthesisText('多头趋势延续，非满仓不可。', input)
+  assert(h5.by.decision === 1 && h5.kept.length === 0, '「非满仓不可」被剔除（EMPHATIC 结构不剥离；修复前剥「非满仓」放行）')
+  // 对照：真否定与真条件句不误伤
+  const h6 = checkSynthesisText('多头趋势延续，不应满仓参与。', input)
+  assert(h6.kept.length === 1 && h6.dropped === 0, '对照：「不应满仓参与」保留（真否定仍剥离）')
+  const h7 = checkSynthesisText('若跌破关键支撑，再评估退出。', input)
+  assert(h7.kept.length === 1 && h7.dropped === 0, '对照：「若跌破关键支撑，再评估退出」保留（真假设表达仍豁免）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
