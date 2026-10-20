@@ -89,10 +89,17 @@ export function templateSynthesis(input: SynthesisInput): string {
 /**
  * 呈给模型的输入块与 user 提示词（单一拼装来源）：
  * buildSynthesis 与调用方的调用前费用预估（estimateMaxLlmCallCostUsd）共用同一文本，
- * 保证预检长度与实际请求一致。
+ * 保证预检长度与实际请求一致。决策行（action/side/conditions）显式呈给模型——
+ * 转述不能与已计算动作冲突，模型须先知道动作域结论。
  */
 export function synthesisUserPrompt(input: SynthesisInput): { factsBlock: string; counterBlock: string; evidenceBlock: string; user: string } {
+  const dLabel = DECISION_LABEL_ZH[input.decision.action] ?? input.decision.action
+  const dSide = input.decision.side === 'long' ? '（多）' : input.decision.side === 'short' ? '（空）' : ''
+  const decisionLine = input.decision.conditions.length > 0
+    ? `- 当前决策：${dLabel}${dSide}；前提条件：${input.decision.conditions.join('；')}`
+    : `- 当前决策：${dLabel}${dSide}`
   const factsBlock = [
+    decisionLine,
     ...input.claims.slice(0, 8).map((c) => `- ${c.text.slice(0, 160)}`),
     ...input.decision.reasons.slice(0, 3).map((r) => `- 理由：${r.slice(0, 120)}`),
     ...input.scenarios.slice(0, 2).map((s) => `- 条件：${s.condition}；失效：${s.invalidation}`),
@@ -103,29 +110,46 @@ export function synthesisUserPrompt(input: SynthesisInput): { factsBlock: string
   return { factsBlock, counterBlock, evidenceBlock, user }
 }
 
-// ---- 决策一致性红线（2026-10-20 评审 #2）----
-// 综合解释是「研究结论的转述」而非交易指令；以下形态无论有无引用一律剔除：
-// - 满仓/全仓/梭哈：仓位上限纪律，LLM 不得建议性提及（条件句同样剔除）；
-// - 无止损建议：风控红线；
-// - 无条件立即指令（立即/马上/务必 × 动作词，句内无「若/如果/一旦/当」等条件词）；
-// - 开仓方向矛盾：无条件句含做多/买入（或对称做空）而决策方向不符——只匹配开仓性
-//   动作词（「看多/看空」是结构描述、「卖出/平仓」可能是 exit 决策的平多动作，不误伤）；
-//   反证句允许在条件词之下讨论反向情形。
+// ---- 决策一致性红线（2026-10-20 评审 #2 第二轮）----
+// 综合解释是「研究结论的转述」而非交易指令。三层检查：
+// 1) 无条件红线（条件句也不豁免）：满仓/全仓/梭哈（仓位上限纪律）、无止损建议（风控）、
+//    收益承诺（保证/稳赚/无风险——不做收益承诺是产品红线，问题措辞呼应也不行）；
+// 2) 条件句豁免层：真正的条件表达（若/如果/一旦/除非/否则/当…（非「当前/当时」）/等待…）
+//    允许讨论反向与应急动作；「当」必须带负向断言——单字匹配会把「当前/当时」误判为
+//    条件句，让「当前结构支持立即做多」绕过指令与方向检查；
+// 3) 无条件句的动作/方向一致性：立即指令（立即/马上/务必 × 动作词）、开仓方向矛盾
+//    （只匹配开仓词做多/买入——「看多」是结构描述、「卖出/平仓」可能是 exit 的平多）、
+//    动作冲突（加仓/减仓/清仓/退出/入场 vs decision.action 的允许集）。
 const OVERSIZE_RE = /满仓|全仓|梭哈/
 const NO_STOP_RE = /无需?设?置?止损|不用止损|不需要止损|不必止损/
+const PROMISE_RE = /有保证|保证(?:收益|盈利|不亏)|稳赚|必赚|包赚|稳赚不赔|无风险|零风险|万无一失|必涨|必跌|一定能赚/
 const URGENCY_RE = /立即|马上|务必|一定要/
-const ACT_RE = /做多|做空|买入|卖出|开仓|加仓|进场|入场|清仓|平仓/
 const LONG_RE = /做多|开多|买入|建多/
 const SHORT_RE = /做空|开空|建空/
-const COND_RE = /若|如果|一旦|当|条件|触发|跌破|突破|除非|否则/
+const ACT_RE = /做多|做空|买入|卖出|开仓|加仓|进场|入场|清仓|平仓/
+/** 条件表达（豁免指令/方向/动作检查）。注意「当」的负向断言与「等待」：见上方注释。 */
+const COND_RE = /若|如果|一旦|除非|否则|当(?!前|时)|条件|触发|跌破|突破|等待/
+/** 动作词 → decision.action 允许集（无条件句才检查；「持有」不进表——描述性太常见） */
+const ACTION_ALLOW: ReadonlyArray<readonly [RegExp, ReadonlySet<string>]> = [
+  [/加仓/, new Set(['hold', 'conditional_entry', 'long'])],
+  [/减仓/, new Set(['reduce', 'exit'])],
+  [/清仓|平仓|全平/, new Set(['exit', 'reduce'])],
+  [/退出|离场/, new Set(['exit', 'reduce'])],
+  [/入场|进场|开仓/, new Set(['long', 'short', 'conditional_entry'])],
+]
 
 function decisionConflict(bare: string, decision: SynthesisInput['decision']): boolean {
+  // 无条件红线：任何句式（含条件句）都剔除
   if (OVERSIZE_RE.test(bare)) return true
   if (NO_STOP_RE.test(bare)) return true
-  if (URGENCY_RE.test(bare) && ACT_RE.test(bare) && !COND_RE.test(bare)) return true
-  if (!COND_RE.test(bare)) {
-    if (decision.side !== 'long' && LONG_RE.test(bare)) return true
-    if (decision.side !== 'short' && SHORT_RE.test(bare)) return true
+  if (PROMISE_RE.test(bare)) return true
+  // 条件句（真实条件表达）允许讨论反向/应急情形
+  if (COND_RE.test(bare)) return false
+  if (URGENCY_RE.test(bare) && ACT_RE.test(bare)) return true
+  if (decision.side !== 'long' && LONG_RE.test(bare)) return true
+  if (decision.side !== 'short' && SHORT_RE.test(bare)) return true
+  for (const [re, allow] of ACTION_ALLOW) {
+    if (re.test(bare) && !allow.has(decision.action)) return true
   }
   return false
 }
@@ -155,16 +179,16 @@ export function checkSynthesisText(raw: string, input: SynthesisInput): Synthesi
   for (const s of input.scenarios) for (const n of numbersOf(`${s.condition}${s.response}${s.invalidation}`)) allowed.add(n)
   for (const t of input.evidenceTexts) for (const n of numbersOf(t)) allowed.add(n)
   const evidenceTerms = input.evidenceTexts.map((t) => termsOf(t))
-  // 无引用句的来源池：全体证据词项 ∪ 事实/条件块 ∪ 反证要点块 ∪ 决策行 ∪ 用户问题
-  // （action 标签/side/reasons/conditions——「结构支持继续持有」的信息来源是决策本身，
-  //  决策语义不进池会把合法转述句误判为无来源；问题文本是综合解释的作答对象，同为合法源）
+  // 无引用句的来源池：全体证据词项 ∪ 事实/条件块 ∪ 反证要点块 ∪ 决策行。
+  // 用户问题不进池（2026-10-20 评审 #3）：问题措辞可用于组织回答（buildSynthesis 的
+  // user 提示词仍呈问题），但不能单独充当事实断言的依据——「收益稳定有保证吗？」
+  // 的问题复述「收益稳定有保证。」不得因与问题重叠而被保留。
   const decisionLine = `${DECISION_LABEL_ZH[input.decision.action] ?? input.decision.action} ${input.decision.side ?? ''} ${input.decision.reasons.join('；')} ${input.decision.conditions.join('；')}`
   const sourceTerms = new Set<string>()
   for (const t of evidenceTerms) for (const w of t) sourceTerms.add(w)
   for (const w of termsOf(factsBlock)) sourceTerms.add(w)
   for (const w of termsOf(counterBlock)) sourceTerms.add(w)
   for (const w of termsOf(decisionLine)) sourceTerms.add(w)
-  if (input.question !== null) for (const w of termsOf(input.question)) sourceTerms.add(w)
 
   const sentences = raw.split(/(?<=[。！？!?\n])/).filter((s) => s.trim() !== '')
   const kept: string[] = []

@@ -650,34 +650,53 @@ console.log('\n[四轮-1] 时刻解析不截断表达：「半」=30 分；「N�
 // 2026-10-20 评审八项修复回归（P1 终验补充：隔离性 / 上下文继承 / 预算约束）
 // ===========================================================================
 
-console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一致性（不只带 [k] 的句子）')
+console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一致性（不只带 [k] 的句子；2026-10-20 第二轮四个边界）')
 {
-  const { checkSynthesisText } = await import('../server/src/research/runs/synthesis.js')
+  const { checkSynthesisText, synthesisUserPrompt } = await import('../server/src/research/runs/synthesis.js')
   const input = {
     question: '现在的结构如何',
     symbol: 'BTCUSDT',
     horizon: '1h',
-    decision: { action: 'wait', side: null as 'long' | 'short' | null, reasons: ['等待回调确认'], conditions: [] },
+    decision: { action: 'wait', side: null as 'long' | 'short' | null, reasons: ['等待回调确认'], conditions: ['回调不破前低'] },
     claims: [{ text: 'BTC 15m：状态 多头趋势', kind: 'fact' as const, evidenceIds: [] }],
     counterClaims: [],
     scenarios: [],
     evidenceTexts: ['多头趋势延续，执行周期不断创新高，关键支撑 60000'],
   }
-  // 评审复现句 1：无引用、无数字、与任何来源（问题/证据/facts/决策）无词项重叠 → 无来源剔除
+  // 评审复现句 1：无引用、无数字、与任何来源（证据/facts/决策）无词项重叠 → 无来源剔除
   const a = checkSynthesisText('天气晴朗，适合外出旅行。', input)
   assert(a.by.unsupported === 1 && a.kept.length === 0, '「天气晴朗，适合外出旅行」被来源锚定剔除（修复前无 [k] 句不检查）')
   // 评审复现句 2：满仓 + 无止损指令 → 决策红线剔除
   const b = checkSynthesisText('现在立即满仓做多，无需设置止损。', input)
   assert(b.by.decision === 1 && b.kept.length === 0, '「立即满仓做多，无需止损」被决策红线剔除（修复前照常发布）')
+  // 第二轮 #1：「当」单字误判条件——「当前结构支持立即做多」不得因「当前」豁免指令检查
+  const b2 = checkSynthesisText('当前结构支持立即做多。', input)
+  assert(b2.by.decision === 1 && b2.kept.length === 0, '「当前结构支持立即做多」被剔除（「当前」不是条件句；修复前 COND_RE 单字「当」放行）')
   // 无条件方向矛盾（决策 wait/side=null，句含开多指令且无条件词）
   const c = checkSynthesisText('建议做多入场。', input)
   assert(c.by.decision === 1, '决策 wait 下无条件「建议做多」被方向矛盾剔除')
+  // 第二轮 #2：动作冲突——exit 决策下「建议加仓继续持有」与已计算动作矛盾
+  const exitInput = {
+    ...input,
+    decision: { action: 'exit' as const, side: null as 'long' | 'short' | null, reasons: ['止损已触发'], conditions: [] },
+  }
+  const c2 = checkSynthesisText('多头趋势延续，建议加仓继续持有。', exitInput)
+  assert(c2.by.decision === 1 && c2.kept.length === 0, 'exit 决策下「建议加仓继续持有」被动作冲突剔除（修复前只查方向不查动作）')
+  // 第二轮 #2 输入侧：模型输入必须显式含 decision.action 与 conditions
+  const promptBlocks = synthesisUserPrompt(input)
+  assert(promptBlocks.factsBlock.includes('当前决策：等待') && promptBlocks.factsBlock.includes('前提条件：回调不破前低'), '模型输入含决策行（action 标签 + 前提条件；修复前缺失）')
+  // 第二轮 #3：用户问题复述不得充当事实断言依据（承诺句双保险：红线 + 问题不入来源池）
+  const qInput = { ...input, question: '收益稳定有保证吗？' }
+  const d0 = checkSynthesisText('收益稳定有保证。', qInput)
+  assert(d0.kept.length === 0 && (d0.by.decision === 1 || d0.by.unsupported === 1), '「收益稳定有保证」被剔除（问题措辞不算事实支撑；承诺红线兜底）')
   // 条件句允许讨论反向/反向证据情形（有「若/跌破」条件词 + 数字在证据白名单内）
   const d = checkSynthesisText('若跌破 60000 支撑，可考虑做空。', input)
   assert(d.kept.length === 1, '条件句讨论反向情形不被误伤（条件词 + 白名单数字）')
-  // 合法转述句保留（与问题/决策/证据词项重叠）
-  const e = checkSynthesisText('结构支持继续持有。', input)
-  assert(e.kept.length === 1, '与问题/决策词项重叠的转述句保留（不误伤）')
+  // 合法转述句保留（与证据/决策词项重叠；问题词项已不算支撑来源）
+  const e = checkSynthesisText('执行周期保持多头趋势，等待回调确认。', input)
+  assert(e.kept.length === 1, '与证据/决策词项重叠的转述句保留（不误伤）')
+  const e2 = checkSynthesisText('结构支持继续持有。', input)
+  assert(e2.kept.length === 0 && e2.by.unsupported === 1, '仅与问题措辞重叠的断言句被剔除（问题 ≠ 事实支撑，2026-10-20 第二轮 #3）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')

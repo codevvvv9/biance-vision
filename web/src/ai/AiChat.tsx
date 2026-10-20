@@ -63,12 +63,13 @@ export default function AiChat({ onClose }: Props): JSX.Element {
     }
   }
 
-  /** 运行失败重试：以该 run 自身的 product/symbol/marketType/horizon + 会话里最近一条用户消息重新发起（助手无顶栏上下文） */
-  const retryRun = async (): Promise<void> => {
+  /** run 失败重试 / 追问重跑（2026-10-20 评审 #3/#4 第二轮同口径）：优先从 run.input
+   * （创建请求快照）恢复原研究上下文；无 input 的旧 run 退回最近一条用户消息。
+   * asOfNow=true（事件「临近到期重估」interval:'same'）按当前时刻重估同一报价；
+   * horizon=下一档（perp「换个周期」interval:'next'）。 */
+  const rerunFrom = async (opts: { horizon?: ResearchRun['horizon']; asOfNow?: boolean } = {}): Promise<void> => {
     const failed = tracker.activeRun
     if (failed === null) return
-    // 2026-10-20 评审 #3 同口径：优先从 run.input（创建请求快照）恢复原研究上下文
-    // （question/positionId/quoteId/positionOverride/asOf）；无 input 的旧 run 退回最近一条用户消息
     const src = (failed.input ?? {}) as Partial<NonNullable<ResearchRun['input']>>
     const lastQuestion = [...conv.messages].reverse().find((m) => m.role === 'user')?.text
     try {
@@ -78,12 +79,12 @@ export default function AiChat({ onClose }: Props): JSX.Element {
           product: failed.product,
           symbol: failed.symbol,
           marketType: failed.marketType,
-          horizon: failed.horizon,
+          horizon: opts.horizon ?? failed.horizon,
           question: typeof src.question === 'string' ? src.question : lastQuestion,
           positionId: typeof src.positionId === 'string' ? src.positionId : undefined,
           quoteId: typeof src.quoteId === 'string' ? src.quoteId : undefined,
           positionOverride: src.positionOverride,
-          asOf: typeof src.asOf === 'number' ? src.asOf : failed.asOf,
+          asOf: opts.asOfNow === true ? undefined : (typeof src.asOf === 'number' ? src.asOf : failed.asOf),
           sceneCode: failed.sceneCode,
         },
       })
@@ -94,8 +95,11 @@ export default function AiChat({ onClose }: Props): JSX.Element {
     }
   }
 
-  /** P1-3 结构化追问（2026-10-20 评审 #7）：悬浮助手无抽屉/表单——证据与上下文类动作
-   * 跳转研究台处理；重跑与反证检索在本会话内完成 */
+  const retryRun = async (): Promise<void> => { await rerunFrom() }
+
+  /** P1-3 结构化追问（2026-10-20 评审 #7/#4）：悬浮助手无抽屉/表单——证据与上下文类动作
+   * 跳转研究台处理；重跑与反证检索在本会话内完成。rerun_with 按 interval 分语义：
+   * 'next'=换下一档周期重跑（perp），'same'=事件到期临近重估（当前时刻重估同一报价） */
   const onFollowUp = (a: import('biance-vision-brooks').FollowUpAction): void => {
     const target = tracker.activeRun
     if (a.action === 'open_evidence' || a.action === 'open_rule_card' || a.action === 'switch_context') {
@@ -103,7 +107,13 @@ export default function AiChat({ onClose }: Props): JSX.Element {
       window.location.assign(`/research?run=${encodeURIComponent(target?.id ?? '')}`)
       return
     }
-    if (a.action === 'rerun_with') { void retryRun(); return }
+    if (a.action === 'rerun_with') {
+      const interval = (a.parameters?.interval as string | undefined) ?? 'next'
+      if (interval === 'same') { void rerunFrom({ asOfNow: true }); return }
+      const order: ResearchRun['horizon'][] = ['10m', '30m', '1h', '1d', '1w']
+      void rerunFrom({ horizon: order[(order.indexOf(target?.horizon ?? '1h') + 1) % order.length] })
+      return
+    }
     if (a.action === 'counter_search') {
       void conv.send(`从反证角度重新研究 ${target?.symbol ?? ''}（${target?.horizon ?? ''}）：重点寻找不支持上一轮结论的证据`)
       return
