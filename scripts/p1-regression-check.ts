@@ -718,6 +718,25 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   // 问题复述与来源锚定不回归
   const f7 = checkSynthesisText('热气球适合旅行。', { ...input, question: '热气球是否适合旅行？' })
   assert(f7.by.unsupported === 1 && f7.kept.length === 0, '「热气球适合旅行」被剔除（问题措辞不算事实支撑，不回归）')
+  // ---- 第四轮（转折重置/既成事实/否定剥离收紧/目标表补全），与 /tmp/bv-47c80c2-boundary-review.mts 同源 ----
+  // #1 转折后的子句不受前文条件豁免（分隔词保留、显式重置）
+  const g1 = checkSynthesisText('若回调确认，可考虑入场，但现在立即做多。', input)
+  assert(g1.by.decision === 1 && g1.kept.length === 0, '「若回调确认…，但现在立即做多」被剔除（转折重置条件作用域；修复前 split 丢「但」整句豁免）')
+  const g1c = checkSynthesisText('现在立即做多。', input)
+  assert(g1c.by.decision === 1, '对照：无条件句「现在立即做多」仍剔除（不回归）')
+  // #2 既成事实不是条件：「已/经/曾 触发」不开启豁免
+  const g2 = checkSynthesisText('止损已触发，立即加仓。', exitInput)
+  assert(g2.by.decision === 1 && g2.kept.length === 0, '「止损已触发，立即加仓」被剔除（触发带 已/经/曾 负向断言；修复前裸「触发」当条件豁免）')
+  // #3 肯定强调语不被否定剥离：「不妨满仓」「不仅保证」原样保留给红线检查
+  const g3 = checkSynthesisText('多头趋势延续，不妨满仓参与。', input)
+  assert(g3.by.decision === 1 && g3.kept.length === 0, '「不妨满仓参与」被剔除（单字否定须紧邻目标词；修复前「不妨满仓」被误剥放行）')
+  const g3b = checkSynthesisText('多头趋势延续，不仅保证收益。', input)
+  assert(g3b.by.decision === 1 && g3b.kept.length === 0, '「不仅保证收益」被剔除（修复前「不仅保证」被误剥放行承诺红线）')
+  // #4 否定目标表补全：「不建议继续持有」「暂不开仓」不再误删
+  const g4 = checkSynthesisText('多头趋势延续，但不建议继续持有。', exitInput)
+  assert(g4.kept.length === 1 && g4.dropped === 0, 'exit 下「不建议继续持有」保留（持有入否定目标表；修复前误删回退模板）')
+  const g5 = checkSynthesisText('多头趋势延续，暂不开仓。', input)
+  assert(g5.kept.length === 1 && g5.dropped === 0, 'wait 下「暂不开仓」保留（开仓入否定目标表；修复前误判动作冲突）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
