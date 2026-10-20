@@ -30,6 +30,9 @@ export type ReplyTemplateKey =
   | 'quote_recorded' // 会话代录 preview 报价：复述录入值供核对
   | 'quote_invalid' // 口述报价数值非法（返还<投入等）：不建行，请求更正
   | 'quote_discarded' // 作废刚代录的报价引用
+  | 'translate_body' // 译文（sections 透传：数字来自原文，豁免白名单）+ 引擎标注
+  | 'translate_empty' // 翻译指令里没有可翻内容：引导补发
+  | 'translate_unavailable' // LLM 与 Argos 均不可用：显式降级，不伪造译文
 
 /** 模板（代码版本控制；占位 {{name}} 对应 facts 槽位，{{notes}} 对应动态说明行） */
 const TEMPLATES: Record<ReplyTemplateKey, string> = {
@@ -65,6 +68,12 @@ const TEMPLATES: Record<ReplyTemplateKey, string> = {
     '已按你的描述录入预览报价（60 秒时效，执行价未锁定）并引用启动研究：{{quoteSummary}}。如与 App 实际报价不符，回复「作废报价」后重发；已提交的订单报价请用表单录入（到期时刻需精确）。',
   quote_invalid: '报价数值不合法：{{reason}}。请核对 App 实际展示的数字后重发（示例：「BTC 高于 60000，投入 10 返还 17，10 分钟」）。',
   quote_discarded: '已作废该预览报价引用（未启动研究）。可重新发送报价描述，或改问「只要结构」。',
+  translate_body: '{{sections}}',
+  translate_empty:
+    '没有收到要翻译的内容。请把文本与指令发在一起，例如「把 BTC 冲刺通道这段分析翻译成英文：<文本>」或「<文本> 译成中文」。',
+  translate_unavailable:
+    '翻译能力暂不可用（大模型与离线翻译引擎均未就绪或调用失败）：不出具不可靠的机器译文。' +
+    '请稍后重试，或让管理员检查 AI 配置（chat 能力）与 research-py 服务。',
 }
 
 /** 概率红线（与 services/validator.ts 同口径；独立实现避免 server→web 分层纠缠） */

@@ -191,3 +191,23 @@ class CalibrationReportResponse(BaseModel):
     reliabilityBins: List[ReliabilityBin] = Field(default_factory=list)
     quantileCoverage: Optional[Dict[str, float]] = None
     sampleSize: int
+
+
+# ---------------------------------------------------------------------------
+# translate (Argos offline fallback; Part 2 translation agent)
+# ---------------------------------------------------------------------------
+
+class TranslateRequest(BaseModel):
+    text: str
+    # 'auto' = naive CJK detection server-side (zh vs en are the only shipped pairs)
+    sourceLang: str = "auto"
+    targetLang: str
+
+
+class TranslateResponse(BaseModel):
+    status: str
+    # package_missing = argostranslate not installed or the language pair was
+    # never downloaded; caller must degrade explicitly, never fabricate.
+    error: Optional[str] = None
+    text: Optional[str] = None
+    detectedLang: Optional[str] = None

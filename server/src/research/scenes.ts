@@ -16,7 +16,7 @@ export { TASK_SCENES }
 export type { TaskScene }
 
 /** 会话意图（conversation.ts 的 Intent；此处仅类型引用避免循环依赖） */
-type IntentLike = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system'
+type IntentLike = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system' | 'translate'
 
 /** 场景注册表（提示词按 (name, scene) 复合作用域差异化；追问动作集见 followUpsOf） */
 export const SCENES: Record<TaskScene, SceneDef> = {
@@ -56,6 +56,12 @@ export const SCENES: Record<TaskScene, SceneDef> = {
     products: ['teaching'],
     description: '涨跌归因：web 搜索 + 原页核验后作答，不编造新闻',
   },
+  'translate': {
+    code: 'translate',
+    label: '翻译',
+    products: [],
+    description: '文本翻译：LLM 主翻（金融术语表提示词）+ Argos 离线包兜底，不产生研究 run',
+  },
 }
 
 /**
@@ -70,6 +76,7 @@ export function resolveScene(
 ): TaskScene {
   if (intent === 'concept') return 'concept-teach'
   if (intent === 'news') return 'news-attribution'
+  if (intent === 'translate') return 'translate'
   if (intent === 'replay' || ctx.replay === true) return 'replay-analysis'
   if (intent === 'event' || ctx.product === 'event') return 'quote-review'
   if (intent === 'perp' || ctx.product === 'perp') return ctx.hasPosition === true ? 'hold-review' : 'structure-scan'

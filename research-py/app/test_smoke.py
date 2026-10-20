@@ -184,6 +184,38 @@ def main() -> None:
     assert resp.status_code == 200 and resp.json()["status"] == "failed", resp.text
     print("[smoke] unsupported file type -> failed ok")
 
+    # translate: bilingual round-trip when packs are installed; structured
+    # package_missing otherwise (never a 500, never a fabricated translation)
+    from .translation import _argos_available, _installed_pairs
+
+    resp = client.post(
+        "/tasks/translate",
+        json={"text": "hello world", "sourceLang": "auto", "targetLang": "zh"},
+    )
+    assert resp.status_code == 200, resp.text
+    tr = resp.json()
+    if _argos_available() and ("en", "zh") in _installed_pairs():
+        assert tr["status"] == "ok" and tr["text"], tr
+        print(f"[smoke] translate en->zh ok: {tr['text'][:30]}")
+    else:
+        assert tr["status"] == "failed" and tr["error"] == "package_missing", tr
+        print("[smoke] translate package-missing path ok (argos pack not downloaded)")
+
+    resp = client.post(
+        "/tasks/translate",
+        json={"text": "你好", "sourceLang": "zh", "targetLang": "fr"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "failed" and resp.json()["error"] == "package_missing", resp.text
+    print("[smoke] translate unsupported pair -> package_missing ok")
+
+    resp = client.post(
+        "/tasks/translate",
+        json={"text": "  ", "sourceLang": "zh", "targetLang": "en"},
+    )
+    assert resp.status_code == 400, resp.text
+    print("[smoke] translate empty text -> 400 ok")
+
     print("[smoke] ALL CHECKS PASSED")
 
 

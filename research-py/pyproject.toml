@@ -18,6 +18,10 @@ dependencies = [
     # docling requires Python >= 3.10 and is heavy (pulls torch); parsing.py
     # lazy-loads it, so the rest of the service runs without it.
     "docling==2.131.0; python_version >= '3.10'",
+    # argostranslate pulls CTranslate2 (offline neural MT). translation.py
+    # lazy-loads it; without downloaded language pairs the endpoint returns a
+    # structured package_missing error and other endpoints are unaffected.
+    "argostranslate==1.9.6",
 ]
 
 [tool.setuptools.packages.find]

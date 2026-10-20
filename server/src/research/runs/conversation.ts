@@ -18,7 +18,7 @@ import { assembleTrustedReply } from './replyAssembler.js'
 import { resolveScene } from '../scenes.js'
 import { kv, log } from '../../logger.js'
 
-export type Intent = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system'
+export type Intent = 'concept' | 'structure' | 'perp' | 'event' | 'replay' | 'news' | 'system' | 'translate'
 
 const SYMBOL_RE = /\b([A-Z0-9]{2,10}(?:USDT|USDC))\b/
 
@@ -26,7 +26,12 @@ const SYMBOL_RE = /\b([A-Z0-9]{2,10}(?:USDT|USDC))\b/
 const DIRECTION_RESEARCH_RE = /预测|涨跌|走势|方向/
 const WEEK_HORIZON_RE = /一周|下周|1\s*周|7\s*天|\b1w\b/i
 
+/** 翻译请求措辞（classifyIntent 最高优先级；与 translate.ts 的 parseTranslateRequest 同源语义） */
+const TRANSLATE_RE = /翻译|译成|翻译成|翻成|译为|帮我译|translate|translation/i
+
 export function classifyIntent(text: string): Intent {
+  // 翻译请求最高优先：明确的「翻译/译成/translate」指令不得落入其他意图
+  if (TRANSLATE_RE.test(text)) return 'translate'
   if (/什么是|解释|概念|术语|意思|怎么理解|定义/.test(text)) return 'concept'
   if (/复盘|历史|当时|回放|如果当时/.test(text)) return 'replay'
   if (/新闻|消息面|为什么涨|为什么跌|为什么大涨|为什么大跌|归因/.test(text)) return 'news'
@@ -526,6 +531,34 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     quoteDraft?: QuoteDraft | null
   }
 
+  // 翻译：LLM 主翻（术语表提示词）+ Argos 离线包兜底（translate.ts 三级降级链）。
+  // 不建研究 run、不写持仓/报价，与草稿流程完全隔离；配额已由端点
+  // assertChatAllowed/recordChatMessage 覆盖。
+  if (intent === 'translate') {
+    const { translateWithFallback, parseTranslateRequest } = await import('../translate.js')
+    const parsed = parseTranslateRequest(text)
+    const out = await translateWithFallback(text, parsed)
+    const reply =
+      parsed.text === ''
+        ? assembleTrustedReply({ key: 'translate_empty' })
+        : out.text !== null
+          ? assembleTrustedReply({
+              key: 'translate_body',
+              // 译文走 sections 证据豁免通道：数字/价格来自待译原文本身，非 LLM 编造行情
+              sections: [
+                out.text +
+                  (out.engine === 'argos' ? '\n\n> 由离线翻译引擎（Argos）产出，金融术语译法可能与主引擎有人工差距。' : ''),
+              ],
+            })
+          : assembleTrustedReply({ key: 'translate_unavailable' })
+    const msg = await appendMessage({
+      conversationId: conv.id, role: 'assistant', intent, content: reply.content,
+      promptRefs: out.promptRefs ?? undefined,
+      sceneCode: 'translate',
+    })
+    return { message: msg, runId: null, needCompletion: [] }
+  }
+
   // 寒暄/能力询问（LLM 分类为 system；确定性分类无此能力）：直接回复引导，不启动研究
   if (intent === 'system') {
     // P0-2 统一可信入口：全部意图回复经组装器（内容只来自 {事实, 证据, 配置文案}）
@@ -874,7 +907,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
 
   const intentLabel: Record<Intent, string> = {
     concept: '概念问答', structure: '当前结构', perp: '永续持仓', event: '事件研究',
-    replay: '历史复盘', news: '新闻归因', system: '系统',
+    replay: '历史复盘', news: '新闻归因', system: '系统', translate: '翻译',
   }
   const asOfNote = asOf !== undefined ? `（历史复盘 asOf=${new Date(asOf).toLocaleString()}，只用当时可见数据）` : ''
   const directionNote = directionResearch ? '（一周方向研究：研究模式输出分布，非事件合约参与建议）' : ''
