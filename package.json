@@ -36,7 +36,8 @@
     "web:smoke": "tsx scripts/web-search-smoke.ts",
     "geo:update": "tsx scripts/update-cn-ip-list.ts",
     "p0:db-check": "tsx scripts/p0-db-acceptance.ts",
-    "blobs:migrate": "tsx scripts/migrate-blobs-to-minio.ts"
+    "blobs:migrate": "tsx scripts/migrate-blobs-to-minio.ts",
+    "check:i18n": "tsx scripts/check-i18n.ts"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
