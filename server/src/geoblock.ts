@@ -181,21 +181,243 @@ setInterval(() => {
   blockedCount = 0
 }, 60_000).unref()
 
-const BLOCK_HTML = `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>该地区暂不支持访问</title></head>
-<body style="font-family:system-ui,-apple-system,sans-serif;background:#0b0e14;color:#dbe4f0;display:grid;place-items:center;min-height:100vh;margin:0">
-<div style="text-align:center;max-width:520px;padding:24px;line-height:1.9">
-<h1 style="font-size:20px;margin:0 0 12px">该地区暂不支持访问 · Not available in your region</h1>
-<p style="color:#8b98ab;font-size:14px;margin:0">本服务仅面向海外地区开放。<br>This service is only available in supported regions outside mainland China.</p>
-</div></body></html>`
+/** 防御性转义：拦截命中的 IP 必为合法 IPv4（纯数字+点），此处仍兜底防注入 */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string,
+  )
+}
+
+/**
+ * 拦截页：风格对齐 web/src/styles/base.css 的暗色科技设计系统。
+ * 约束：完全自包含（无外部字体/样式/脚本——被拦用户本就加载不了 CDN），
+ * 诊断信息（IP/时间/规则）方便用户截图反馈误判。
+ */
+function blockPageHtml(ip: string): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="dark">
+<title>403 · 该地区暂不支持访问 — Biance Vision</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+    background: #070b14;
+    color: #e8eefc;
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 环境光晕（cyan/purple，与登录页同族） */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(640px 420px at 50% -10%, rgba(0, 229, 255, 0.07), transparent 60%),
+      radial-gradient(560px 420px at 100% 110%, rgba(167, 139, 250, 0.06), transparent 60%),
+      radial-gradient(480px 380px at 0% 100%, rgba(0, 229, 255, 0.04), transparent 60%);
+    pointer-events: none;
+  }
+  .card {
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+    text-align: center;
+    padding: 46px 40px 32px;
+    border-radius: 16px;
+    border: 1px solid #1a2438;
+    background: linear-gradient(180deg, rgba(18, 28, 50, 0.72), rgba(10, 16, 30, 0.88));
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+    animation: rise 0.5s ease-out both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 20px;
+    animation: breathe 6s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.16)); }
+    50% { filter: drop-shadow(0 0 22px rgba(0, 229, 255, 0.32)); }
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: #8ea0c2;
+    border: 1px solid #24304a;
+    background: rgba(11, 17, 32, 0.6);
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 22px;
+  }
+  .status .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff4d6a;
+    box-shadow: 0 0 8px rgba(255, 77, 106, 0.8);
+  }
+  h1 { font-size: 22px; font-weight: 650; letter-spacing: 0.01em; margin-bottom: 6px; }
+  .en { font-size: 13px; color: #8ea0c2; letter-spacing: 0.02em; margin-bottom: 20px; }
+  .desc {
+    font-size: 14px;
+    line-height: 1.85;
+    color: #c9d6ef;
+    margin: 0 auto 26px;
+  }
+  .desc .muted { color: #8ea0c2; font-size: 13px; }
+  .diag {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 12px;
+    text-align: left;
+    background: rgba(4, 6, 12, 0.55);
+    border: 1px solid #1a2438;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 24px;
+    display: grid;
+    gap: 6px;
+  }
+  .diag div { display: flex; gap: 12px; }
+  .diag .k { width: 44px; flex: none; color: #5a6b8c; }
+  .diag .v { color: #c9d6ef; word-break: break-all; }
+  .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 26px;
+  }
+  .btn {
+    appearance: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    padding: 9px 18px;
+    border-radius: 9px;
+    transition: filter 0.15s, border-color 0.15s, background 0.15s, transform 0.05s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary {
+    color: #06121f;
+    font-weight: 600;
+    background: linear-gradient(135deg, #00e5ff, #4da3ff);
+    border: none;
+  }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-ghost {
+    color: #c9d6ef;
+    background: rgba(16, 26, 46, 0.5);
+    border: 1px solid #24304a;
+  }
+  .btn-ghost:hover { border-color: #33436b; background: rgba(22, 34, 60, 0.6); }
+  .hint { font-size: 12px; color: #5a6b8c; line-height: 1.8; }
+  .brand {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid #1a2438;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    color: #5a6b8c;
+  }
+  @media (max-width: 480px) {
+    .card { padding: 34px 22px 26px; }
+    h1 { font-size: 19px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card, .icon { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main class="card">
+  <svg class="icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <circle cx="32" cy="32" r="21" stroke="#00e5ff" stroke-opacity="0.95" stroke-width="2"/>
+    <path d="M32 11a32.1 32.1 0 0 1 8.4 21 32.1 32.1 0 0 1-8.4 21 32.1 32.1 0 0 1-8.4-21 32.1 32.1 0 0 1 8.4-21Z" stroke="#00e5ff" stroke-opacity="0.55" stroke-width="2"/>
+    <path d="M11 32h42" stroke="#00e5ff" stroke-opacity="0.55" stroke-width="2"/>
+    <path d="M12.5 51.5 51.5 12.5" stroke="#ff4d6a" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+  <div class="status"><span class="dot"></span>HTTP 403 · REGION_BLOCKED</div>
+  <h1>该地区暂不支持访问</h1>
+  <div class="en">Not available in your region</div>
+  <p class="desc">
+    因服务区域限制，本站点暂无法向您当前的网络位置提供服务。<br>
+    <span class="muted">Due to regional service restrictions, this site is not available from your current location.</span>
+  </p>
+  <div class="diag">
+    <div><span class="k">TIME</span><span class="v" id="t">—</span></div>
+    <div><span class="k">IP</span><span class="v">${escapeHtml(ip)}</span></div>
+    <div><span class="k">RULE</span><span class="v">geo/ipv4 · deny</span></div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" onclick="location.reload()">刷新重试 · Retry</button>
+    <button class="btn btn-ghost" id="copy">复制诊断信息 · Copy</button>
+  </div>
+  <p class="hint">
+    正在旅行、或认为此拦截有误？请更换网络后重试，或截图本页并联系站点运营者。<br>
+    Traveling or believe this is a mistake? Switch networks, or contact the site operator with a screenshot.
+  </p>
+  <div class="brand">BIANCE&nbsp;VISION</div>
+</main>
+<script>
+(function () {
+  var t = document.getElementById('t');
+  if (t) t.textContent = new Date().toLocaleString('zh-CN', { hour12: false });
+  var btn = document.getElementById('copy');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var lines = Array.prototype.map.call(
+      document.querySelectorAll('.diag div'),
+      function (row) {
+        return row.querySelector('.k').textContent + ' ' + row.querySelector('.v').textContent;
+      },
+    );
+    var text = 'BIANCE VISION · 403 region_blocked\\n' + lines.join('\\n');
+    function done(ok) {
+      btn.textContent = ok ? '已复制 · Copied' : '复制失败 · Failed';
+      setTimeout(function () { btn.textContent = '复制诊断信息 · Copy'; }, 2000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      done(ok);
+    }
+  });
+})();
+</script>
+</body>
+</html>`
+}
 
 function replyBlocked(ip: string, req: FastifyRequest, reply: FastifyReply): void {
   blockedCount++
   lastBlockedIp = ip
   const wantsHtml = req.method === 'GET' && String(req.headers.accept ?? '').includes('text/html')
   if (wantsHtml) {
-    void reply.code(403).header('content-type', 'text/html; charset=utf-8').send(BLOCK_HTML)
+    void reply.code(403).header('content-type', 'text/html; charset=utf-8').send(blockPageHtml(ip))
   } else {
     void reply.code(403).send({
       statusCode: 403,
