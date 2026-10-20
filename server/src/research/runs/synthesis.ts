@@ -136,17 +136,37 @@ const ACT_RE = /做多|做空|买入|卖出|开仓|加仓|进场|入场|清仓|�
 const CLAUSE_SPLIT_RE = /([,，;；]|但是|然而|不过|却|只是|但)/
 const CLAUSE_TURN_RE = /但是|然而|不过|却|只是|但/
 const CLAUSE_PUNCT_RE = /[,，;；]/
-/** 条件子句识别（豁免其后的动作/方向检查直到转折或句末）。
- * 第六/七轮定稿：**明确且未被否定的假设结构才豁免**——
- * - 「等待…后/再」带否定断言（无需/不用/不必/不/没 + 等待 = 条件被否定，
- *   「无需等待确认后立即做多」比无条件句更激进，不得豁免）；
- * - 事件词（触发/跌破/突破）与「条件」的后置时间标记须是完整结构：后/时/不得处于
- *   名词组合内（「触发**时**间」「后**果**」的时/后是名词成分，不是状语从句标记）；
- * - 裸事件词已移除（第六轮），无假设标记的事件子句按既成事实从严检查。 */
-const TIME_MARK = '(?:后(?!市|果|续)|时(?!间|候|刻|长|段|效|区|序|限|机)|再)'
-const COND_CLAUSE_RE = new RegExp(
-  `若|如果|一旦|除非|当(?!前|时)|届时|否则|(?<!无需|不用|不必|不|没)等待.{0,12}[后再]|先等待|条件[^，。;；]{0,8}${TIME_MARK}|(?:触发|跌破|突破)[^，。;；]{0,6}${TIME_MARK}`,
-)
+/**
+ * 条件子句判定（第八轮统一重构）：所有分支共同经过「否定检查、时间标记完整结构」，
+ * 不再各自维护独立豁免模式——
+ * - 假设连接词（若/如果/一旦/除非/当…（非当前/当时）/届时/否则）独立成立；
+ * - 推迟表达（先等待 / 等待…时间标记）：「等待」锚点前 0-4 字内有否定前缀
+ *   （无需/不用/不必/不/没）= 条件被否定（比无条件句更激进），不豁免；
+ *   时间标记复用 TIME_MARK（「后果」「时间」等名词内的后/时不算）；
+ * - 条件名词/事件词（触发/跌破/突破）必须配完整时间标记（第六/七轮），裸词不豁免。
+ */
+const TIME_MARK_SRC = '(?:后(?!市|果|续)|时(?!间|候|刻|长|段|效|区|序|限|机)|再)'
+const CONN_RE = /若|如果|一旦|除非|当(?!前|时)|届时|否则/
+const DEFER_ANCHOR_RE = /先?等待/
+const DEFER_MARK_RE = new RegExp(`等待[^，。;；]{0,12}${TIME_MARK_SRC}`)
+const DEFER_NEG_TAIL_RE = /(?:无需|不用|不必|没|不)$/
+const COND_NOUN_RE = new RegExp(`条件[^，。;；]{0,8}${TIME_MARK_SRC}`)
+const EVENT_MARK_RE = new RegExp(`(?:触发|跌破|突破)[^，。;；]{0,6}${TIME_MARK_SRC}`)
+
+function isConditionalClause(clause: string): boolean {
+  if (CONN_RE.test(clause)) return true
+  const defer = DEFER_ANCHOR_RE.exec(clause)
+  if (defer !== null) {
+    const at = defer.index ?? 0
+    const prefix = clause.slice(Math.max(0, at - 4), at)
+    if (!DEFER_NEG_TAIL_RE.test(prefix)) {
+      if (defer[0] === '先等待' || DEFER_MARK_RE.test(clause)) return true
+    }
+  }
+  if (COND_NOUN_RE.test(clause)) return true
+  if (EVENT_MARK_RE.test(clause)) return true
+  return false
+}
 /** 被否定的承诺/动作目标词（第四轮 #4 补 持有/开仓——「不建议继续持有」「暂不开仓」
  * 是安全表述）。「止损」不在表内——「不必止损」本身就是无止损建议，不得剥离。 */
 const NEGATED_TARGETS = '保证|稳赚|必赚|包赚|无风险|零风险|万无一失|必涨|必跌|满仓|全仓|梭哈|加仓|减仓|清仓|平仓|退出|离场|入场|进场|开仓|做多|做空|买入|卖出|持有'
@@ -192,7 +212,7 @@ function decisionConflict(bare: string, decision: SynthesisInput['decision']): b
     if (!EMPHATIC_RE.test(clause)) clause = clause.replace(NEGATED_RE, '')
     // 无条件红线：任何子句（含条件子句）都检查
     if (OVERSIZE_RE.test(clause) || NO_STOP_RE.test(clause) || PROMISE_RE.test(clause)) return true
-    if (COND_CLAUSE_RE.test(clause)) {
+    if (isConditionalClause(clause)) {
       inConditional = true
       continue
     }
