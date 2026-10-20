@@ -791,6 +791,21 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(k2.by.decision === 1 && k2.kept.length === 0, '「等待回调的后果是错过行情，立即做多」被剔除（等待分支复用 TIME_MARK；修复前裸 [后再] 把「后果」当标记）')
   const k3 = checkSynthesisText('先等待回调确认，再评估入场。', input)
   assert(k3.kept.length === 1 && k3.dropped === 0, '对照：「先等待回调确认，再评估入场」保留（未被否定的先等待仍豁免）')
+  // ---- 第九轮（统一否定短路 + 当/再完整语法位置），与 /tmp/bv-5ab71dd-boundary-review.mts 同源 ----
+  // #1 否定拒绝统一：被否定的等待使整子句非条件，条件名词/事件词分支不得捞回
+  const m1 = checkSynthesisText('无需等待入场条件满足后再参与，立即做多。', input)
+  assert(m1.by.decision === 1 && m1.kept.length === 0, '「无需等待条件满足后再参与，立即做多」被剔除（否定短路；修复前 COND_NOUN 分支捞回）')
+  const m2 = checkSynthesisText('无需等待突破关键支撑后再入场，立即做多。', input)
+  assert(m2.by.decision === 1 && m2.kept.length === 0, '「无需等待突破后入场，立即做多」被剔除（否定短路；修复前 EVENT_MARK 分支捞回）')
+  const m3 = checkSynthesisText('等待入场条件满足后再考虑参与。', input)
+  assert(m3.kept.length === 1 && m3.dropped === 0, '对照：「等待条件满足后再考虑参与」保留（未被否定的等待+条件名词组合仍豁免）')
+  // #2 词内字符不算标记：应当的当、再次的再
+  const m4 = checkSynthesisText('多头趋势延续，应当立即做多。', input)
+  assert(m4.by.decision === 1 && m4.kept.length === 0, '「应当立即做多」被剔除（当=当…时/之际结构且前非应/正；修复前「应当」命中连接词豁免）')
+  const m5 = checkSynthesisText('多头趋势延续，入场条件再次不成立，立即做多。', input)
+  assert(m5.by.decision === 1 && m5.kept.length === 0, '「条件再次不成立，立即做多」被剔除（再(?!次|现|者…)；修复前「再次」命中时间标记豁免）')
+  const m6 = checkSynthesisText('当回调确认时，再评估入场。', input)
+  assert(m6.kept.length === 1 && m6.dropped === 0, '对照：「当回调确认时，再评估入场」保留（当…时 完整结构仍豁免）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
