@@ -227,12 +227,32 @@ export default function WorkbenchPage(): JSX.Element {
   const sceneOf = (product: string, hasPosition: boolean): string =>
     product === 'perp' ? (hasPosition ? 'hold-review' : 'structure-scan') : product === 'event' ? 'quote-review' : 'structure-scan'
   const HORIZON_ORDER: Horizon[] = ['10m', '30m', '1h', '1d', '1w']
-  const createRunDirect = async (horizonOverride?: Horizon): Promise<void> => {
+  // P1-3 重跑携带原研究上下文（2026-10-20 评审 #3）：question/positionId/quoteId/
+  // positionOverride/asOf 从 run.input（创建请求快照）恢复——持仓复查仍是持仓复查、
+  // 报价评估仍带报价、历史复盘不变成当前研究；旧 run 无 input 时退回 run 行可得字段。
+  // asOf 默认沿用原研究时点（replay 换周期仍在同一历史时点）；asOfNow=true（事件
+  // 「临近到期重估」）时以当前时刻重估同一报价。
+  const createRunDirect = async (opts: { horizon?: Horizon; asOfNow?: boolean } = {}): Promise<void> => {
     if (!run || retryBusy) return
     setRetryBusy(true)
     try {
-      const nextH = horizonOverride ?? run.horizon
-      const d = await api<{ run: ResearchRun }>('/research/runs', { method: 'POST', body: { product: run.product, symbol: run.symbol, marketType: run.marketType, horizon: nextH, sceneCode: run.sceneCode ?? sceneOf(run.product, positionId !== '') } })
+      const src = (run.input ?? {}) as Partial<NonNullable<ResearchRun['input']>>
+      const nextH = opts.horizon ?? run.horizon
+      const d = await api<{ run: ResearchRun }>('/research/runs', {
+        method: 'POST',
+        body: {
+          product: run.product,
+          symbol: run.symbol,
+          marketType: run.marketType,
+          horizon: nextH,
+          question: typeof src.question === 'string' ? src.question : undefined,
+          positionId: typeof src.positionId === 'string' ? src.positionId : undefined,
+          quoteId: typeof src.quoteId === 'string' ? src.quoteId : undefined,
+          positionOverride: (src.positionOverride as { leverage: number } | undefined) ?? undefined,
+          asOf: opts.asOfNow === true ? undefined : (typeof src.asOf === 'number' ? src.asOf : run.asOf),
+          sceneCode: run.sceneCode ?? sceneOf(run.product, typeof src.positionId === 'string'),
+        },
+      })
       updateUrl({ run: d.run.id })
     } catch (e) { setPageError((e as Error).message) } finally { setRetryBusy(false) }
   }
@@ -241,7 +261,14 @@ export default function WorkbenchPage(): JSX.Element {
   const onFollowUp = (a: FollowUpAction): void => {
     if (a.action === 'open_evidence' || a.action === 'open_rule_card') { openPanel('evidence'); return }
     if (a.action === 'switch_context') { setToolsOpen(true); return }
-    if (a.action === 'rerun_with') { void createRunDirect(HORIZON_ORDER[(HORIZON_ORDER.indexOf(run?.horizon ?? '1h') + 1) % HORIZON_ORDER.length]); return }
+    if (a.action === 'rerun_with') {
+      // interval:'next' = 换周期重跑（perp/replay）；interval:'same' = 事件到期临近重估
+      //（保持原报价与周期，当前时刻重跑——不再被统一处理成切换研究周期）
+      const interval = (a.parameters?.interval as string | undefined) ?? 'next'
+      if (interval === 'same') { void createRunDirect({ asOfNow: true }); return }
+      void createRunDirect({ horizon: HORIZON_ORDER[(HORIZON_ORDER.indexOf(run?.horizon ?? '1h') + 1) % HORIZON_ORDER.length] })
+      return
+    }
     if (a.action === 'counter_search') {
       void conv.send(`从反证角度重新研究 ${run?.symbol ?? symbol}（${run?.horizon ?? horizon}）：重点寻找不支持上一轮结论的证据`)
       return

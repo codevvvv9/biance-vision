@@ -103,6 +103,9 @@ export const ResearchRunSchema = z.object({
   asOf: z.number().int(),
   /** P1-1 任务场景（服务端 resolveScene 推导或显式传入） */
   sceneCode: TaskSceneSchema.optional(),
+  /** 创建请求快照（question/positionId/quoteId/positionOverride/asOf 等）——
+   * 追问重跑/失败重试按此恢复原研究上下文，不退化为无上下文新研究 */
+  input: ResearchRunCreateSchema.optional(),
   snapshotId: z.string().optional(),
   configVersion: z.string().optional(),
   knowledgeVersion: z.string().optional(),

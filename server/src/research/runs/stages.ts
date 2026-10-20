@@ -1085,16 +1085,32 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         .orderBy(evidenceItems.createdAt)
         .limit(12)
       const evidenceTexts = evidenceRows.map((e) => e.text)
+      const synthesisInput = {
+        question: ctx.question,
+        symbol: ctx.symbol,
+        horizon: ctx.horizon,
+        decision: d,
+        claims: ctx.claims,
+        counterClaims: ctx.counterClaims,
+        scenarios,
+        evidenceTexts,
+      }
       // 提示词：只读冻结集（红线 #2；旧检查点恢复回退工程默认）
       const frozenSyn = frozenPrompt(ctx.frozenConfig?.raw as Parameters<typeof frozenPrompt>[0], 'synthesis-writer')
       const systemBase = frozenSyn?.content ?? DEFAULT_PROMPTS['synthesis-writer']
       // 占位符统一拼装（§4.B）：{{vertical}}/{{traderProfile}}/{{memory}}/{{knowledgeVersion}}
+      // P1-5（2026-10-20 评审 #6）：优先读创建时冻结的记忆快照（同一 run 重试/恢复提示词不变）；
+      // 旧 run 检查点无 memoryBlock 字段时回退实时读取
       let memory = ''
-      try {
-        const { memoryBlock } = await import('../memory.js')
-        memory = await memoryBlock(ctx.userId)
-      } catch {
-        /* 记忆读取失败不阻塞综合解释 */
+      if (typeof (raw as { memoryBlock?: unknown }).memoryBlock === 'string') {
+        memory = (raw as { memoryBlock: string }).memoryBlock
+      } else {
+        try {
+          const { memoryBlock } = await import('../memory.js')
+          memory = await memoryBlock(ctx.userId)
+        } catch {
+          /* 记忆读取失败不阻塞综合解释 */
+        }
       }
       const system = renderPrompt(systemBase, {
         vertical: verticalLine(ctx.product),
@@ -1102,21 +1118,29 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         memory: memory !== '' ? `\n用户长期记忆（供措辞参考，不得引入记忆中的数字）：\n${memory}` : '',
         knowledgeVersion: ctx.knowledgeVersion ?? '',
       })
+      // 调用前费用预检（2026-10-20 评审 #4，与反证同口径）：预检文本与实际请求同一拼装来源
+      if (llm !== null) {
+        const { synthesisUserPrompt } = await import('./synthesis.js')
+        const estCost = estimateMaxLlmCallCostUsd(system.length + synthesisUserPrompt(synthesisInput).user.length, 420)
+        const costCap = ctx.frozenConfig?.budgets.maxCostUsd
+        if (costCap !== undefined && estCost !== null && ctx.usage.costUsd + estCost > costCap) {
+          log.warn('research', '综合解释费用预估超限，回退模板', kv({ run: ctx.runId.slice(0, 8), 预估: estCost, 已用: ctx.usage.costUsd, 上限: costCap }))
+          llm = null
+        }
+      }
       if (llm !== null) emitDetail(ctx.runId, 'synthesis', { kind: 'synthesis', label: '综合解释生成中', status: 'started' })
-      const result = await buildSynthesis(
-        {
-          question: ctx.question,
-          symbol: ctx.symbol,
-          horizon: ctx.horizon,
-          decision: d,
-          claims: ctx.claims,
-          counterClaims: ctx.counterClaims,
-          scenarios,
-          evidenceTexts,
-        },
-        { llm: llm !== null ? (i) => llm!.complete(i) : null, system, timeoutMs: remainingMs },
-      )
+      const result = await buildSynthesis(synthesisInput, {
+        llm: llm !== null ? (i) => llm!.complete(i) : null,
+        system,
+        timeoutMs: remainingMs,
+      })
       if (result.didCallLlm) ctx.usage.llmCalls += 1
+      // 记账（2026-10-20 评审 #4）：token 与费用与反证归纳同口径累计（单价未配置时费用保持 0）
+      if (result.usage !== null) {
+        ctx.usage.tokens += result.usage.promptTokens + result.usage.completionTokens
+        const callCost = estimateLlmCostUsd(result.usage)
+        if (callCost !== null) ctx.usage.costUsd += callCost
+      }
       if (result.checkNotes.length > 0) log.info('research', '综合解释校验注记', kv({ run: ctx.runId.slice(0, 8), 注记: result.checkNotes.join(';').slice(0, 160) }))
       emitDetail(ctx.runId, 'synthesis', { kind: 'synthesis', label: '综合解释完成', status: 'finished', count: result.text.length })
       ctx.synthesis = { text: result.text, source: result.source, ...(result.degraded ? { degraded: true } : {}) }
@@ -1189,7 +1213,31 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         .select({ id: evidenceItems.id, text: evidenceItems.text })
         .from(evidenceItems)
         .where(eq(evidenceItems.runId, ctx.runId))
+        .orderBy(evidenceItems.createdAt)
       const evidenceTexts = new Map(evidenceTextRows.map((r) => [r.id, r.text]))
+      // P1-2（2026-10-20 评审 #2）终校验复查：LLM 综合文本重新过句级校验（来源锚定+决策
+      // 一致性对全部保留句生效，不只带 [k] 的句子）；与生成时不一致 → 以复查结果为准
+      // （全被剔除则回退模板装配——绝不发布未经校验的综合文本）
+      if (ctx.synthesis !== null && ctx.synthesis.source === 'llm' && ctx.synthesis.text !== '') {
+        const { checkSynthesisText, templateSynthesis } = await import('./synthesis.js')
+        const recheckInput = {
+          question: ctx.question,
+          symbol: ctx.symbol,
+          horizon: ctx.horizon,
+          decision: v2.decision ?? { action: 'insufficient_evidence' as const, side: null, reasons: ['决策缺失（异常）'], conditions: [] },
+          claims: ctx.claims,
+          counterClaims: ctx.counterClaims,
+          scenarios: scenariosFor(ctx),
+          evidenceTexts: evidenceTextRows.slice(0, 12).map((r) => r.text),
+        }
+        const recheck = checkSynthesisText(ctx.synthesis.text, recheckInput)
+        if (recheck.kept.join('') !== ctx.synthesis.text) {
+          log.warn('research', '综合解释终校验复查剔除违例句', kv({ run: ctx.runId.slice(0, 8), 剔除: recheck.dropped, 注记: recheck.notes.join(';').slice(0, 120) }))
+          ctx.synthesis = recheck.kept.length > 0
+            ? { ...ctx.synthesis, text: recheck.kept.join(''), degraded: true }
+            : { text: templateSynthesis(recheckInput), source: 'template' as const, degraded: true }
+        }
+      }
       const result = validateResearch({
         claims: ctx.claims,
         counterClaims: ctx.counterClaims,

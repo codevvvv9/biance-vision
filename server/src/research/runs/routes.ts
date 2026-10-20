@@ -54,6 +54,8 @@ function runDto(row: {
   createdAt: Date
   publishedAt: Date | null
   error: string | null
+  /** 创建请求快照（追问重跑按此恢复原研究上下文；旧 run 无此列时缺省） */
+  input?: Record<string, unknown> | null
 }) {
   return {
     id: row.id,
@@ -64,6 +66,7 @@ function runDto(row: {
     horizon: row.horizon,
     asOf: row.asOf,
     sceneCode: row.sceneCode ?? undefined,
+    input: (row.input ?? undefined) as unknown as undefined | Record<string, unknown>,
     snapshotId: row.snapshotId ?? undefined,
     configVersion: row.configVersion ?? undefined,
     knowledgeVersion: row.knowledgeVersion ?? undefined,

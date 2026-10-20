@@ -131,13 +131,15 @@ export function buildFollowUpActions(ctx: FollowUpContext): FollowUpAction[] {
       actions.push({ action: 'switch_context', label: '重新确认持仓（已过期）', sourceRunId: ctx.runId, parameters: { positionId: 'reconfirm' } })
     }
   } else if (ctx.product === 'event') {
-    // 语义纪律：明确「到期高于/低于执行价」是结算语义，与盘中触达区分
+    // 语义纪律：明确「到期高于/低于执行价」是结算语义，与盘中触达区分。
+    // 2026-10-20 评审 #3：事件重估 = 保持原报价/问题/周期，在当前时刻重跑
+    // （interval:'same'，前端不得切换研究周期；perp 的 interval:'next' 才是换周期）
     const above = ctx.eventDirectionSemantics !== 'touch'
     actions.push({
       action: 'rerun_with',
       label: above ? '到期临近时重估（结算口径）' : '临近触发价时重估（盘中口径）',
       sourceRunId: ctx.runId,
-      parameters: { interval: 'next' },
+      parameters: { interval: 'same' },
     })
   }
   if (ctx.searchEnabled) {

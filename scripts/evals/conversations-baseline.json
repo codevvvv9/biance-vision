@@ -1,0 +1,1205 @@
+{
+  "name": "conversation-baseline",
+  "kind": "conversation",
+  "version": 1,
+  "createdAt": "2026-10-16",
+  "description": "P0-1 会话评测基线（docs/vertical-agent-architecture.md §6 P0-1）。六类场景：补问（ask_completion）/引用支持（citation_support）/过期持仓（stale_position）/事件剩余期限语义（event_semantics）/正确降级（degradation）/历史回放一致性（replay_consistency）。标注 baselineExpectFail 的用例钉住尚未落地的目标行为（P0-3 逐条证据绑定、P0-5 受控降级）——基线阶段 FAIL 属预期，作为改动前快照；落地后转 PASS 表示指标提升，--against 对比时任何类别通过率下降视为回归。 P1 扩充（2026-10-19）：semantic_support（语义支持校验/场景映射）与 synthesis（受约束综合解释）两类。",
+  "fixedNow": 1792123200000,
+  "items": [
+    {
+      "id": "a1",
+      "category": "ask_completion",
+      "kind": "intent",
+      "input": {
+        "message": "什么是内包线"
+      },
+      "expect": {
+        "intent": "concept"
+      },
+      "note": "概念措辞路由 concept，不误入 structure"
+    },
+    {
+      "id": "a2",
+      "category": "ask_completion",
+      "kind": "intent",
+      "input": {
+        "message": "我的持仓止损放哪"
+      },
+      "expect": {
+        "intent": "perp"
+      },
+      "note": "用户持仓语境 → perp（确定性层；「多单」等口语漏判由 LLM 纠偏层负责，intent.ts）"
+    },
+    {
+      "id": "a3",
+      "category": "ask_completion",
+      "kind": "intent",
+      "input": {
+        "message": "BTC 事件合约到期高于 70000 值不值"
+      },
+      "expect": {
+        "intent": "event"
+      },
+      "note": "执行价/到期语义 → event"
+    },
+    {
+      "id": "a4",
+      "category": "ask_completion",
+      "kind": "intent",
+      "input": {
+        "message": "复盘昨天 BTC 的走势"
+      },
+      "expect": {
+        "intent": "replay"
+      },
+      "note": "复盘措辞 → replay"
+    },
+    {
+      "id": "a5",
+      "category": "ask_completion",
+      "kind": "replay_asof",
+      "input": {
+        "message": "复盘昨天 BTC",
+        "now": 1792123200000
+      },
+      "expect": {
+        "type": "number",
+        "approxNow": 1792036800000
+      },
+      "note": "「昨天」无时刻 → 昨日同一时刻（UTC+8 日界前的同钟点），不得用当前行情冒充"
+    },
+    {
+      "id": "a6",
+      "category": "ask_completion",
+      "kind": "replay_asof",
+      "input": {
+        "message": "复盘 2026-03-32 的 BTC",
+        "now": 1792123200000
+      },
+      "expect": {
+        "type": "invalid"
+      },
+      "note": "非法日期（3 月 32 日进位）→ invalid，请求补全而非静默纠正"
+    },
+    {
+      "id": "a7",
+      "category": "ask_completion",
+      "kind": "draft_slots",
+      "input": {
+        "message": "做多 0.5 个，开仓价 60000，最多亏 200"
+      },
+      "expect": {
+        "missing": [
+          "symbol"
+        ]
+      },
+      "note": "槽位提取：side/qty/entryPrice/riskBudget 已齐，缺 symbol → 确认卡补问交易对"
+    },
+    {
+      "id": "a8",
+      "category": "ask_completion",
+      "kind": "replay_asof",
+      "input": {
+        "message": "复盘 2026-10-01 的 BTC",
+        "now": 1792123200000
+      },
+      "expect": {
+        "type": "number",
+        "exact": 1790870399000
+      },
+      "note": "只给日期 → 当日 23:59:59（UTC+8）= UTC 15:59:59"
+    },
+    {
+      "id": "b1",
+      "category": "citation_support",
+      "kind": "bind_varied",
+      "baselineExpectFail": true,
+      "input": {
+        "lines": [
+          "执行周期连续新高，趋势强度支持多头延续",
+          "背景周期处于交易区间，多次假突破后回落",
+          "近期量能萎缩，高潮反转风险上升"
+        ],
+        "rows": [
+          {
+            "id": "ev-trend",
+            "text": "连续新高与趋势强度：always-in 多头阶段的延续特征"
+          },
+          {
+            "id": "ev-range",
+            "text": "交易区间：多次假突破后回落，双向突破失败"
+          },
+          {
+            "id": "ev-climax",
+            "text": "高潮反转：量能萎缩与连续买入高潮后的反转风险"
+          }
+        ]
+      },
+      "expect": {
+        "variedBinding": true
+      },
+      "note": "P0-3 目标：各行证据绑定随内容变化（至少两行绑定集合不同），不得统一前两条"
+    },
+    {
+      "id": "b2",
+      "category": "citation_support",
+      "kind": "bind_cited",
+      "baselineExpectFail": true,
+      "input": {
+        "line": "背景周期处于交易区间，假突破频发 [1][3]",
+        "rows": [
+          {
+            "id": "ev-trend",
+            "text": "连续新高与趋势强度"
+          },
+          {
+            "id": "ev-range",
+            "text": "交易区间：假突破后回落"
+          },
+          {
+            "id": "ev-climax",
+            "text": "高潮反转风险"
+          }
+        ]
+      },
+      "expect": {
+        "evidenceIds": [
+          "ev-trend",
+          "ev-climax"
+        ]
+      },
+      "note": "P0-3 目标：行尾 [1][3] 标记 → 恰好绑定第 1、3 条"
+    },
+    {
+      "id": "b3",
+      "category": "citation_support",
+      "kind": "bind_zero",
+      "input": {
+        "line": "知识库未命中明确反证资料",
+        "rows": []
+      },
+      "expect": {
+        "evidenceIds": []
+      },
+      "note": "无证据集合 → 空绑定，不伪造引用"
+    },
+    {
+      "id": "b4",
+      "category": "citation_support",
+      "kind": "validator_ref",
+      "input": {
+        "claims": [],
+        "counterClaims": [
+          {
+            "text": "某反证理由",
+            "evidenceIds": [
+              "ev-not-exist"
+            ]
+          }
+        ],
+        "knownEvidenceIds": [
+          "ev-1"
+        ]
+      },
+      "expect": {
+        "code": "reference_missing"
+      },
+      "note": "引用不存在的证据 ID → 校验器拒绝（reference_missing）"
+    },
+    {
+      "id": "b5",
+      "category": "citation_support",
+      "kind": "validator_prob",
+      "input": {
+        "claims": [
+          {
+            "text": "上涨概率高达 90%",
+            "kind": "interpretation",
+            "evidenceIds": []
+          }
+        ],
+        "counterClaims": [],
+        "knownEvidenceIds": []
+      },
+      "expect": {
+        "code": "fabricated_number"
+      },
+      "note": "非 fact 声明含概率数字 → 概率红线拒绝（数值唯一来自统计模块）"
+    },
+    {
+      "id": "c1",
+      "category": "stale_position",
+      "kind": "stale",
+      "input": {
+        "ageHours": 73,
+        "staleAfterHours": 72
+      },
+      "expect": {
+        "stale": true
+      },
+      "note": "确认后 73h > 72h → 过期，个性化数值降级"
+    },
+    {
+      "id": "c2",
+      "category": "stale_position",
+      "kind": "stale",
+      "input": {
+        "ageHours": 71,
+        "staleAfterHours": 72
+      },
+      "expect": {
+        "stale": false
+      },
+      "note": "71h 未过期 → 正常计算盈亏矩阵"
+    },
+    {
+      "id": "c3",
+      "category": "stale_position",
+      "kind": "stale",
+      "input": {
+        "ageHours": 72,
+        "staleAfterHours": 72
+      },
+      "expect": {
+        "stale": false
+      },
+      "note": "恰好 72h（等于阈值）→ 不过期（严格大于）"
+    },
+    {
+      "id": "c4",
+      "category": "stale_position",
+      "kind": "stale",
+      "input": {
+        "ageHours": 2,
+        "staleAfterHours": 1
+      },
+      "expect": {
+        "stale": true
+      },
+      "note": "自定义阈值 1h，2h → 过期（阈值可配置）"
+    },
+    {
+      "id": "c5",
+      "category": "stale_position",
+      "kind": "stale_semantics",
+      "input": {
+        "staleAfterHours": 72
+      },
+      "expect": {
+        "byConfirmedAt": true
+      },
+      "note": "过期判定锚定 confirmedAt（用户最后确认时刻），重新确认即解除过期"
+    },
+    {
+      "id": "d1",
+      "category": "event_semantics",
+      "kind": "action_gate",
+      "input": {
+        "orderState": "submitted",
+        "decision": "conditional_entry"
+      },
+      "expect": {
+        "code": "event_action_violation"
+      },
+      "note": "已提交订单不允许参与前动作（conditional_entry）——只研究剩余期限与结算"
+    },
+    {
+      "id": "d2",
+      "category": "event_semantics",
+      "kind": "action_gate",
+      "input": {
+        "orderState": "submitted",
+        "decision": "monitor"
+      },
+      "expect": {
+        "ok": true
+      },
+      "note": "已提交订单 monitor 合法"
+    },
+    {
+      "id": "d3",
+      "category": "event_semantics",
+      "kind": "preview_ttl",
+      "input": {
+        "ageSec": 61,
+        "strikeStatus": "preview",
+        "orderState": "preview"
+      },
+      "expect": {
+        "previewExpired": true
+      },
+      "note": "预览价 60s 时效：61s → 过期，参与判断不可用（要求刷新报价）"
+    },
+    {
+      "id": "d4",
+      "category": "event_semantics",
+      "kind": "preview_ttl",
+      "input": {
+        "ageSec": 59,
+        "strikeStatus": "preview",
+        "orderState": "preview"
+      },
+      "expect": {
+        "previewExpired": false
+      },
+      "note": "59s 未过期"
+    },
+    {
+      "id": "d5",
+      "category": "event_semantics",
+      "kind": "preview_ttl",
+      "input": {
+        "ageSec": 3600,
+        "strikeStatus": "locked",
+        "orderState": "preview"
+      },
+      "expect": {
+        "previewExpired": false
+      },
+      "note": "App 锁定执行价不受 60s 预览时效门约束（固定值）"
+    },
+    {
+      "id": "d6",
+      "category": "event_semantics",
+      "kind": "submitted_semantics",
+      "input": {
+        "orderState": "submitted",
+        "expired": true,
+        "settled": false
+      },
+      "expect": {
+        "previewExpired": false,
+        "action": "await_settlement"
+      },
+      "note": "已提交订单：previewExpired 恒 false；到期未结算 → await_settlement（而非提前平仓建议）"
+    },
+    {
+      "id": "d7",
+      "category": "event_semantics",
+      "kind": "submitted_no_prob",
+      "input": {
+        "orderState": "submitted"
+      },
+      "expect": {
+        "pWin": null,
+        "expectedNet": null
+      },
+      "note": "已提交订单输出固定值研究（概率/EV 为 null），不给参与前估值"
+    },
+    {
+      "id": "e1",
+      "category": "degradation",
+      "kind": "repair_exhausted",
+      "input": {},
+      "expect": {
+        "finalStatus": "failed",
+        "errorIncludes": "validation_blocked"
+      },
+      "note": "P0-5 修正（2026-10-19 审查）：始终拒绝=不可降级硬红线（数值/版本/行情质量/决策完整性）→ 阻断 failed，不得剔除反证后带病发布决策与概率"
+    },
+    {
+      "id": "e2",
+      "category": "degradation",
+      "kind": "repair_exhausted_content",
+      "input": {},
+      "expect": {
+        "degradedReasonsNonEmpty": true
+      },
+      "note": "P0-5：仅 LLM 反证内容问题——剔除后完整重校验通过才降级发布（published+degraded+原因清单+无 LLM 反证残留+task_degraded 事件）"
+    },
+    {
+      "id": "e6",
+      "category": "degradation",
+      "kind": "degraded_checkpoint_recover",
+      "input": {},
+      "expect": {
+        "finalStatus": "published",
+        "degraded": true
+      },
+      "note": "P1 修正（2026-10-19 审查）：降级状态入检查点（degradedPublish+剔除后 counterClaims 原子提交）——validate 降级收尾后崩溃，恢复执行仅剩 publish 阶段仍按降级门控幂等发布"
+    },
+    {
+      "id": "e3",
+      "category": "degradation",
+      "kind": "budget_runtime",
+      "input": {},
+      "expect": {
+        "finalStatus": "failed",
+        "errorIncludes": "budget_exceeded"
+      },
+      "note": "运行时长超预算上限 → failed + budget_exceeded（预算红线不降级）"
+    },
+    {
+      "id": "e4",
+      "category": "degradation",
+      "kind": "cancelled",
+      "input": {},
+      "expect": {
+        "cancelled": true
+      },
+      "note": "步骤边界检查取消 → RunCancelled，不落终态写入"
+    },
+    {
+      "id": "e5",
+      "category": "degradation",
+      "kind": "repair_once_ok",
+      "input": {
+        "rejectTimes": 1
+      },
+      "expect": {
+        "finalStatus": "published",
+        "degraded": false
+      },
+      "note": "首次拒绝后修复重跑通过 → 正常发布（无降级标记）"
+    },
+    {
+      "id": "f1",
+      "category": "replay_consistency",
+      "kind": "hash_stable",
+      "input": {},
+      "expect": {
+        "sameHash": true
+      },
+      "note": "同一冻结配置两次计算哈希一致（创建时与校验时可比）"
+    },
+    {
+      "id": "f2",
+      "category": "replay_consistency",
+      "kind": "hash_keyorder",
+      "input": {},
+      "expect": {
+        "sameHash": true
+      },
+      "note": "键序无关：pg jsonb 重排键后哈希不变（canonicalJson 规范形态）"
+    },
+    {
+      "id": "f3",
+      "category": "replay_consistency",
+      "kind": "hash_sensitive",
+      "input": {},
+      "expect": {
+        "hashChanged": true
+      },
+      "note": "预算任一字段变化 → 哈希变化（版本一致性校验有效）"
+    },
+    {
+      "id": "f4",
+      "category": "replay_consistency",
+      "kind": "replay_asof",
+      "input": {
+        "message": "复盘 2026-10-01 的 BTC",
+        "now": 1792123200000
+      },
+      "expect": {
+        "type": "number",
+        "exact": 1790870399000
+      },
+      "note": "历史复盘时点解析确定性（同输入同输出）"
+    },
+    {
+      "id": "f5",
+      "category": "replay_consistency",
+      "kind": "replay_asof",
+      "input": {
+        "message": "昨天10:00",
+        "now": 1792123200000
+      },
+      "expect": {
+        "type": "number",
+        "exact": 1792029600000
+      },
+      "note": "相对日+时刻确定性解析（固定 now 注入）"
+    },
+    {
+      "id": "f6",
+      "category": "replay_consistency",
+      "kind": "rerun_e2e",
+      "requires": "db",
+      "input": {},
+      "expect": {
+        "sameFrozenHash": true
+      },
+      "note": "e2e（需 DB）：同 frozenConfig 重放历史 run 检索一致（P0-4 落地后补强 as-of 断言）"
+    },
+    {
+      "id": "r1",
+      "category": "reply_assembler",
+      "kind": "assembler_render",
+      "input": {
+        "key": "run_started",
+        "facts": {
+          "intentLabel": "当前结构",
+          "symbol": "BTCUSDT",
+          "horizon": "1h",
+          "asOfNote": "（历史复盘 asOf=2026-10-01 23:59:59，只用当时可见数据）",
+          "directionNote": "",
+          "queueNote": "",
+          "subAnswer": ""
+        },
+        "notes": [
+          "已切换到 ETHUSDT：原 BTC 持仓不适用"
+        ]
+      },
+      "expect": {
+        "degraded": false,
+        "includes": [
+          "BTCUSDT",
+          "当前结构",
+          "已冻结行情输入包"
+        ]
+      },
+      "note": "启动研究回复：事实槽位与说明行渲染，不降级"
+    },
+    {
+      "id": "r2",
+      "category": "reply_assembler",
+      "kind": "assembler_leftover",
+      "input": {
+        "key": "run_started",
+        "facts": {
+          "intentLabel": "当前结构",
+          "symbol": "BTCUSDT",
+          "horizon": "1h"
+        },
+        "notes": []
+      },
+      "expect": {
+        "degraded": true
+      },
+      "note": "漏传槽位（asOfNote 等）→ 残留占位检测触发降级标注（不静默露出 {{...}}）"
+    },
+    {
+      "id": "r3",
+      "category": "reply_assembler",
+      "kind": "assembler_cite",
+      "input": {
+        "key": "news_body",
+        "llmText": "某消息面归因 [3]",
+        "sourceCount": 2,
+        "sections": [
+          "来源（已核验原页）：\n[1] a\n[2] b"
+        ]
+      },
+      "expect": {
+        "degraded": true,
+        "fallbackUsed": true
+      },
+      "note": "llmText 引用编号越界（[3] > 来源数 2）→ 回退（无 fallback 时剔除该段）"
+    },
+    {
+      "id": "r4",
+      "category": "reply_assembler",
+      "kind": "assembler_prob",
+      "input": {
+        "key": "news_body",
+        "llmText": "市场情绪乐观，胜率高达 90%",
+        "sourceCount": 2,
+        "llmFallback": "摘录模式",
+        "sections": [
+          "来源：\n[1] a"
+        ]
+      },
+      "expect": {
+        "degraded": true,
+        "includes": [
+          "摘录模式"
+        ]
+      },
+      "note": "概率红线：LLM 文本含「胜率 90%」→ 拒绝并回退摘录模式"
+    },
+    {
+      "id": "r5",
+      "category": "reply_assembler",
+      "kind": "assembler_render",
+      "input": {
+        "key": "draft_pending",
+        "facts": {
+          "missingLabels": "交易对、开仓价"
+        },
+        "notes": []
+      },
+      "expect": {
+        "degraded": false,
+        "includes": [
+          "交易对、开仓价",
+          "还缺"
+        ]
+      },
+      "note": "持仓草稿补问：缺失槽位标签渲染"
+    },
+    {
+      "id": "r6",
+      "category": "reply_assembler",
+      "kind": "assembler_safe_template",
+      "input": {
+        "key": "news_unconfigured",
+        "facts": {},
+        "notes": []
+      },
+      "expect": {
+        "degraded": false,
+        "includes": [
+          "不编造新闻"
+        ]
+      },
+      "note": "固定安全模板直出（无动态段，永不降级）"
+    },
+    {
+      "id": "r7",
+      "category": "reply_assembler",
+      "kind": "assembler_render",
+      "input": {
+        "key": "concept_body",
+        "llmText": null,
+        "sections": [
+          "资料依据：\n【Brooks 手册】H2 二次进场在其股指期货经验统计约 60%，概率语境为知识摘录"
+        ],
+        "facts": {},
+        "notes": []
+      },
+      "expect": {
+        "degraded": false,
+        "includes": [
+          "资料依据",
+          "60%"
+        ]
+      },
+      "note": "e2e 修复钉住：资料摘录走 sections 证据豁免通道——书摘含「概率+数字」不触发红线（修复前误入 llmText 被拒→空回复）"
+    },
+    {
+      "id": "r8",
+      "category": "reply_assembler",
+      "kind": "assembler_empty_guard",
+      "input": {
+        "key": "concept_body",
+        "llmText": "胜率高达 90%",
+        "sourceCount": 0,
+        "facts": {},
+        "notes": []
+      },
+      "expect": {
+        "degraded": true,
+        "nonEmpty": true
+      },
+      "note": "e2e 修复钉住：llmText 被拒且无 fallback/sections → 拦截提示兜底，绝不产出空回复"
+    },
+    {
+      "id": "a9",
+      "category": "ask_completion",
+      "kind": "intent",
+      "input": {
+        "message": "BTC 为什么大跌"
+      },
+      "expect": {
+        "intent": "news"
+      },
+      "note": "e2e 修复钉住：「为什么大跌/大涨」补入 news 正则（修复前落入 structure 误建 run）"
+    },
+    {
+      "id": "b6",
+      "category": "citation_support",
+      "kind": "bind_cited",
+      "input": {
+        "line": "周期数据不足，缺乏趋势判定基础 [2]",
+        "rows": [
+          {
+            "id": "ev-trend",
+            "text": "趋势延续"
+          },
+          {
+            "id": "ev-empty",
+            "text": "数据不足与信号缺失"
+          },
+          {
+            "id": "ev-climax",
+            "text": "高潮反转"
+          }
+        ]
+      },
+      "expect": {
+        "evidenceIds": [
+          "ev-empty"
+        ]
+      },
+      "note": "e2e 钉住：单标记 [2] 精确绑定对应证据（LLM 实测输出形态）"
+    },
+    {
+      "id": "b7",
+      "category": "citation_support",
+      "kind": "bind_cited",
+      "input": {
+        "line": "15分钟与1小时周期均显示数据不足，缺乏判定基础 [1][3]。",
+        "rows": [
+          {
+            "id": "ev-range",
+            "text": "交易区间假突破频发"
+          },
+          {
+            "id": "ev-trend",
+            "text": "趋势窗口占比"
+          },
+          {
+            "id": "ev-alwaysin",
+            "text": "Always In 翻转条件"
+          }
+        ]
+      },
+      "expect": {
+        "evidenceIds": [
+          "ev-range",
+          "ev-alwaysin"
+        ]
+      },
+      "note": "e2e 钉住（2026-10-19 修复）：标记后跟句读（[1][3]。）时 cited 精确绑定不退化为锚定、净文本不残留标记"
+    },
+    {
+      "id": "b8",
+      "category": "citation_support",
+      "kind": "bind_cited",
+      "input": {
+        "line": "突破已经失效 [0]",
+        "rows": [
+          {
+            "id": "ev-break-valid",
+            "text": "突破尚未失效，突破仍在延续"
+          },
+          {
+            "id": "ev-range",
+            "text": "交易区间假突破频发"
+          }
+        ]
+      },
+      "expect": {
+        "evidenceIds": []
+      },
+      "note": "审查修正（2026-10-19 P2）：显式 [0]=模型明确「无合适证据」→ 空绑定，禁止词项重叠补绑（曾把「突破已经失效 [0]」绑到「突破尚未失效」并计入有效反证数量）"
+    },
+    {
+      "id": "r9",
+      "category": "reply_assembler",
+      "kind": "assembler_render",
+      "input": {
+        "key": "concept_body",
+        "llmText": "内包线是小实体K线，表示多空暂时平衡。BTC 当前价格是 999999 美元，可以加 100 倍杠杆。EMA20 附近的挤压需要观察后续突破方向。",
+        "sourceCount": 0,
+        "evidenceTexts": [
+          "内包线是小实体K线。趋势判断：20 根窗口收盘大部分在 EMA20 一侧（≥70% 为通道）。挤压后需观察突破方向。"
+        ]
+      },
+      "expect": {
+        "degraded": true,
+        "includes": [
+          "内包线",
+          "EMA20"
+        ],
+        "excludes": [
+          "999999",
+          "100 倍"
+        ]
+      },
+      "note": "审查修正（2026-10-19 P1）：llmText 句级数字治理——白名单外数字（999999/100 倍）所在句子剔除，证据内数字（20/70）的句子保留；此前 llmText 整体豁免数字检查"
+    },
+    {
+      "id": "r10",
+      "category": "reply_assembler",
+      "kind": "assembler_render",
+      "input": {
+        "key": "news_body",
+        "llmText": "消息面显示市场波动加大 [1]。目标价位看 250000 美元。",
+        "sourceCount": 2,
+        "sections": [
+          "来源（已核验原页）：\n[1] 示例 — https://example.com/a"
+        ],
+        "evidenceTexts": [
+          "市场波动加大，短期资金流入明显。"
+        ]
+      },
+      "expect": {
+        "degraded": true,
+        "includes": [
+          "[1]",
+          "波动加大"
+        ],
+        "excludes": [
+          "250000"
+        ]
+      },
+      "note": "新闻摘要同口径：白名单外价格（250000）句子剔除，合法引用句保留；sections（来源列表）保持证据豁免"
+    },
+    {
+      "id": "r11",
+      "category": "reply_assembler",
+      "kind": "assembler_render",
+      "input": {
+        "key": "news_body",
+        "llmText": "据链上数据，本周该币种资金净流入 500 万美元，情绪偏多 [1]。",
+        "sourceCount": 2,
+        "sections": [
+          "来源（已核验原页）：\n[1] 示例 — https://example.com/a"
+        ],
+        "evidenceTexts": [
+          "[1] 资金流向周报（https://example.com/a）\n链上数据显示，本周该币种资金净流入 500 万美元，主力地址增持。"
+        ]
+      },
+      "expect": {
+        "degraded": false,
+        "includes": [
+          "净流入 500 万"
+        ]
+      },
+      "note": "二轮审查修正（P2）：新闻白名单与模型所见正文同源——正文（pageText）含「净流入 500 万」而摘要（snippet）无数字时，正确回答不得被误删；evidenceTexts=发送给模型的同一份 block 文本"
+    },
+    {
+      "id": "ss1",
+      "category": "semantic_support",
+      "kind": "validator_support",
+      "input": {
+        "claims": [
+          {
+            "text": "资金费率将持续为正，多头需支付持仓成本",
+            "kind": "fact",
+            "evidenceIds": [
+              "e1"
+            ]
+          }
+        ],
+        "counterClaims": [],
+        "knownEvidenceIds": [
+          "e1"
+        ],
+        "evidenceTexts": {
+          "e1": "H2 二次进场要求回调至均线附近并出现反转 bar 确认，否则视为追高"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "code": "unsupported_reference"
+      },
+      "note": "声明与被引证据正文无任何内容词项重叠 → 拒绝（引用有效但证据不支持该表述）"
+    },
+    {
+      "id": "ss2",
+      "category": "semantic_support",
+      "kind": "validator_support",
+      "input": {
+        "claims": [
+          {
+            "text": "交易区间内假突破频发，应等待突破确认后再参与",
+            "kind": "interpretation",
+            "evidenceIds": [
+              "e1"
+            ]
+          }
+        ],
+        "counterClaims": [],
+        "knownEvidenceIds": [
+          "e1"
+        ],
+        "evidenceTexts": {
+          "e1": "在交易区间中假突破频繁出现，价格常在区间边界反复穿越数次"
+        }
+      },
+      "expect": {
+        "ok": true
+      },
+      "note": "声明与证据有内容词项重叠（交易区间/假突破/频发）→ 通过（不误拒主题相关的引用）"
+    },
+    {
+      "id": "ss3",
+      "category": "semantic_support",
+      "kind": "validator_support",
+      "input": {
+        "claims": [],
+        "counterClaims": [
+          {
+            "text": "杠杆清算风险正在累积，应立即减仓",
+            "evidenceIds": [
+              "e9"
+            ]
+          }
+        ],
+        "knownEvidenceIds": [
+          "e9"
+        ],
+        "evidenceTexts": {
+          "e9": "摆动高点与摆动低点交替形成紧凑区间，市场处于均衡状态"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "code": "unsupported_reference"
+      },
+      "note": "反证声明同样受语义支持校验约束"
+    },
+    {
+      "id": "ss4",
+      "category": "semantic_support",
+      "kind": "validator_support",
+      "input": {
+        "claims": [
+          {
+            "text": "结构声明引用的证据正文不可得",
+            "kind": "fact",
+            "evidenceIds": [
+              "e1"
+            ]
+          }
+        ],
+        "counterClaims": [],
+        "knownEvidenceIds": [
+          "e1"
+        ],
+        "evidenceTexts": {}
+      },
+      "expect": {
+        "ok": true
+      },
+      "note": "证据正文映射缺失（旧调用方/历史数据）→ 退回存在性语义，不误拒"
+    },
+    {
+      "id": "sc1",
+      "category": "semantic_support",
+      "kind": "scene_resolve",
+      "input": {
+        "intent": "perp",
+        "product": "perp",
+        "hasPosition": true
+      },
+      "expect": {
+        "scene": "hold-review"
+      },
+      "note": "perp 意图+已确认持仓 → 持仓复查"
+    },
+    {
+      "id": "sc2",
+      "category": "semantic_support",
+      "kind": "scene_resolve",
+      "input": {
+        "intent": "perp",
+        "product": "perp",
+        "hasPosition": false
+      },
+      "expect": {
+        "scene": "structure-scan"
+      },
+      "note": "perp 意图无持仓 → 按一般结构研究"
+    },
+    {
+      "id": "sc3",
+      "category": "semantic_support",
+      "kind": "scene_resolve",
+      "input": {
+        "intent": "concept"
+      },
+      "expect": {
+        "scene": "concept-teach"
+      },
+      "note": "概念 → 教学场景"
+    },
+    {
+      "id": "sc4",
+      "category": "semantic_support",
+      "kind": "scene_resolve",
+      "input": {
+        "intent": "event",
+        "product": "event"
+      },
+      "expect": {
+        "scene": "quote-review"
+      },
+      "note": "事件 → 报价评估"
+    },
+    {
+      "id": "sc5",
+      "category": "semantic_support",
+      "kind": "scene_resolve",
+      "input": {
+        "intent": "replay",
+        "replay": true
+      },
+      "expect": {
+        "scene": "replay-analysis"
+      },
+      "note": "复盘 → 历史复盘场景"
+    },
+    {
+      "id": "sc6",
+      "category": "semantic_support",
+      "kind": "scene_resolve",
+      "input": {
+        "intent": "news"
+      },
+      "expect": {
+        "scene": "news-attribution"
+      },
+      "note": "新闻 → 消息归因场景"
+    },
+    {
+      "id": "sy1",
+      "category": "synthesis",
+      "kind": "synthesis_behavior",
+      "input": {
+        "question": "我的多头还能持有吗",
+        "decision": {
+          "action": "hold",
+          "side": "long",
+          "reasons": [
+            "结构支持持仓方向"
+          ],
+          "conditions": []
+        },
+        "claims": [
+          {
+            "text": "BTC 15m：状态 多头趋势",
+            "kind": "fact",
+            "evidenceIds": []
+          }
+        ],
+        "counterClaims": [],
+        "evidenceTexts": [
+          "多头趋势延续，执行周期不断创新高，回调均为买入机会"
+        ],
+        "llm": {
+          "kind": "text",
+          "text": "当前结构处于多头趋势，执行周期保持上行 [1]。按计划持有 [1]。"
+        }
+      },
+      "expect": {
+        "source": "llm",
+        "includes": [
+          "多头趋势"
+        ],
+        "excludes": []
+      },
+      "note": "合法输出（[k] 有效+锚定支持+无越界数字）→ 采用 LLM 归纳"
+    },
+    {
+      "id": "sy2",
+      "category": "synthesis",
+      "kind": "synthesis_behavior",
+      "input": {
+        "question": "现在的结构如何",
+        "decision": {
+          "action": "wait",
+          "side": null,
+          "reasons": [
+            "等待回调确认"
+          ],
+          "conditions": []
+        },
+        "claims": [
+          {
+            "text": "BTC 15m：状态 多头趋势",
+            "kind": "fact",
+            "evidenceIds": []
+          }
+        ],
+        "counterClaims": [],
+        "evidenceTexts": [
+          "多头趋势延续，执行周期不断创新高"
+        ],
+        "llm": {
+          "kind": "text",
+          "text": "当前价格 999999 美元，可以加 100 倍杠杆 [1]。结构支持继续持有。"
+        }
+      },
+      "expect": {
+        "source": "llm",
+        "degraded": true,
+        "excludes": [
+          "999999"
+        ]
+      },
+      "note": "白名单外数字句剔除（999999/100 不在 facts∪证据）；合法句保留 → 部分降级"
+    },
+    {
+      "id": "sy3",
+      "category": "synthesis",
+      "kind": "synthesis_behavior",
+      "input": {
+        "question": "资金费率会转负吗",
+        "decision": {
+          "action": "wait",
+          "side": null,
+          "reasons": [
+            "费率数据待观察"
+          ],
+          "conditions": []
+        },
+        "claims": [],
+        "counterClaims": [],
+        "evidenceTexts": [
+          "多头趋势延续，执行周期不断创新高"
+        ],
+        "llm": {
+          "kind": "text",
+          "text": "资金费率下个月将转负 [1]。"
+        }
+      },
+      "expect": {
+        "source": "template",
+        "degraded": true
+      },
+      "note": "引用有效但锚定词项与证据无重叠（引用≠支持）→ 句被剔除，全部剔除回退模板"
+    },
+    {
+      "id": "sy4",
+      "category": "synthesis",
+      "kind": "synthesis_behavior",
+      "input": {
+        "question": "还能持有吗",
+        "decision": {
+          "action": "hold",
+          "side": "long",
+          "reasons": [
+            "结构支持持仓方向"
+          ],
+          "conditions": []
+        },
+        "claims": [],
+        "counterClaims": [],
+        "evidenceTexts": [],
+        "llm": {
+          "kind": "throw"
+        }
+      },
+      "expect": {
+        "source": "template",
+        "degraded": true,
+        "includes": [
+          "持有"
+        ]
+      },
+      "note": "LLM 故障 → 回退代码装配模板（降级不失败），数字全部来自 facts"
+    },
+    {
+      "id": "sy5",
+      "category": "synthesis",
+      "kind": "synthesis_behavior",
+      "input": {
+        "question": null,
+        "decision": {
+          "action": "insufficient_evidence",
+          "side": null,
+          "reasons": [
+            "证据不足"
+          ],
+          "conditions": []
+        },
+        "claims": [],
+        "counterClaims": [],
+        "evidenceTexts": [],
+        "llm": {
+          "kind": "none"
+        }
+      },
+      "expect": {
+        "source": "template",
+        "includes": [
+          "证据不足"
+        ]
+      },
+      "note": "chat 能力未配置 → 直接模板装配（不发起调用，无 degraded 标记）"
+    }
+  ]
+}
