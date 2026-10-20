@@ -1,0 +1,20 @@
+{
+  "layout": {
+    "title": "Admin console",
+    "back": "Back to the app"
+  },
+  "menu": {
+    "panel": "Dashboard",
+    "panelHint": "Users / logs",
+    "ai": "AI conversations",
+    "aiHint": "Context / memory",
+    "knowledge": "Knowledge base",
+    "knowledgeHint": "Import / publish / retrieval debug",
+    "agents": "Agent config",
+    "agentsHint": "Capabilities / versions / rollback",
+    "prompts": "Prompts & copy",
+    "promptsHint": "Template versions / disclaimers / input config",
+    "evals": "Evals & models",
+    "evalsHint": "Datasets / training / metrics"
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "type": {
+    "price_above": "Price crosses above",
+    "price_below": "Price falls below",
+    "change_above": "24h gain exceeds",
+    "change_below": "24h loss exceeds"
+  },
+  "form": {
+    "symbol": "Pair",
+    "cond": "Condition",
+    "targetPrice": "Target price",
+    "threshold": "Threshold (%)",
+    "note": "Note (optional)",
+    "notePlaceholder": "e.g. resistance breakout, watch the retest",
+    "submit": "+ Add rule",
+    "busy": "Adding…",
+    "hint": "Price rules trigger on the breakout/breakdown edge: if price is already on the far side of the target when the rule is created, it must reset first and cross again before alerting. Change rules alert once when the threshold is exceeded and can re-arm after falling back below it."
+  },
+  "toast": {
+    "loadFailed": "Failed to load rules",
+    "added": "Rule added",
+    "addFailed": "Add failed",
+    "toggleFailed": "Operation failed",
+    "deleteFailed": "Delete failed",
+    "saved": "Webhook saved",
+    "cleared": "Webhook cleared",
+    "saveFailed": "Save failed",
+    "testFailed": "Test push failed"
+  },
+  "rules": {
+    "title": "Alert Rules",
+    "col": {
+      "symbol": "Pair",
+      "cond": "Condition",
+      "note": "Note",
+      "status": "Status",
+      "lastTriggered": "Last Triggered"
+    },
+    "switchOn": "Click to disable",
+    "switchOff": "Click to enable",
+    "remove": "Delete",
+    "empty": "No alert rules yet — add your first one with the form above"
+  },
+  "history": {
+    "title": "Trigger History",
+    "empty": "No triggers yet",
+    "nowPrice": "last"
+  },
+  "webhook": {
+    "title": "Push Webhook",
+    "desc": "When an alert fires, besides the in-page toast, system notification and sound, the server also POSTs a JSON payload to this webhook URL, auto-adapting to ServerChan / WeCom / Feishu bot formats (custom endpoints receive {{payload}}) for mobile push.",
+    "help": "View per-platform setup steps",
+    "save": "Save",
+    "test": "Send test"
+  },
+  "help": {
+    "title": "Webhook Push Setup",
+    "close": "Close",
+    "sample": "Sample URL:",
+    "custom": {
+      "name": "Your own service",
+      "chip": "Custom",
+      "steps": [
+        "Enter any publicly reachable http(s) URL. The server POSTs {{payload}} as JSON with a 5-second timeout"
+      ]
+    }
+  },
+  "guides": {
+    "ftqq": {
+      "name": "ServerChan",
+      "chip": "WeChat",
+      "badge": "Recommended",
+      "steps": [
+        "Open sct.ftqq.com and sign in with WeChat QR",
+        "Go to the SendKey page and copy your key",
+        "Paste https://sctapi.ftqq.com/YOURKEY.send into the input above and click Save",
+        "Click Send test — the Fangtang official account on WeChat receives a test message"
+      ]
+    },
+    "wecom": {
+      "name": "WeCom group bot",
+      "chip": "WeCom",
+      "badge": "",
+      "steps": [
+        "In the target WeCom group: right-click the group name → Add group bot → New, name it anything",
+        "Copy the generated webhook URL",
+        "Paste it into the input above and click Save",
+        "Click Send test — the group receives a test alert"
+      ]
+    },
+    "feishu": {
+      "name": "Feishu custom bot",
+      "chip": "Feishu",
+      "badge": "",
+      "steps": [
+        "Target Feishu group → Settings → Group bots → Add \"Custom bot\"",
+        "In security settings pick \"Custom keywords\" and enter the keyword 预警",
+        "Copy the generated webhook URL, paste it above and Save",
+        "Click Send test — the group receives a test alert"
+      ]
+    }
+  }
+}

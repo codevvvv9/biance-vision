@@ -1,0 +1,24 @@
+{
+  "title": "24h Movers",
+  "toast": {
+    "listed": "{{symbol}} · new mover",
+    "body": "24h {{pct}}, last {{price}} — entered the ±{{threshold}}% movers list"
+  },
+  "thresholdLabel": "Change threshold",
+  "pushOn": "🔔 New-mover alerts: on",
+  "pushOff": "🔕 New-mover alerts: off",
+  "tabs": {
+    "up": "Top gainers",
+    "down": "Top losers"
+  },
+  "hint": "Scope: top {{count}} USDT pairs by volume · Live refresh",
+  "col": {
+    "symbol": "Pair",
+    "last": "Last Price",
+    "changePct": "24h Change",
+    "quoteVolume": "24h Volume",
+    "high": "24h High",
+    "low": "24h Low"
+  },
+  "empty": "No pairs moved more than ±{{threshold}}% in the last 24h — try lowering the threshold"
+}

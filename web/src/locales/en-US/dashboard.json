@@ -1,0 +1,47 @@
+{
+  "kline": {
+    "intervals": {
+      "1m": "1m",
+      "5m": "5m",
+      "15m": "15m",
+      "1h": "1h",
+      "4h": "4h",
+      "1d": "1D"
+    },
+    "loadFailed": "Failed to load candles",
+    "loading": "Loading {{symbol}} candles…",
+    "retry": "Retry",
+    "fullscreen": "Show chart full screen"
+  },
+  "table": {
+    "title": "Live Markets",
+    "searchPlaceholder": "Search pairs, e.g. BTC",
+    "fullscreen": "Show market table full screen",
+    "emptyMatch": "No matching pairs",
+    "connecting": "Connecting to the Binance market stream…",
+    "foot": "Click a row to switch the chart · Data pushed every second",
+    "col": {
+      "symbol": "Pair",
+      "last": "Last Price",
+      "changePct": "24h Change",
+      "high": "24h High",
+      "low": "24h Low",
+      "quoteVolume": "24h Volume"
+    }
+  },
+  "stat": {
+    "high": "H",
+    "low": "L",
+    "sentiment": "Market Sentiment",
+    "sentimentSub": "USDT pairs",
+    "marketBarTitle": "{{up}} up · {{down}} down",
+    "upPct": "{{pct}}% up",
+    "totalVolume": "24h Total Volume",
+    "monitoring": "Tracking {{count}} pairs"
+  },
+  "tape": {
+    "label": "Live market ticker tape",
+    "connected": "Receiving live Binance market data…",
+    "connecting": "Connecting to the Binance market stream…"
+  }
+}

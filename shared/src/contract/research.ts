@@ -23,6 +23,7 @@ export const TASK_SCENES = [
   'quote-review',
   'replay-analysis',
   'news-attribution',
+  'translate',
 ] as const
 export type TaskScene = (typeof TASK_SCENES)[number]
 export const TaskSceneSchema = z.enum(TASK_SCENES)

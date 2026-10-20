@@ -9,6 +9,8 @@
  */
 
 import type { BarFeature, Leg, SwingLabel, SwingPoint, BrooksCandle } from './types.js'
+import { msg } from './i18n.js'
+import type { SharedLocale } from './i18n.js'
 
 export function findSwings(bars: BrooksCandle[], k: number): SwingPoint[] {
   const raw: SwingPoint[] = []
@@ -174,19 +176,19 @@ export function maxHighBetween(bars: BrooksCandle[], a: number, b: number): numb
 }
 
 /** 摆动序列文本，如 HH→HL→HH（用于结构摘要） */
-export function swingSequenceText(zigzag: SwingPoint[], take = 6): string {
+export function swingSequenceText(zigzag: SwingPoint[], take = 6, locale: SharedLocale = 'zh-CN'): string {
   const tail = zigzag.slice(-take)
   const parts: string[] = []
-  for (const s of tail) parts.push(s.label !== '' ? s.label : s.kind === 'high' ? '高' : '低')
+  for (const s of tail) parts.push(s.label !== '' ? s.label : msg(s.kind === 'high' ? 'swing.kind.high' : 'swing.kind.low', {}, locale))
   return parts.join('→')
 }
 
 /** 结构判定：最近的高点标签与低点标签组合 */
-export function trendStructureText(zigzag: SwingPoint[]): string {
+export function trendStructureText(zigzag: SwingPoint[], locale: SharedLocale = 'zh-CN'): string {
   const lastHigh = [...zigzag].reverse().find((s) => s.kind === 'high')
   const lastLow = [...zigzag].reverse().find((s) => s.kind === 'low')
-  if (!lastHigh || !lastLow || lastHigh.label === '' || lastLow.label === '') return '结构未定型（摆动点不足）'
-  if (lastHigh.label === 'HH' && lastLow.label === 'HL') return '多头结构（HH + HL 交替抬升）'
-  if (lastHigh.label === 'LH' && lastLow.label === 'LL') return '空头结构（LH + LL 交替下移）'
-  return '多空拉锯（高低点方向不一致，按震荡处理）'
+  if (!lastHigh || !lastLow || lastHigh.label === '' || lastLow.label === '') return msg('structure.unformed', {}, locale)
+  if (lastHigh.label === 'HH' && lastLow.label === 'HL') return msg('structure.bull', {}, locale)
+  if (lastHigh.label === 'LH' && lastLow.label === 'LL') return msg('structure.bear', {}, locale)
+  return msg('structure.ranging', {}, locale)
 }
