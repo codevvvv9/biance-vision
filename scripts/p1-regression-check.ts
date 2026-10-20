@@ -771,6 +771,19 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(i5.kept.length === 1 && i5.dropped === 0, '对照：无强调结构版本同样保留（不回归）')
   const i6 = checkSynthesisText('多头趋势延续，保证收益。', input)
   assert(i6.by.decision === 1 && i6.kept.length === 0, '对照：「保证收益」无否定前缀仍剔除（承诺红线不受剥离影响）')
+  // ---- 第七轮（被否定的等待不豁免 + 时间标记完整结构），与 /tmp/bv-570453d-boundary-review.mts 同源 ----
+  // #1 「无需等待…后再」= 条件被否定，不开启豁免
+  const j1 = checkSynthesisText('无需等待回调确认后再入场，立即做多。', input)
+  assert(j1.by.decision === 1 && j1.kept.length === 0, '「无需等待…后再入场，立即做多」被剔除（等待模式带否定断言；修复前局部命中「等待…后」仍豁免）')
+  const j1c = checkSynthesisText('无需等待回调确认，立即做多。', input)
+  assert(j1c.by.decision === 1, '对照：无后缀版「无需等待…立即做多」仍剔除（三轮行为不回归）')
+  const j2 = checkSynthesisText('等待回调确认后再考虑入场。', input)
+  assert(j2.kept.length === 1 && j2.dropped === 0, '对照：「等待回调确认后再考虑入场」保留（未被否定的推迟表达仍豁免）')
+  // #2 名词内的「时/后」不是时间状语标记：「触发时间」的时、「后果」的后
+  const j3 = checkSynthesisText('止损触发时间已经确认，立即加仓。', exitInput)
+  assert(j3.by.decision === 1 && j3.kept.length === 0, '「止损触发时间已经确认，立即加仓」被剔除（TIME_MARK 排除名词组合；修复前「时间」的时被当后置标记）')
+  const j4 = checkSynthesisText('触发止损时，再评估退出。', exitInput)
+  assert(j4.kept.length === 1 && j4.dropped === 0, '对照：「触发止损时，再评估退出」保留（完整状语结构仍豁免）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
