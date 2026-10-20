@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { useAi } from '../ai/AiContext'
 import { useMarket } from '../market/MarketContext'
@@ -14,18 +15,20 @@ import FullscreenButton from '../components/FullscreenButton'
 import { fmtDateTime, lsGet, lsSet } from '../utils'
 import BrooksChart from '../brooks/BrooksChart'
 import { BrooksTerm, termForSignalKind } from '../brooks/terms'
+import { currentLocale } from '../i18n'
+import type { SharedLocale } from 'biance-vision-brooks'
 import type { BrooksChartHandle } from '../brooks/BrooksChart'
 import { analyzeBrooks } from 'biance-vision-brooks'
 import type { BrooksDisplay, BrooksSignal } from 'biance-vision-brooks'
 import type { KlineBar } from '../types'
 
 const INTERVALS: { v: string; t: string }[] = [
-  { v: '1m', t: '1分' },
-  { v: '5m', t: '5分' },
-  { v: '15m', t: '15分' },
-  { v: '1h', t: '1时' },
-  { v: '4h', t: '4时' },
-  { v: '1d', t: '日线' },
+  { v: '1m', t: 'brooks:interval.1m' },
+  { v: '5m', t: 'brooks:interval.5m' },
+  { v: '15m', t: 'brooks:interval.15m' },
+  { v: '1h', t: 'brooks:interval.1h' },
+  { v: '4h', t: 'brooks:interval.4h' },
+  { v: '1d', t: 'brooks:interval.1d' },
 ]
 
 const INTERVAL_MS: Record<string, number> = {
@@ -38,10 +41,10 @@ const INTERVAL_MS: Record<string, number> = {
 }
 
 const SCALES: { v: number; t: string; hint: string }[] = [
-  { v: 1, t: '微观', hint: 'k=1：微观摆动，噪音多，贴近逐根K线读法' },
-  { v: 2, t: '精细', hint: 'k=2：偏微观的结构' },
-  { v: 3, t: '标准', hint: 'k=3：社区共识的默认尺度（AxisJu/ByteBard 均用 3）' },
-  { v: 5, t: '主要', hint: 'k=5：只看主要摆动点，结构更干净但更滞后' },
+  { v: 1, t: 'brooks:scales.1.t', hint: 'brooks:scales.1.hint' },
+  { v: 2, t: 'brooks:scales.2.t', hint: 'brooks:scales.2.hint' },
+  { v: 3, t: 'brooks:scales.3.t', hint: 'brooks:scales.3.hint' },
+  { v: 5, t: 'brooks:scales.5.t', hint: 'brooks:scales.5.hint' },
 ]
 
 const LIMITS = [300, 500, 1000]
@@ -55,13 +58,13 @@ const DEFAULT_DISPLAY: BrooksDisplay = {
   regime: true,
 }
 
-const TOGGLES: { key: keyof BrooksDisplay; label: string }[] = [
-  { key: 'regime', label: '状态条' },
-  { key: 'ema', label: 'EMA20' },
-  { key: 'legs', label: '腿连线' },
-  { key: 'swings', label: '摆动标签' },
-  { key: 'io', label: '内/外包' },
-  { key: 'signals', label: '信号' },
+const TOGGLES: { key: keyof BrooksDisplay; labelKey: string }[] = [
+  { key: 'regime', labelKey: 'brooks:toggles.regime' },
+  { key: 'ema', labelKey: 'brooks:toggles.ema' },
+  { key: 'legs', labelKey: 'brooks:toggles.legs' },
+  { key: 'swings', labelKey: 'brooks:toggles.swings' },
+  { key: 'io', labelKey: 'brooks:toggles.io' },
+  { key: 'signals', labelKey: 'brooks:toggles.signals' },
 ]
 
 type SignalFilter = 'all' | 'bull' | 'bear'
@@ -71,6 +74,8 @@ function sigDirClass(s: BrooksSignal): string {
 }
 
 export default function BrooksPage(): JSX.Element {
+  const { t, i18n } = useTranslation()
+  const locale: SharedLocale = currentLocale()
   const [searchParams, setSearchParams] = useSearchParams()
   const { order, subscribeKline, upColor } = useMarket()
   const { status: aiStatus, askAi, showRobot } = useAi()
@@ -92,7 +97,11 @@ export default function BrooksPage(): JSX.Element {
   const chartRef = useRef<BrooksChartHandle | null>(null)
   const fs = useFullscreen<HTMLElement>()
 
-  const analysis = useMemo(() => (bars.length > 0 ? analyzeBrooks(bars, { swingK }) : null), [bars, swingK])
+  // 文案（label/reason/summary 等）由 shared 引擎按 locale 产出，语言切换时连同重算
+  const analysis = useMemo(
+    () => (bars.length > 0 ? analyzeBrooks(bars, { swingK, locale }) : null),
+    [bars, swingK, locale],
+  )
 
   const toggleDisplay = (key: keyof BrooksDisplay): void => {
     setDisplay((prev) => {
@@ -120,7 +129,7 @@ export default function BrooksPage(): JSX.Element {
       })
       .catch((e: Error) => {
         if (!cancelled) {
-          setError(e.message || 'K 线加载失败')
+          setError(e.message || i18n.t('brooks:loadFailed'))
           setLoading(false)
         }
       })
@@ -161,30 +170,33 @@ export default function BrooksPage(): JSX.Element {
     setSearchParams({ symbol, interval: v })
   }
 
-  /** 把当前结构摘要打包发给 AI 助手，用 Brooks 框架解读（AI 需已配置） */
+  /** 把当前结构摘要打包发给 AI 助手，用 Brooks 框架解读（AI 需已配置）；提示词跟随 UI 语言 */
   const askAiAnalysis = (): void => {
     if (!analysis || !summary) return
-    const dirText = (d: string): string => (d === 'bull' ? '多头' : d === 'bear' ? '空头' : '中性')
+    const dirText = (d: string): string => t(`brooks:aiPrompt.dir.${d === 'bull' ? 'bull' : d === 'bear' ? 'bear' : 'neutral'}`)
     const recent = analysis.signals
       .slice(-8)
       .reverse()
       .map((s, i) => `${i + 1}. [${s.label} · ${dirText(s.direction)}] ${s.reason}`)
       .join('\n')
     const lastLegText = summary.lastLeg
-      ? `- 最近一腿：${summary.lastLeg.direction === 'up' ? '上' : '下'} ${summary.lastLeg.barCount} 根（趋势棒 ${summary.lastLeg.trendBarCount}${
-          summary.lastLeg.retracementOfPrev !== undefined
-            ? `，幅度为前腿 ${(summary.lastLeg.retracementOfPrev * 100).toFixed(0)}%`
-            : ''
-        }）\n`
+      ? t('brooks:aiPrompt.lastLegLine', {
+          dir: t(`brooks:aiPrompt.legDir.${summary.lastLeg.direction === 'up' ? 'up' : 'down'}`),
+          count: summary.lastLeg.barCount,
+          trend: summary.lastLeg.trendBarCount,
+          retracement: summary.lastLeg.retracementOfPrev !== undefined
+            ? t('brooks:aiPrompt.retracement', { pct: (summary.lastLeg.retracementOfPrev * 100).toFixed(0) })
+            : '',
+        }) + '\n'
       : ''
     const prompt = [
-      `请用 Al Brooks《价格行为交易》三部曲的框架解读以下结构数据（来自内置 Brooks 结构引擎：${symbol} ${interval}，${summary.barCount} 根收盘K线，摆动尺度 k=${analysis.options.swingK}）：`,
-      `- 市场状态：${summary.regimeText}`,
-      `- Always In：${dirText(summary.alwaysIn)}（${summary.alwaysInReason}）`,
-      `- 结构判定：${summary.trendStructure}；摆动序列（旧→新）：${summary.swingSequence}`,
-      lastLegText + `- 最近信号（新→旧）：\n${recent || '无'}`,
+      t('brooks:aiPrompt.header', { symbol, interval, barCount: summary.barCount, swingK: analysis.options.swingK }),
+      `- ${t('brooks:aiPrompt.regime')}：${summary.regimeText}`,
+      t('brooks:aiPrompt.alwaysInLine', { dir: dirText(summary.alwaysIn), reason: summary.alwaysInReason }),
+      t('brooks:aiPrompt.structureLine', { verdict: summary.trendStructure, sequence: summary.swingSequence }),
+      lastLegText + `- ${t('brooks:aiPrompt.recentSignals')}\n${recent || t('brooks:aiPrompt.none')}`,
       '',
-      '解读要点：1) 当前结构的含义与多空力量对比；2) 信号之间的印证与矛盾；3) 按 Brooks 概率先验（区间突破 80% 失败、H2 二次进场 ≈60%、趋势线破位 50/50）区分高质量信号与大概率只是回调的信号；4) 当前状态下最需要警惕的陷阱。可调用工具补充实时行情。',
+      t('brooks:aiPrompt.requirements'),
     ].join('\n')
     showRobot()
     askAi(prompt)
@@ -214,7 +226,7 @@ export default function BrooksPage(): JSX.Element {
             <input
               value={symbolInput}
               onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
-              placeholder="交易对，如 BTCUSDT"
+              placeholder={t('brooks:symbolPlaceholder')}
               list="brooks-symbol-list"
               spellCheck={false}
             />
@@ -224,48 +236,48 @@ export default function BrooksPage(): JSX.Element {
               ))}
             </datalist>
             <button className="btn btn-primary btn-sm" type="submit">
-              分析
+              {t('brooks:analyze')}
             </button>
           </form>
           <div className="interval-group" role="tablist">
             {INTERVALS.map((iv) => (
               <button key={iv.v} className={iv.v === interval ? 'on' : ''} onClick={() => applyInterval(iv.v)}>
-                {iv.t}
+                {t(iv.t)}
               </button>
             ))}
           </div>
-          <div className="interval-group" role="group" aria-label="摆动尺度">
+          <div className="interval-group" role="group" aria-label={t('brooks:swingScale')}>
             {SCALES.map((s) => (
               <button
                 key={s.v}
-                title={s.hint}
+                title={t(s.hint)}
                 className={s.v === swingK ? 'on' : ''}
                 onClick={() => setSwingK(s.v)}
               >
-                {s.t}·{s.v}
+                {t(s.t)}·{s.v}
               </button>
             ))}
           </div>
-          <div className="interval-group" role="group" aria-label="K线数量">
+          <div className="interval-group" role="group" aria-label={t('brooks:barCount')}>
             {LIMITS.map((n) => (
               <button key={n} className={n === limit ? 'on' : ''} onClick={() => setLimit(n)}>
-                {n}根
+                {t('brooks:barsUnit', { count: n })}
               </button>
             ))}
           </div>
           <div className="brooks-toggles">
-            {TOGGLES.map((t) => (
+            {TOGGLES.map((tg) => (
               <button
-                key={t.key}
-                className={`brooks-toggle${display[t.key] ? ' on' : ''}`}
-                onClick={() => toggleDisplay(t.key)}
+                key={tg.key}
+                className={`brooks-toggle${display[tg.key] ? ' on' : ''}`}
+                onClick={() => toggleDisplay(tg.key)}
               >
-                {t.label}
+                {t(tg.labelKey)}
               </button>
             ))}
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowHelp(true)}>
-            ? 图例与规则
+            {t('brooks:helpButton')}
           </button>
         </div>
       </section>
@@ -275,37 +287,40 @@ export default function BrooksPage(): JSX.Element {
           <div className="panel-head">
             <h2 className="panel-title">
               <span className="title-glyph teal">▮</span>
-              {symbol.replace('USDT', '')}/USDT · 价格行为结构 · {INTERVALS.find((i) => i.v === interval)?.t}
-              {analysis ? `（尺度 k=${analysis.options.swingK}）` : ''}
+              {t('brooks:title', {
+                base: symbol.replace('USDT', ''),
+                interval: t(INTERVALS.find((i) => i.v === interval)?.t ?? 'brooks:interval.1h'),
+              })}
+              {analysis ? t('brooks:titleScale', { k: analysis.options.swingK }) : ''}
             </h2>
             <div className="panel-head-tools">
-              <span className="brooks-note">只识别结构 · 不预测涨跌 · 仅收盘K线计入信号</span>
+              <span className="brooks-note">{t('brooks:note')}</span>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={askAiAnalysis}
                 disabled={!aiStatus.configured || !analysis}
-                title={aiStatus.configured ? '把当前结构摘要发给 AI 助手，按 Brooks 框架解读' : 'AI 未配置（需超管在「AI 设置」中完成配置）'}
+                title={aiStatus.configured ? t('brooks:ai.hintOk') : t('brooks:ai.hintNo')}
               >
-                🤖 AI 解读
+                {t('brooks:ai.button')}
               </button>
               <FullscreenButton
                 on={fs.isFullscreen}
                 onClick={fs.toggle}
-                label="全屏查看价格行为结构（放大后自动显示更多标注）"
+                label={t('brooks:fullscreen')}
               />
               <button className="btn btn-ghost btn-sm" onClick={() => setReload((n) => n + 1)}>
-                刷新
+                {t('brooks:refresh')}
               </button>
             </div>
           </div>
           <div className="brooks-chart-hold">
             <BrooksChart ref={chartRef} bars={bars} analysis={analysis} display={display} upColor={upColor} />
-            {loading && <div className="chart-mask">加载 {symbol} K 线…</div>}
+            {loading && <div className="chart-mask">{t('brooks:loading', { symbol })}</div>}
             {error && (
               <div className="chart-mask error">
                 <span>{error}</span>
                 <button className="btn btn-ghost btn-sm" onClick={() => setReload((n) => n + 1)}>
-                  重试
+                  {t('brooks:retry')}
                 </button>
               </div>
             )}
@@ -316,74 +331,78 @@ export default function BrooksPage(): JSX.Element {
           <section className="panel brooks-summary-panel">
             <div className="panel-head">
               <h3 className="panel-title">
-                <span className="title-glyph amber">◆</span>当前结构
+                <span className="title-glyph amber">◆</span>{t('brooks:summary.title')}
               </h3>
             </div>
             {summary ? (
               <div className="brooks-summary">
                 <div className="brooks-kv">
-                  <span className="k"><BrooksTerm term="市场状态">市场状态</BrooksTerm></span>
+                  <span className="k"><BrooksTerm term="市场状态">{t('brooks:summary.marketState')}</BrooksTerm></span>
                   <span className={`brooks-chip regime-${summary.regime}`}>{summary.regimeText}</span>
                 </div>
                 <div className="brooks-kv">
                   <span className="k"><BrooksTerm term="alwaysIn">Always In</BrooksTerm></span>
                   <span className={`brooks-chip dir-${summary.alwaysIn}`}>
-                    {summary.alwaysIn === 'bull' ? '多头' : summary.alwaysIn === 'bear' ? '空头' : '方向不明'}
+                    {t(`brooks:summary.alwaysIn.${summary.alwaysIn === 'bull' ? 'bull' : summary.alwaysIn === 'bear' ? 'bear' : 'none'}`)}
                   </span>
                 </div>
-                <div className="brooks-sub">{summary.alwaysInReason}（自第 {summary.alwaysInSince + 1} 根）</div>
+                <div className="brooks-sub">{summary.alwaysInReason}{t('brooks:summary.sinceBar', { n: summary.alwaysInSince + 1 })}</div>
                 <div className="brooks-kv">
-                  <span className="k"><BrooksTerm term="结构判定">结构判定</BrooksTerm></span>
+                  <span className="k"><BrooksTerm term="结构判定">{t('brooks:summary.structureVerdict')}</BrooksTerm></span>
                   <span className="v">{summary.trendStructure}</span>
                 </div>
                 <div className="brooks-kv">
-                  <span className="k"><BrooksTerm term="摆动序列">摆动序列</BrooksTerm></span>
+                  <span className="k"><BrooksTerm term="摆动序列">{t('brooks:summary.swingSequence')}</BrooksTerm></span>
                   <span className="v mono">{summary.swingSequence}</span>
                 </div>
                 {lastLeg && (
                   <div className="brooks-kv">
-                    <span className="k"><BrooksTerm term="最近一腿">最近一腿</BrooksTerm></span>
+                    <span className="k"><BrooksTerm term="最近一腿">{t('brooks:summary.lastLeg')}</BrooksTerm></span>
                     <span className="v">
-                      {lastLeg.direction === 'up' ? '↑' : '↓'} {lastLeg.barCount} 根 · 趋势棒 {lastLeg.trendBarCount}
+                      {t('brooks:summary.lastLegLine', {
+                        dir: lastLeg.direction === 'up' ? '↑' : '↓',
+                        count: lastLeg.barCount,
+                        trend: lastLeg.trendBarCount,
+                      })}
                       {lastLeg.retracementOfPrev !== undefined
-                        ? ` · 相对前腿 ${(lastLeg.retracementOfPrev * 100).toFixed(0)}%`
+                        ? t('brooks:summary.lastLegRetrace', { pct: (lastLeg.retracementOfPrev * 100).toFixed(0) })
                         : ''}
                     </span>
                   </div>
                 )}
                 <div className="brooks-kv">
-                  <span className="k">信号统计</span>
+                  <span className="k">{t('brooks:summary.signalStat')}</span>
                   <span className="v">
-                    共 {signals.length} 条 · 多头 {bullCount} · 空头 {bearCount}
+                    {t('brooks:summary.signalCount', { total: signals.length, bull: bullCount, bear: bearCount })}
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="brooks-sub">加载中或K线不足（至少需要 30 根收盘K线）…</div>
+              <div className="brooks-sub">{t('brooks:summary.empty')}</div>
             )}
           </section>
 
           <section className="panel brooks-signals-panel">
             <div className="panel-head">
               <h3 className="panel-title">
-                <span className="title-glyph amber">◆</span>研究信号（新→旧）
+                <span className="title-glyph amber">◆</span>{t('brooks:signals.title')}
               </h3>
               <div className="panel-head-tools brooks-filter">
                 {(['all', 'bull', 'bear'] as SignalFilter[]).map((f) => (
                   <button key={f} className={f === filter ? 'on' : ''} onClick={() => setFilter(f)}>
-                    {f === 'all' ? '全部' : f === 'bull' ? '多头' : '空头'}
+                    {t(`brooks:signals.filter.${f}`)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="brooks-signal-list">
-              {visibleSignals.length === 0 && <div className="brooks-sub">暂无信号（该周期结构未触发规则）</div>}
+              {visibleSignals.length === 0 && <div className="brooks-sub">{t('brooks:signals.empty')}</div>}
               {visibleSignals.map((s, idx) => (
                 <button
                   key={`${s.kind}-${s.index}-${idx}`}
                   className={`brooks-signal ${sigDirClass(s)}`}
                   onClick={() => chartRef.current?.scrollTo(s.index)}
-                  title="点击定位到图上对应K线"
+                  title={t('brooks:signals.locate')}
                 >
                   <div className="brooks-signal-head">
                     <span className={`brooks-sig-chip ${sigDirClass(s)} strength-${s.strength}`} title={termForSignalKind(s.label, s.kind)}>{s.label}</span>
@@ -392,12 +411,12 @@ export default function BrooksPage(): JSX.Element {
                   </div>
                   <div className="brooks-signal-reason">{s.reason}</div>
                   <div className="brooks-signal-concept">{s.concept}</div>
-                  {s.empiricalNote && <div className="brooks-signal-prior" title="Brooks 在其美股股指期货市场的经验统计，非本品种验证胜率">经验统计：{s.empiricalNote}</div>}
+                  {s.empiricalNote && <div className="brooks-signal-prior" title={t('brooks:signals.empiricalTitle')}>{t('brooks:signals.empirical', { note: s.empiricalNote })}</div>}
                   {s.ref && (s.ref.entry !== undefined || s.ref.stop !== undefined || s.ref.target !== undefined) && (
                     <div className="brooks-signal-ref mono">
-                      {s.ref.entry !== undefined && <span>突破 {s.ref.entry.toPrecision(6)}</span>}
-                      {s.ref.stop !== undefined && <span>止损 {s.ref.stop.toPrecision(6)}</span>}
-                      {s.ref.target !== undefined && <span>目标 {s.ref.target.toPrecision(6)}</span>}
+                      {s.ref.entry !== undefined && <span>{t('brooks:signals.ref.entry', { v: s.ref.entry.toPrecision(6) })}</span>}
+                      {s.ref.stop !== undefined && <span>{t('brooks:signals.ref.stop', { v: s.ref.stop.toPrecision(6) })}</span>}
+                      {s.ref.target !== undefined && <span>{t('brooks:signals.ref.target', { v: s.ref.target.toPrecision(6) })}</span>}
                     </div>
                   )}
                 </button>
@@ -416,73 +435,37 @@ export default function BrooksPage(): JSX.Element {
         >
           <div className="modal brooks-help">
             <div className="modal-head">
-              <h3>图例与规则速查（Al Brooks 价格行为）</h3>
+              <h3>{t('brooks:help.title')}</h3>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowHelp(false)}>
-                关闭
+                {t('brooks:help.close')}
               </button>
             </div>
             <div className="modal-body">
-              <h4>结构标注</h4>
+              <h4>{t('brooks:help.structureTitle')}</h4>
               <ul>
-                <li>
-                  <b>HH / LH</b>（K线上方）：更高高顶 / 更低高顶；<b>HL / LL</b>（K线下方）：更高低底 / 更低低底。
-                  HH+HL 交替 = 多头结构，LH+LL 交替 = 空头结构。
-                </li>
-                <li>
-                  <b>i / O / ii / oo / ioi</b>：内包线 / 外包线 / 连续内包 / 连续外包 / 内包-外包-内包。
-                  内包 = 突破模式（观望），ii 是日内最可靠的突破形态之一。
-                </li>
-                <li>
-                  <b>顶部状态条</b>：绿=多头通道（亮绿=冲刺）、红=空头通道（亮红=冲刺）、琥珀=交易区间、紫=紧凑区间/铁丝网。
-                </li>
-                <li>
-                  <b>EMA20</b>（青色虚线）：Brooks 判定趋势的基准——20 根收盘 ≥70% 在一侧 = 趋势，否则震荡。
-                </li>
+                {(t('brooks:help.structure', { returnObjects: true }) as string[]).map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
               </ul>
-              <h4>信号</h4>
+              <h4>{t('brooks:help.signalTitle')}</h4>
               <ul>
-                <li>
-                  <b>H1~H4 / L1~L4</b>：多头/空头回调中的进场计数。H2/L2 = 二次进场，是 Brooks 体系中胜率最高的结构（先验 ≈60%）。
-                </li>
-                <li>
-                  <b>楔顶/楔底</b>：三推反转（跨度 ≤40 根），第三推动能衰减时可靠性更高。
-                </li>
-                <li>
-                  <b>双顶/双底</b>：两个摆动点近似等高/等低（容差 0.3×ATR，间隔 ≥3 根）。
-                </li>
-                <li>
-                  <b>破线↓/↑（TLB）</b>：趋势线被收盘穿越——只是警戒：约 50% 概率趋势恢复、50% 走向反转。
-                </li>
-                <li>
-                  <b>MTR</b>：主要趋势反转 = 趋势线突破 + 测试 + 反转信号三步齐备。
-                </li>
-                <li>
-                  <b>区间破↑/↓</b>：交易区间突破。先验：80% 的区间突破尝试失败，首次突破仅约 50% 存活——只作研究关注。
-                </li>
-                <li>
-                  <b>冲刺↑/↓</b>：连续 ≥5 根同向趋势棒（spike），spike and channel 的起点。
-                </li>
+                {(t('brooks:help.signalList', { returnObjects: true }) as string[]).map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
               </ul>
-              <h4>AI 联动</h4>
+              <h4>{t('brooks:help.aiTitle')}</h4>
               <ul>
-                <li>
-                  <b>🤖 AI 解读</b>：把当前结构摘要一键发给 AI 助手，按 Brooks 框架解读（需超管配置 AI）。
-                </li>
-                <li>
-                  <b>/brooks 币 周期</b>：AI 聊天里的斜杠命令（如 <code>/brooks BTC 1h</code>），直接输
-                  出结构识别结果；自然语言问「BTC 现在什么结构」时 AI 也会自动调用结构引擎工具。
-                </li>
+                {(t('brooks:help.aiList', { returnObjects: true }) as string[]).map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
               </ul>
-              <h4>摆动尺度 k</h4>
+              <h4>{t('brooks:help.scaleTitle')}</h4>
               <ul>
-                <li>
-                  摆动点需右侧 k 根K线确认（信号天然滞后 k 根，且不重绘）。k=1 微观（噪音多）→ k=3 标准（推荐）→ k=5 主要摆动。
-                  Brooks 本人强调结构是分形的：换尺度看同一份K线，本身就是练习。
-                </li>
+                {(t('brooks:help.scaleList', { returnObjects: true }) as string[]).map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
               </ul>
-              <p className="brooks-disclaimer">
-                本工具把 Brooks 三部曲的K线结构规则量化为确定性代码，仅供学习复盘研究；信号是结构标注而非交易指令，不构成任何投资建议。
-              </p>
+              <p className="brooks-disclaimer">{t('brooks:help.disclaimer')}</p>
             </div>
           </div>
         </div>

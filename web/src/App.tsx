@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import ErrorBoundary from './components/ErrorBoundary'
 import Header from './components/Header'
 import TickerTape from './components/TickerTape'
@@ -27,8 +28,9 @@ const AiAssistant = lazy(() => import('./ai/AiAssistant'))
 
 /** 页面级懒加载兜底（图表/研究台首挂拉 chunk 的间隙） */
 function PageFallback(): JSX.Element {
+  const { t } = useTranslation()
   return (
-    <div className="page-loading" role="status" aria-label="页面加载中">
+    <div className="page-loading" role="status" aria-label={t('app.pageLoading')}>
       <span className="page-loading-bar" />
     </div>
   )
@@ -36,6 +38,7 @@ function PageFallback(): JSX.Element {
 
 /** 登录后才挂载行情应用（WebSocket / 行情接口都要求会话） */
 function AuthedApp(): JSX.Element {
+  const { t } = useTranslation()
   return (
     <MarketProvider>
       <AiProvider>
@@ -91,7 +94,7 @@ function AuthedApp(): JSX.Element {
                   <Suspense
                     fallback={
                       <div className="auth-wrap">
-                        <div className="auth-loading">正在加载管理后台…</div>
+                        <div className="auth-loading">{t('app.loadingAdmin')}</div>
                       </div>
                     }
                   >
@@ -103,9 +106,7 @@ function AuthedApp(): JSX.Element {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
-        <footer className="footer">
-          数据来源：Binance 公开行情接口（REST + WebSocket，1s 推送） · 本工具仅供学习研究，不构成投资建议
-        </footer>
+        <footer className="footer">{t('footer.disclaimer')}</footer>
         <Toasts />
         <Suspense fallback={null}>
           <AiAssistant />
@@ -118,6 +119,7 @@ function AuthedApp(): JSX.Element {
 function Shell(): JSX.Element {
   const { user, loading } = useAuth()
   const location = useLocation()
+  const { t } = useTranslation()
   const dev = location.pathname === '/research' && researchUiMode(location.search) === 'dev'
   const workbench = <ErrorBoundary><Suspense fallback={<PageFallback />}><WorkbenchPage key={user?.username ?? 'guest'} /></Suspense></ErrorBoundary>
 
@@ -131,7 +133,7 @@ function Shell(): JSX.Element {
       </div>
       {loading ? (
         <div className="auth-wrap">
-          <div className="auth-loading">正在验证登录状态…</div>
+          <div className="auth-loading">{t('app.verifying')}</div>
         </div>
       ) : dev ? (
         user ? <MarketProvider>{workbench}<Toasts /></MarketProvider> : workbench

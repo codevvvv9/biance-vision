@@ -1542,6 +1542,41 @@
   background: var(--line);
 }
 
+/* ---------- 语言切换器（触发按钮复用 .icon-btn，面板对齐用户菜单范式） ---------- */
+.lang-menu {
+  position: relative;
+}
+.lang-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 132px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(10, 16, 30, 0.97);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  z-index: 80;
+  animation: menu-in 0.16s ease;
+}
+.lang-item.on {
+  color: var(--cyan);
+}
+.lang-item .menu-hint {
+  color: var(--cyan);
+}
+
+/* 登录/注册页角落挂载点（.auth-wrap 无定位上下文，直接用 fixed） */
+.auth-lang {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 5;
+}
+
 /* ---------- MiniMarkdown 通用排版（知识证据 / 助手消息 / 管理端预览共用） ----------
    管线为 react-markdown（gfm + breaks + math/katex），选择器按标准元素书写；
    katex 输出 MathML+HTML 标记，颜色继承 currentColor，暗色主题无需覆写。 */
@@ -1662,3 +1697,55 @@
     animation: none;
   }
 }
+
+/* ---- 消息级翻译开关（X 式「展示翻译」；MessageTranslate，两个研究终端 + AI 助手共用） ---- */
+.msg-translate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.msg-translate-btn:hover { color: var(--cyan); }
+.msg-translate-btn.is-loading { cursor: default; color: var(--text-3); }
+.msg-translate-btn.is-loading:hover { color: var(--text-3); }
+.msg-translate-btn.is-error { color: var(--down); }
+.msg-translate-btn.is-error:hover { color: var(--down); }
+
+.msg-translate-block {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-2);
+}
+.msg-translate-text {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg-translate-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.msg-translate-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-size: 11px;
+  cursor: pointer;
+}
+.msg-translate-toggle:hover { color: var(--cyan); text-decoration: underline; }

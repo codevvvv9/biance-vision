@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Chart, DeepPartial, Styles } from 'klinecharts'
 import { dispose, init, registerStyles } from 'klinecharts'
+import { useTranslation } from 'react-i18next'
 import FullscreenButton from './FullscreenButton'
 import { api } from '../api'
 import { useFullscreen } from '../hooks/useFullscreen'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice, precisionFor } from '../utils'
+import { klinechartsLocale, default as i18n } from '../i18n'
 import type { UpColorMode } from '../utils'
 import type { KlineBar } from '../types'
 
@@ -15,12 +17,12 @@ interface IntervalOption {
 }
 
 const INTERVALS: IntervalOption[] = [
-  { v: '1m', t: '1分' },
-  { v: '5m', t: '5分' },
-  { v: '15m', t: '15分' },
-  { v: '1h', t: '1时' },
-  { v: '4h', t: '4时' },
-  { v: '1d', t: '日线' },
+  { v: '1m', t: 'dashboard:kline.intervals.1m' },
+  { v: '5m', t: 'dashboard:kline.intervals.5m' },
+  { v: '15m', t: 'dashboard:kline.intervals.15m' },
+  { v: '1h', t: 'dashboard:kline.intervals.1h' },
+  { v: '4h', t: 'dashboard:kline.intervals.4h' },
+  { v: '1d', t: 'dashboard:kline.intervals.1d' },
 ]
 
 let stylesRegistered = false
@@ -108,6 +110,7 @@ interface Props {
 
 export default function KlineChart({ symbol, interval, onIntervalChange }: Props): JSX.Element {
   const { tickers, subscribeKline, upColor } = useMarket()
+  const { t, i18n } = useTranslation()
   const boxRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<Chart | null>(null)
   const lastBarRef = useRef(0)
@@ -120,7 +123,7 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
     ensureStyles()
     const el = boxRef.current
     if (!el) return undefined
-    const chart = init(el, { locale: 'zh-CN', styles: 'bv-dark' })
+    const chart = init(el, { locale: klinechartsLocale(), styles: 'bv-dark' })
     chartRef.current = chart
     if (chart) {
       chart.createIndicator('MA', false, { id: 'candle_pane' })
@@ -143,6 +146,11 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
   useEffect(() => {
     chartRef.current?.setStyles(upDownOverrides(upColor))
   }, [upColor])
+
+  // UI 语言切换时同步图表内置文案（klinecharts 支持 setLocale 热切换）
+  useEffect(() => {
+    chartRef.current?.setLocale(klinechartsLocale())
+  }, [i18n.language])
 
   useEffect(() => {
     let cancelled = false
@@ -171,7 +179,7 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
       })
       .catch((e: Error) => {
         if (!cancelled) {
-          setError(e.message || 'K 线加载失败')
+          setError(e.message || i18n.t('dashboard:kline.loadFailed'))
           setLoading(false)
         }
       })
@@ -196,8 +204,8 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
     }
   }, [symbol, interval, subscribeKline, reload])
 
-  const t = tickers[symbol]
-  const up = (t?.changePct ?? 0) >= 0
+  const ticker = tickers[symbol]
+  const up = (ticker?.changePct ?? 0) >= 0
 
   return (
     <section className="panel chart-panel" ref={fs.ref}>
@@ -207,10 +215,10 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
             {symbol.replace('USDT', '')}
             <em className="pair-quote">/USDT</em>
           </h2>
-          {t && (
+          {ticker && (
             <>
-              <span className="mono price-lg">{fmtPrice(t.last)}</span>
-              <span className={`chg ${up ? 'up' : 'down'}`}>{fmtPct(t.changePct)}</span>
+              <span className="mono price-lg">{fmtPrice(ticker.last)}</span>
+              <span className={`chg ${up ? 'up' : 'down'}`}>{fmtPct(ticker.changePct)}</span>
             </>
           )}
         </div>
@@ -222,20 +230,20 @@ export default function KlineChart({ symbol, interval, onIntervalChange }: Props
                 className={iv.v === interval ? 'on' : ''}
                 onClick={() => onIntervalChange?.(iv.v)}
               >
-                {iv.t}
+                {t(iv.t)}
               </button>
             ))}
           </div>
-          <FullscreenButton on={fs.isFullscreen} onClick={fs.toggle} label="全屏显示 K 线" />
+          <FullscreenButton on={fs.isFullscreen} onClick={fs.toggle} label={t('dashboard:kline.fullscreen')} />
         </div>
       </div>
       <div className="chart-box" ref={boxRef}>
-        {loading && <div className="chart-mask">加载 {symbol} K 线…</div>}
+        {loading && <div className="chart-mask">{t('dashboard:kline.loading', { symbol })}</div>}
         {error && (
           <div className="chart-mask error">
             <span>{error}</span>
             <button className="btn btn-ghost btn-sm" onClick={() => setReload((n) => n + 1)}>
-              重试
+              {t('dashboard:kline.retry')}
             </button>
           </div>
         )}

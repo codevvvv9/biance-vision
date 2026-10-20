@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import FullscreenButton from './FullscreenButton'
 import { useFullscreen } from '../hooks/useFullscreen'
 import { useMarket } from '../market/MarketContext'
@@ -25,13 +26,13 @@ function PriceCell({ value }: { value: number }): JSX.Element {
   return <span className={`mono price ${flash}`}>{fmtPrice(value)}</span>
 }
 
-const COLUMNS: { key: SortKey; label: string; className?: string }[] = [
-  { key: 'symbol', label: '交易对', className: 'col-sym' },
-  { key: 'last', label: '最新价' },
-  { key: 'changePct', label: '24h涨跌幅' },
-  { key: 'high', label: '24h最高' },
-  { key: 'low', label: '24h最低' },
-  { key: 'quoteVolume', label: '24h成交额' },
+const COLUMNS: { key: SortKey; labelKey: string; className?: string }[] = [
+  { key: 'symbol', labelKey: 'dashboard:table.col.symbol', className: 'col-sym' },
+  { key: 'last', labelKey: 'dashboard:table.col.last' },
+  { key: 'changePct', labelKey: 'dashboard:table.col.changePct' },
+  { key: 'high', labelKey: 'dashboard:table.col.high' },
+  { key: 'low', labelKey: 'dashboard:table.col.low' },
+  { key: 'quoteVolume', labelKey: 'dashboard:table.col.quoteVolume' },
 ]
 
 interface Props {
@@ -41,6 +42,7 @@ interface Props {
 
 export default function MarketTable({ selected, onSelect }: Props): JSX.Element {
   const { tickers, order, status } = useMarket()
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortState>({ key: 'quoteVolume', dir: -1 })
   const fs = useFullscreen<HTMLElement>()
@@ -68,7 +70,7 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
       <div className="panel-head">
         <h2 className="panel-title">
           <i className="title-glyph" />
-          实时行情
+          {t('dashboard:table.title')}
           <span className="title-badge">{list.length}</span>
         </h2>
         <div className="panel-head-tools">
@@ -80,11 +82,11 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索交易对，如 BTC"
+              placeholder={t('dashboard:table.searchPlaceholder')}
               spellCheck={false}
             />
           </div>
-          <FullscreenButton on={fs.isFullscreen} onClick={fs.toggle} label="全屏显示行情" />
+          <FullscreenButton on={fs.isFullscreen} onClick={fs.toggle} label={t('dashboard:table.fullscreen')} />
         </div>
       </div>
 
@@ -98,7 +100,7 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
                   className={`${c.className ?? ''} ${sort.key === c.key ? 'sorted' : ''}`}
                   onClick={() => toggleSort(c.key)}
                 >
-                  {c.label}
+                  {t(c.labelKey)}
                   {sort.key === c.key && <i className="sort-arrow">{sort.dir === 1 ? '▲' : '▼'}</i>}
                 </th>
               ))}
@@ -128,7 +130,7 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
             {list.length === 0 && (
               <tr className="empty-row">
                 <td colSpan={COLUMNS.length}>
-                  {status === 'connected' ? '没有匹配的交易对' : '正在连接币安行情流…'}
+                  {status === 'connected' ? t('dashboard:table.emptyMatch') : t('dashboard:table.connecting')}
                 </td>
               </tr>
             )}
@@ -136,7 +138,7 @@ export default function MarketTable({ selected, onSelect }: Props): JSX.Element 
         </table>
       </div>
 
-      <div className="panel-foot muted">点击行切换 K 线 · 数据每秒推送</div>
+      <div className="panel-foot muted">{t('dashboard:table.foot')}</div>
     </section>
   )
 }

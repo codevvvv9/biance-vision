@@ -1,25 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
 import { useAi } from '../ai/AiContext'
 import AiSettingsModal from '../ai/AiSettingsModal'
 import { ADMIN_MENU } from '../admin/menu'
 import { fmtPct, fmtPrice } from '../utils'
+import { currentLocale } from '../i18n'
 import { notificationState, requestNotifications } from '../notify'
 import type { NotificationPermissionState } from '../notify'
+import LanguageSwitcher from './LanguageSwitcher'
 
 interface Tab {
   to: string
-  label: string
+  labelKey: string
   end?: boolean
 }
 
 const TABS: Tab[] = [
-  { to: '/', label: '大盘总览', end: true },
+  { to: '/', labelKey: 'nav.overview', end: true },
   // 异动榜/预警中心入口暂时隐藏（聚焦研究 agent 三场景建议）；路由保留，直达链接仍可用
-  { to: '/brooks', label: '价格行为' },
-  { to: '/research', label: '研究终端' },
+  { to: '/brooks', labelKey: 'nav.priceAction' },
+  { to: '/research', labelKey: 'nav.research' },
 ]
 
 const QUICK = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
@@ -116,10 +119,10 @@ function QuickQuote({ symbol }: { symbol: string }): JSX.Element {
   )
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  connected: '实时连接',
-  connecting: '连接中',
-  offline: '已断线 · 重连中',
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  connected: 'status.connected',
+  connecting: 'status.connecting',
+  offline: 'status.offline',
 }
 
 function LogoutIcon(): JSX.Element {
@@ -137,6 +140,7 @@ export default function Header(): JSX.Element {
   const ai = useAi()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [perm, setPerm] = useState<NotificationPermissionState>(notificationState())
   const [now, setNow] = useState<Date>(() => new Date())
   const [menuOpen, setMenuOpen] = useState(false)
@@ -166,7 +170,8 @@ export default function Header(): JSX.Element {
   }, [menuOpen])
 
   const bellLabel =
-    perm === 'granted' ? '系统通知已开启' : perm === 'default' ? '开启系统通知' : '通知被浏览器拦截'
+    perm === 'granted' ? t('header.notifyOn') : perm === 'default' ? t('header.notifyEnable') : t('header.notifyBlocked')
+  const statusLabel = STATUS_LABEL_KEYS[status] ? t(STATUS_LABEL_KEYS[status]) : status
 
   return (
     <header className="header">
@@ -174,14 +179,14 @@ export default function Header(): JSX.Element {
         <Logo />
         <div className="brand-text">
           <span className="brand-name">BIANCE VISION</span>
-          <span className="brand-sub">币安大盘监控终端</span>
+          <span className="brand-sub">{t('brand.sub')}</span>
         </div>
       </div>
 
       <nav className="nav">
-        {TABS.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? 'on' : '')}>
-            {t.label}
+        {TABS.map((tab) => (
+          <NavLink key={tab.to} to={tab.to} end={tab.end} className={({ isActive }) => (isActive ? 'on' : '')}>
+            {t(tab.labelKey)}
           </NavLink>
         ))}
       </nav>
@@ -192,9 +197,9 @@ export default function Header(): JSX.Element {
             <QuickQuote key={s} symbol={s} />
           ))}
         </div>
-        <span className={`conn ${status}`} title={STATUS_LABEL[status] ?? status}>
+        <span className={`conn ${status}`} title={statusLabel}>
           <i className="conn-dot" />
-          {STATUS_LABEL[status] ?? status}
+          {statusLabel}
         </span>
         <button
           className={`icon-btn ${perm === 'granted' ? 'active' : ''}`}
@@ -207,23 +212,24 @@ export default function Header(): JSX.Element {
         </button>
         <button
           className={`icon-btn ${soundOn ? 'active' : ''}`}
-          title={soundOn ? '提示音：开' : '提示音：关'}
+          title={soundOn ? t('header.soundOn') : t('header.soundOff')}
           onClick={toggleSound}
         >
           <SoundIcon off={!soundOn} />
         </button>
+        <LanguageSwitcher />
         {user && (
           <div className={`user-menu ${menuOpen ? 'open' : ''}`} ref={menuRef}>
             <button
               className="user-chip"
-              title={user.role === 'superadmin' ? '超级管理员' : '普通用户'}
+              title={user.role === 'superadmin' ? t('header.roleSuper') : t('header.roleUser')}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
             >
               <i className={`user-role-dot ${user.role}`} />
               <span className="user-name">{user.username}</span>
-              {user.role === 'superadmin' && <em className="user-role-tag">超管</em>}
+              {user.role === 'superadmin' && <em className="user-role-tag">{t('header.superTag')}</em>}
               <svg
                 className="caret"
                 width="10"
@@ -254,8 +260,8 @@ export default function Header(): JSX.Element {
                         }}
                       >
                         {item.icon}
-                        <span>{item.label}</span>
-                        <em className="menu-hint">{item.hint}</em>
+                        <span>{t(item.labelKey)}</span>
+                        <em className="menu-hint">{t(item.hintKey)}</em>
                       </button>
                     ))}
                     <button
@@ -267,8 +273,8 @@ export default function Header(): JSX.Element {
                       }}
                     >
                       <GearIcon />
-                      <span>AI 设置</span>
-                      <em className="menu-hint">{ai.status.configured ? ai.status.model || '已配置' : '未配置'}</em>
+                      <span>{t('header.aiSettings')}</span>
+                      <em className="menu-hint">{ai.status.configured ? ai.status.model || t('header.aiConfigured') : t('header.aiNotConfigured')}</em>
                     </button>
                   </>
                 )}
@@ -283,15 +289,15 @@ export default function Header(): JSX.Element {
                     }}
                   >
                     <RobotIcon />
-                    <span>AI 助手</span>
-                    <em className="menu-hint">{ai.robotVisible ? '对话中' : '唤起'}</em>
+                    <span>{t('header.aiAssistant')}</span>
+                    <em className="menu-hint">{ai.robotVisible ? t('header.aiChatting') : t('header.aiSummon')}</em>
                   </button>
                 )}
                 <div className="menu-sep" />
                 <button className="menu-item" role="menuitem" onClick={toggleUpColor}>
                   <PaletteIcon />
-                  <span>涨跌配色</span>
-                  <em className="menu-hint">{upColor === 'green' ? '绿涨红跌' : '红涨绿跌'}</em>
+                  <span>{t('header.upColor')}</span>
+                  <em className="menu-hint">{upColor === 'green' ? t('header.upColorGreen') : t('header.upColorRed')}</em>
                 </button>
                 <button
                   className="menu-item danger"
@@ -302,13 +308,13 @@ export default function Header(): JSX.Element {
                   }}
                 >
                   <LogoutIcon />
-                  <span>退出登录</span>
+                  <span>{t('header.logout')}</span>
                 </button>
               </div>
             )}
           </div>
         )}
-        <span className="clock mono">{now.toLocaleTimeString('zh-CN', { hour12: false })}</span>
+        <span className="clock mono">{now.toLocaleTimeString(currentLocale(), { hour12: false })}</span>
         {aiOpen && <AiSettingsModal onClose={() => setAiOpen(false)} />}
       </div>
     </header>

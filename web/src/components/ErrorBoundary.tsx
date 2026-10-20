@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
+import i18n from '../i18n'
 
 interface Props {
   children: ReactNode
@@ -32,9 +33,9 @@ export default class ErrorBoundary extends Component<Props, State> {
             className="auth-loading"
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}
           >
-            页面加载失败
+            {i18n.t('common:error.pageFailed')}
             <button className="btn btn-ghost" onClick={() => window.location.reload()}>
-              刷新重试
+              {i18n.t('common:error.reload')}
             </button>
           </div>
         </div>

@@ -8,9 +8,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import type { Chart } from 'klinecharts'
 import { dispose, init } from 'klinecharts'
+import { useTranslation } from 'react-i18next'
 import { ensureStyles, upDownOverrides } from '../components/KlineChart'
 import type { UpColorMode } from '../utils'
 import { precisionFor } from '../utils'
+import { klinechartsLocale } from '../i18n'
 import type { KlineBar } from '../types'
 import { ensureBrooksIndicator } from './indicator'
 import type { BrooksChartLevel } from './indicator'
@@ -42,6 +44,7 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
   { bars, analysis, display, upColor, highlightTime = null, levels },
   ref,
 ) {
+  const { i18n } = useTranslation()
   const boxRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<Chart | null>(null)
   const extRef = useRef({ analysis, display, upColor, highlightTime, levels })
@@ -54,7 +57,7 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
     ensureBrooksIndicator()
     const el = boxRef.current
     if (!el) return undefined
-    const chart = init(el, { locale: 'zh-CN', styles: 'bv-dark' })
+    const chart = init(el, { locale: klinechartsLocale(), styles: 'bv-dark' })
     chartRef.current = chart
     chart?.setStyles(upDownOverrides(upColor))
     chart?.createIndicator({ name: 'BROOKS', extendData: extRef.current }, false, { id: 'candle_pane' })
@@ -78,6 +81,11 @@ const BrooksChart = forwardRef<BrooksChartHandle, Props>(function BrooksChart(
     chartRef.current?.overrideIndicator({ name: 'BROOKS', extendData: extRef.current })
     chartRef.current?.setStyles(upDownOverrides(upColor))
   }, [analysis, display, upColor, highlightTime, levels])
+
+  // UI 语言切换时同步图表内置文案（klinecharts 支持 setLocale 热切换）
+  useEffect(() => {
+    chartRef.current?.setLocale(klinechartsLocale())
+  }, [i18n.language])
 
   // 收盘K线集合变化 → 整体替换
   useEffect(() => {

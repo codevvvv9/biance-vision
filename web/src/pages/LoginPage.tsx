@@ -1,8 +1,10 @@
 import { useState, type CSSProperties } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import Magnet from '../components/fx/Magnet'
 import SplitText from '../components/fx/SplitText'
 import { authReturnTo, authUrl, researchUiMode } from '../research/uiMode'
@@ -12,6 +14,8 @@ export default function LoginPage(): JSX.Element {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation('auth')
+  const { t: tc } = useTranslation('common')
   const from = authReturnTo(location.search, location.state as { from?: string } | null)
 
   const [username, setUsername] = useState('')
@@ -23,7 +27,7 @@ export default function LoginPage(): JSX.Element {
     e.preventDefault()
     if (busy) return
     if (!username.trim() || !password) {
-      setError('请输入用户名和密码')
+      setError(t('login.required'))
       return
     }
     setBusy(true)
@@ -32,7 +36,7 @@ export default function LoginPage(): JSX.Element {
       await login(username, password)
       navigate(from, { replace: true })
     } catch (err) {
-      setError((err as Error).message || '登录失败，请稍后再试')
+      setError((err as Error).message || t('login.failed'))
     } finally {
       setBusy(false)
     }
@@ -41,6 +45,9 @@ export default function LoginPage(): JSX.Element {
   return (
     <div className="auth-wrap">
       <AuthFx />
+      <div className="auth-lang">
+        <LanguageSwitcher />
+      </div>
       <div className="auth-card fx-beam" style={{ '--fx-beam-t': '5.2s' } as CSSProperties}>
         <div className="auth-brand fx-in">
           <Logo />
@@ -48,26 +55,26 @@ export default function LoginPage(): JSX.Element {
             <span className="auth-title">
               <SplitText text="BIANCE VISION" delay={0.12} gradient={['#00e5ff', '#a78bfa']} />
             </span>
-            <span className="auth-sub fx-in" style={{ '--fx-i': 8 } as CSSProperties}>币安大盘监控终端</span>
+            <span className="auth-sub fx-in" style={{ '--fx-i': 8 } as CSSProperties}>{tc('brand.sub')}</span>
           </div>
         </div>
 
         <form className="auth-form fx-in" style={{ '--fx-i': 3 } as CSSProperties} onSubmit={(e) => void submit(e)}>
           <label className="auth-field">
-            <span>用户名</span>
+            <span>{t('login.username')}</span>
             <input
               autoComplete="username"
               autoFocus
-              placeholder="请输入用户名"
+              placeholder={t('login.usernamePlaceholder')}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
           </label>
           <label className="auth-field">
-            <span>密码</span>
+            <span>{t('login.password')}</span>
             <input
               autoComplete="current-password"
-              placeholder="请输入密码"
+              placeholder={t('login.passwordPlaceholder')}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -78,15 +85,15 @@ export default function LoginPage(): JSX.Element {
 
           <Magnet className="auth-submit-wrap">
             <button className="btn btn-primary auth-submit" disabled={busy} type="submit">
-              {busy ? '登录中…' : '登 录'}
+              {busy ? t('login.submitting') : t('login.submit')}
             </button>
           </Magnet>
         </form>
 
         <div className="auth-foot">
-          还没有账号？
-          <Link to={authUrl('/register', from, researchUiMode(location.search))}>联系管理员开通</Link>
-          {researchUiMode(location.search) === 'dev' && <Link to={from}>返回研究工作台</Link>}
+          {t('login.noAccount')}
+          <Link to={authUrl('/register', from, researchUiMode(location.search))}>{t('login.contactAdmin')}</Link>
+          {researchUiMode(location.search) === 'dev' && <Link to={from}>{t('login.backToWorkbench')}</Link>}
         </div>
       </div>
     </div>
