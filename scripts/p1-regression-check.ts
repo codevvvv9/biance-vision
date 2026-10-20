@@ -784,6 +784,13 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(j3.by.decision === 1 && j3.kept.length === 0, '「止损触发时间已经确认，立即加仓」被剔除（TIME_MARK 排除名词组合；修复前「时间」的时被当后置标记）')
   const j4 = checkSynthesisText('触发止损时，再评估退出。', exitInput)
   assert(j4.kept.length === 1 && j4.dropped === 0, '对照：「触发止损时，再评估退出」保留（完整状语结构仍豁免）')
+  // ---- 第八轮（条件分支统一 isConditionalClause：先等待补否定检查 + 等待分支复用 TIME_MARK），与 /tmp/bv-0ab5b8c-boundary-review.mts 同源 ----
+  const k1 = checkSynthesisText('无需先等待回调确认，立即做多。', input)
+  assert(k1.by.decision === 1 && k1.kept.length === 0, '「无需先等待回调确认，立即做多」被剔除（先等待分支补否定检查；修复前独立分支无守卫）')
+  const k2 = checkSynthesisText('等待回调的后果是错过行情，立即做多。', input)
+  assert(k2.by.decision === 1 && k2.kept.length === 0, '「等待回调的后果是错过行情，立即做多」被剔除（等待分支复用 TIME_MARK；修复前裸 [后再] 把「后果」当标记）')
+  const k3 = checkSynthesisText('先等待回调确认，再评估入场。', input)
+  assert(k3.kept.length === 1 && k3.dropped === 0, '对照：「先等待回调确认，再评估入场」保留（未被否定的先等待仍豁免）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
