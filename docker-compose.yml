@@ -109,8 +109,10 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - research-models:/data/models
+      - argos-packages:/root/.local/share/argos-translate
 
 volumes:
   pgdata:
   research-models:
   minio-data:
+  argos-packages:

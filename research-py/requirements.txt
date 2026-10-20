@@ -10,3 +10,6 @@ scikit-learn==1.6.1
 joblib==1.5.3
 numpy==2.0.2
 httpx==0.28.1
+# Argos 离线翻译（Part 2 翻译 Agent 兜底引擎；CTranslate2 推理，语言包另行下载到
+# research-py/scripts/download_argos_packs.py 指定目录，translation.py 懒加载）
+argostranslate==1.9.6
