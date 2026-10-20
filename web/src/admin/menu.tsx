@@ -1,8 +1,9 @@
 /** 管理后台菜单配置：Header 用户下拉与 AdminLayout 内部导航共用同一份数据源（含图标，单一来源） */
 export interface AdminMenuItem {
   path: string
-  label: string
-  hint: string
+  /** admin:* 词典 key（消费方用 t() 取当前语言；单一数据源不变） */
+  labelKey: string
+  hintKey: string
   icon: JSX.Element
 }
 
@@ -65,10 +66,10 @@ function PromptIcon(): JSX.Element {
 }
 
 export const ADMIN_MENU: AdminMenuItem[] = [
-  { path: '/admin', label: '管理面板', hint: '用户 / 日志', icon: <LogIcon /> },
-  { path: '/admin/ai', label: 'AI 会话', hint: '上下文 / 记忆', icon: <ChatLogIcon /> },
-  { path: '/admin/knowledge', label: '知识库', hint: '导入 / 发布 / 检索调试', icon: <BookIcon /> },
-  { path: '/admin/agents', label: 'Agent 配置', hint: '能力 / 版本 / 回滚', icon: <TuneIcon /> },
-  { path: '/admin/prompts', label: '提示词与文案', hint: '模板版本 / 免责 / 输入配置', icon: <PromptIcon /> },
-  { path: '/admin/evals', label: '评测与模型', hint: '数据集 / 训练 / 指标', icon: <ChartIcon /> },
+  { path: '/admin', labelKey: 'admin:menu.panel', hintKey: 'admin:menu.panelHint', icon: <LogIcon /> },
+  { path: '/admin/ai', labelKey: 'admin:menu.ai', hintKey: 'admin:menu.aiHint', icon: <ChatLogIcon /> },
+  { path: '/admin/knowledge', labelKey: 'admin:menu.knowledge', hintKey: 'admin:menu.knowledgeHint', icon: <BookIcon /> },
+  { path: '/admin/agents', labelKey: 'admin:menu.agents', hintKey: 'admin:menu.agentsHint', icon: <TuneIcon /> },
+  { path: '/admin/prompts', labelKey: 'admin:menu.prompts', hintKey: 'admin:menu.promptsHint', icon: <PromptIcon /> },
+  { path: '/admin/evals', labelKey: 'admin:menu.evals', hintKey: 'admin:menu.evalsHint', icon: <ChartIcon /> },
 ]

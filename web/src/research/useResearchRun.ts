@@ -7,29 +7,40 @@
  * run_failed/run_cancelled/run_published。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import i18n from '../i18n'
 import { api } from '../api'
 import type { ResearchResult, ResearchRun, RunStepInfo } from 'biance-vision-brooks'
 
 export type SseConnState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed'
 
-export const SSE_CONN_LABEL: Record<SseConnState, string> = {
-  idle: '未订阅',
-  connecting: '连接中…',
-  open: '已连接',
-  reconnecting: '断开重连中…',
-  closed: '已断开',
+/** SSE 连接状态 → research:sse.* 词典 key（调用方用 t() 取当前语言文案） */
+export const SSE_CONN_KEYS: Record<SseConnState, string> = {
+  idle: 'research:sse.idle',
+  connecting: 'research:sse.connecting',
+  open: 'research:sse.open',
+  reconnecting: 'research:sse.reconnecting',
+  closed: 'research:sse.closed',
 }
 
-export const STEP_LABEL: Record<string, string> = {
-  plan: '意图规划',
-  snapshot: '行情快照',
-  structures: '结构计算',
-  retrieve: '知识检索',
-  product_analysis: '产品分析',
-  countercase: '反证审查',
-  synthesis: '综合解释',
-  validate: '风险校验',
-  publish: '发布',
+export function sseConnLabel(state: SseConnState): string {
+  return i18n.t(SSE_CONN_KEYS[state])
+}
+
+/** 阶段 → research:step.* 词典 key */
+export const STEP_KEYS: Record<string, string> = {
+  plan: 'research:step.plan',
+  snapshot: 'research:step.snapshot',
+  structures: 'research:step.structures',
+  retrieve: 'research:step.retrieve',
+  product_analysis: 'research:step.product_analysis',
+  countercase: 'research:step.countercase',
+  synthesis: 'research:step.synthesis',
+  validate: 'research:step.validate',
+  publish: 'research:step.publish',
+}
+
+export function stepLabel(step: string): string {
+  return i18n.t(STEP_KEYS[step] ?? step)
 }
 
 /** P1-7 过程播报行（step_detail 事件）：真实阶段/工具状态/计数（服务端承诺无正文） */
@@ -120,14 +131,14 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
         setSteps(d.steps)
         setActiveRun(prev => prev?.id === d.run.id && ['published', 'failed', 'cancelled'].includes(prev.status) ? prev : d.run)
       })
-      .catch((e: Error) => { if (isCurrent()) setSseError(`运行详情读取失败：${e.message}`) })
+      .catch((e: Error) => { if (isCurrent()) setSseError(i18n.t("research:run.detailLoadFailed", { msg: e.message })) })
     void api<{ result: ResearchResult }>(`/research/runs/${run.id}/result`)
       .then((d) => {
         if (!isCurrent()) return
         setResult(d.result)
       })
       .catch((e: Error) => {
-        if (isCurrent() && run.status === 'published') setSseError(`已发布结果读取失败：${e.message}`)
+        if (isCurrent() && run.status === 'published') setSseError(i18n.t("research:run.publishedLoadFailed", { msg: e.message }))
       })
     if (['published', 'failed', 'cancelled'].includes(run.status)) return
     const after = lastSeqRef.current > 0 ? `?after=${lastSeqRef.current}` : ''
@@ -176,7 +187,7 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
       es.close()
       setSseConn('closed')
       const data = JSON.parse((ev as MessageEvent).data) as { error?: string }
-      setSseError(data.error ?? '运行失败')
+      setSseError(data.error ?? i18n.t("research:run.failed"))
       setActiveRun((prev) => (prev !== null && prev.id === run.id ? { ...prev, status: 'failed' } : prev))
     })
     // P0-5 受控降级（红线 #4：新增事件类型；旧版本前端未注册此 listener 天然忽略）
@@ -273,7 +284,7 @@ export function useResearchRun(opts: UseResearchRunOptions = {}): ResearchRunTra
             if (gen === genRef.current) { setResult(r.result); setSseError(''); optsRef.current.onPublished?.() }
           }
         })
-        .catch((e: Error) => { if (gen === genRef.current) setSseError(`运行状态同步失败：${e.message}`) })
+        .catch((e: Error) => { if (gen === genRef.current) setSseError(i18n.t("research:run.syncFailed", { msg: e.message })) })
         .finally(() => { polling = false })
     }, 5000)
     return () => clearInterval(timer)

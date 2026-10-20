@@ -6,6 +6,7 @@
  * - 确认卡：confirm_position 内联卡片，「确认写入」PATCH context（positionDraft+confirm）后才落库
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import i18n from '../i18n'
 import { api } from '../api'
 
 /** 会话确认卡（confirm_position）：未经确认不落库，卡片内联在消息流中 */
@@ -70,8 +71,8 @@ export interface UseResearchConversationOptions {
   onPositionsChanged?: () => void
 }
 
-const DEFAULT_GREETING =
-  '我是你的研究 Agent：直接描述问题即可，例如「BTC 永续多头持仓还能拿吗」「10 分钟后高于 60000 的事件合约值不值得参与」「什么是铁丝网」。我会自动识别场景、关联你录入的持仓/报价并启动完整研究。'
+/** 问候语跟随 UI 语言（hook 内非组件上下文，直接读 i18n 实例） */
+const DEFAULT_GREETING = (): string => i18n.t('research:conv.welcome')
 
 function toChatMessage(m: ServerMessage): ChatMessage | null {
   if (m.role !== 'user' && m.role !== 'assistant') return null
@@ -89,7 +90,7 @@ function toChatMessage(m: ServerMessage): ChatMessage | null {
 }
 
 export function useResearchConversation(options: UseResearchConversationOptions = {}) {
-  const { enabled = true, context = null, greeting = DEFAULT_GREETING, restoreLatest = false, ensureOnMount = false } = options
+  const { enabled = true, context = null, greeting = DEFAULT_GREETING(), restoreLatest = false, ensureOnMount = false } = options
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'assistant', text: greeting }])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -265,7 +266,7 @@ export function useResearchConversation(options: UseResearchConversationOptions 
         void refreshConversations()
         return true
       } catch (e) {
-        if (mounted.current) setMessages((prev) => [...prev, { role: 'assistant', text: `出错了：${(e as Error).message}` }])
+        if (mounted.current) setMessages((prev) => [...prev, { role: 'assistant', text: i18n.t('research:conv.error', { msg: (e as Error).message }) }])
         return false
       } finally {
         sending.current = false
@@ -285,7 +286,7 @@ export function useResearchConversation(options: UseResearchConversationOptions 
       if (!confirm) {
         setMessages((prev) => [
           ...prev.map((m, i) => (i === idx && m.card !== undefined ? { ...m, card: { ...m.card, state: 'cancelled' as const } } : m)),
-          { role: 'assistant', text: '已取消：该持仓草稿未写入持仓。' },
+          { role: 'assistant', text: i18n.t('research:conv.cancelledDraft') },
         ])
         // 取消同时清除服务端待补齐草稿（评审附注：后续消息的槽位不再合并进已取消草稿）
         if (convId !== null) {
@@ -304,12 +305,14 @@ export function useResearchConversation(options: UseResearchConversationOptions 
           ...prev.map((m, i) => (i === idx && m.card !== undefined ? { ...m, card: { ...m.card, state: 'confirmed' as const } } : m)),
           {
             role: 'assistant',
-            text: `持仓已确认写入${r.confirmedPositionId !== null ? `（ID ${r.confirmedPositionId.slice(0, 8)}）` : ''}，可在左侧持仓列表查看，可继续提问。`,
+            text: i18n.t('research:conv.positionConfirmed', {
+              id: r.confirmedPositionId !== null ? i18n.t('research:conv.positionConfirmedId', { id: r.confirmedPositionId.slice(0, 8) }) : '',
+            }),
           },
         ])
         optsRef.current.onPositionsChanged?.()
       } catch (e) {
-        setMessages((prev) => [...prev, { role: 'assistant', text: `持仓确认失败：${(e as Error).message}` }])
+        setMessages((prev) => [...prev, { role: 'assistant', text: i18n.t('research:conv.positionConfirmFailed', { msg: (e as Error).message }) }])
       } finally {
         setCardBusy(null)
       }

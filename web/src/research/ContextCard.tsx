@@ -6,6 +6,7 @@
  * 描述性字段「历史习惯」，不作授权上限——文案明示）。
  */
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { EventQuote, Position, TraderProfile } from 'biance-vision-brooks'
 import { api } from '../api'
 import { Dropdown } from './Dropdown'
@@ -21,24 +22,24 @@ interface Props {
   loggedIn: boolean
 }
 
-const RISK_OPTIONS = [
-  { value: '', label: '风险偏好未设置' },
-  { value: 'conservative', label: '保守' },
-  { value: 'balanced', label: '均衡' },
-  { value: 'aggressive', label: '激进' },
-]
-const EXP_OPTIONS = [
-  { value: '', label: '经验未设置' },
-  { value: 'novice', label: '新手' },
-  { value: 'intermediate', label: '有经验' },
-  { value: 'pro', label: '专业' },
-]
-
 export function ContextCard({ symbol, horizon, product, position, quote, onOpenTools, loggedIn }: Props): JSX.Element {
+  const { t } = useTranslation()
   const [profile, setProfile] = useState<TraderProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
   const [expanded, setExpanded] = useState(false)
+  const riskOptions = [
+    { value: '', label: t('research:ctx.riskUnset') },
+    { value: 'conservative', label: t('research:ctx.riskConservative') },
+    { value: 'balanced', label: t('research:ctx.riskBalanced') },
+    { value: 'aggressive', label: t('research:ctx.riskAggressive') },
+  ]
+  const expOptions = [
+    { value: '', label: t('research:ctx.expUnset') },
+    { value: 'novice', label: t('research:ctx.expNovice') },
+    { value: 'intermediate', label: t('research:ctx.expIntermediate') },
+    { value: 'pro', label: t('research:ctx.expPro') },
+  ]
 
   useEffect(() => {
     if (!loggedIn) return
@@ -63,46 +64,61 @@ export function ContextCard({ symbol, horizon, product, position, quote, onOpenT
   const stale = position?.isStale === true
   const quoteSoon = quote !== null && quote.expiryAt - Date.now() < 5 * 60_000
   return (
-    <section className="context-card" aria-label="当前分析对象">
+    <section className="context-card" aria-label={t('research:ctx.aria')}>
       <div className="context-main">
         <span className="context-obj">
           {position !== null
-            ? `持仓：${position.symbol} ${position.side === 'long' ? '多' : '空'} · ${position.qty} @ ${position.entryPrice}（${position.leverage}x）`
+            ? t('research:ctx.positionLine', {
+                symbol: position.symbol,
+                side: t(position.side === 'long' ? 'research:ctx.long' : 'research:ctx.short'),
+                qty: position.qty,
+                price: position.entryPrice,
+                leverage: position.leverage,
+              })
             : quote !== null
-              ? `报价：${quote.symbol} ${quote.direction === 'above' ? '高于' : '低于'} ${quote.strikePrice} · ${new Date(quote.expiryAt).toLocaleTimeString()} 到期`
-              : `对象：${symbol} · ${horizon}${product === 'teaching' ? ' · 结构研究' : product === 'perp' ? ' · 永续' : product === 'event' ? ' · 事件' : ''}`}
+              ? t('research:ctx.quoteLine', {
+                  symbol: quote.symbol,
+                  direction: t(quote.direction === 'above' ? 'research:main.above' : 'research:main.below'),
+                  strike: quote.strikePrice,
+                  time: new Date(quote.expiryAt).toLocaleTimeString(),
+                })
+              : t('research:ctx.objectLine', {
+                  symbol,
+                  horizon,
+                  suffix: product === 'teaching' ? t('research:ctx.suffixTeaching') : product === 'perp' ? t('research:ctx.suffixPerp') : product === 'event' ? t('research:ctx.suffixEvent') : '',
+                })}
         </span>
         {position !== null && (
           <span className={`ctx-badge ${stale ? 'ctx-stale' : 'ctx-fresh'}`} role="note">
-            {stale ? '已过期，需重新确认' : '已确认，新鲜'}
+            {stale ? t('research:ctx.staleReconfirm') : t('research:ctx.fresh')}
           </span>
         )}
         {quote !== null && (
           <span className={`ctx-badge ${quoteSoon ? 'ctx-stale' : 'ctx-fresh'}`} role="note">
-            {quoteSoon ? '临近到期' : '报价新鲜'}
+            {quoteSoon ? t('research:ctx.expiringSoon') : t('research:ctx.quoteFresh')}
           </span>
         )}
         {stale && (
           <button className="btn btn-ghost btn-sm" onClick={onOpenTools}>
-            重新确认持仓
+            {t('research:ctx.reconfirm')}
           </button>
         )}
         <button className="context-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-          {expanded ? '收起画像' : '研究画像'}
+          {expanded ? t('research:ctx.collapse') : t('research:ctx.expand')}
         </button>
       </div>
       {expanded && (
         <div className="context-profile">
           {profileError !== '' && <p className="err-text" role="alert">{profileError}</p>}
           <label>
-            风险偏好
-            <Dropdown ariaLabel="风险偏好" value={profile?.riskProfile ?? ''} disabled={profileBusy || !loggedIn} onChange={(v) => saveProfile({ riskProfile: v === '' ? null : (v as 'conservative' | 'balanced' | 'aggressive') })} options={RISK_OPTIONS} />
+            {t('research:ctx.riskProfile')}
+            <Dropdown ariaLabel={t('research:ctx.riskProfile')} value={profile?.riskProfile ?? ''} disabled={profileBusy || !loggedIn} onChange={(v) => saveProfile({ riskProfile: v === '' ? null : (v as 'conservative' | 'balanced' | 'aggressive') })} options={riskOptions} />
           </label>
           <label>
-            交易经验
-            <Dropdown ariaLabel="交易经验" value={profile?.experienceLevel ?? ''} disabled={profileBusy || !loggedIn} onChange={(v) => saveProfile({ experienceLevel: v === '' ? null : (v as 'novice' | 'intermediate' | 'pro') })} options={EXP_OPTIONS} />
+            {t('research:ctx.experience')}
+            <Dropdown ariaLabel={t('research:ctx.experience')} value={profile?.experienceLevel ?? ''} disabled={profileBusy || !loggedIn} onChange={(v) => saveProfile({ experienceLevel: v === '' ? null : (v as 'novice' | 'intermediate' | 'pro') })} options={expOptions} />
           </label>
-          <p className="context-profile-note">画像只影响解释详略与措辞（如新手附术语解释），不改变研究结论；历史杠杆习惯为描述性记录，不作为授权上限。</p>
+          <p className="context-profile-note">{t('research:ctx.profileNote')}</p>
         </div>
       )}
     </section>

@@ -5,19 +5,25 @@
  * - 证据抽屉：冻结片段（支持/反证），点击定位（页码/图号/原文）
  */
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import type { FollowUpAction, ResearchResult } from 'biance-vision-brooks'
 import MiniMarkdown from '../components/MiniMarkdown'
 
-const DECISION_LABEL: Record<string, string> = {
-  wait: '等待',
-  hold: '持有',
-  conditional_entry: '条件参与',
-  reduce: '减仓',
-  exit: '退出',
-  long: '做多',
-  short: '做空',
-  insufficient_evidence: '证据不足',
+/** 决策 → research:result.decision.* 词典 key */
+const DECISION_KEYS: Record<string, string> = {
+  wait: 'research:result.decision.wait',
+  hold: 'research:result.decision.hold',
+  conditional_entry: 'research:result.decision.conditional_entry',
+  reduce: 'research:result.decision.reduce',
+  exit: 'research:result.decision.exit',
+  long: 'research:result.decision.long',
+  short: 'research:result.decision.short',
+  insufficient_evidence: 'research:result.decision.insufficient_evidence',
+  request_reconfirm: 'research:result.decision.request_reconfirm',
+  monitor: 'research:result.decision.monitor',
+  await_settlement: 'research:result.decision.await_settlement',
+  settled: 'research:result.decision.settled',
 }
 
 // ---- P1-8 免责文案（红线 #10：服务端下发，前端只渲染不内置）----
@@ -66,24 +72,26 @@ interface StructureEventItem {
  * 剩余时间为纯时钟换算（非数值估算），30s 自刷新一次
  */
 function ExpiryCountdown({ expiryAt, asOfRemainingMs }: { expiryAt: number; asOfRemainingMs?: number }): JSX.Element {
+  const { t } = useTranslation()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [])
   const ms = expiryAt - now
-  const frozen = asOfRemainingMs !== undefined ? `（运行 asOf 时剩 ${Math.floor(asOfRemainingMs / 60000)} 分）` : ''
-  if (ms <= 0) return <>已到期（{new Date(expiryAt).toLocaleString()}）{frozen}</>
+  const frozen = asOfRemainingMs !== undefined ? t('research:result.asOfRemaining', { mins: Math.floor(asOfRemainingMs / 60000) }) : ''
+  if (ms <= 0) return <>{t('research:result.expired', { time: new Date(expiryAt).toLocaleString() })}{frozen}</>
   const mins = Math.floor(ms / 60000)
   const secs = Math.floor((ms % 60000) / 1000)
   return (
     <>
-      剩 {mins} 分 {secs} 秒（到期 {new Date(expiryAt).toLocaleString()}）{frozen}
+      {t('research:result.countdown', { mins, secs, time: new Date(expiryAt).toLocaleString() })}{frozen}
     </>
   )
 }
 
 export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: { result: ResearchResult; horizon?: string; runId?: string; onCitation?: (evidenceId: string) => void; onFollowUp?: (action: FollowUpAction) => void }): JSX.Element {
+  const { t } = useTranslation()
   // 论断引用定位（P2）：evidenceIds → 可点击标记，展开冻结原文（页码/来源/文档）
   const [evidenceMap, setEvidenceMap] = useState<Map<string, EvidenceItem> | null>(null)
   const [openEvidence, setOpenEvidence] = useState<string | null>(null)
@@ -133,71 +141,71 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
     payload: Record<string, unknown>
   }
   const pp = r2?.payload ?? {}
-  const DECISION_LABEL_V2: Record<string, string> = { ...DECISION_LABEL, request_reconfirm: '请重新确认持仓', monitor: '监控订单', await_settlement: '等待结算', settled: '已结算' }
+  const decisionLabel = DECISION_KEYS[result.decision] !== undefined ? t(DECISION_KEYS[result.decision]) : result.decision
   return (
     <div className="result-card fx-in">
       <div className="result-head">
-        <span className={`decision-badge d-${result.decision}`}>{(DECISION_LABEL_V2[result.decision] ?? DECISION_LABEL[result.decision]) ?? result.decision}{r2?.side !== null && r2?.side !== undefined && r2.decision === 'conditional_entry' ? `（${r2.side === 'long' ? '多' : '空'}）` : ''}</span>
+        <span className={`decision-badge d-${result.decision}`}>{decisionLabel}{r2?.side !== null && r2?.side !== undefined && r2.decision === 'conditional_entry' ? `（${t(r2.side === 'long' ? 'research:result.sideLong' : 'research:result.sideShort')}）` : ''}</span>
         <span className={`quality q-${result.evidenceQuality}`}>
-          证据{result.evidenceQuality === 'complete' ? '完整' : result.evidenceQuality === 'partial' ? '部分' : '过期/不足'}
+          {result.evidenceQuality === 'complete' ? t('research:result.evidenceComplete') : result.evidenceQuality === 'partial' ? t('research:result.evidencePartial') : t('research:result.evidenceStale')}
         </span>
         {(pp.researchMode === true || horizon === '1w') && (
           <span className="mode-tag" role="note">
-            研究模式（非币安事件合约产品）
+            {t('research:result.researchModeTag')}
           </span>
         )}
         {r2?.degraded === true && (
-          <span className="mode-tag degraded-tag" role="note" aria-label="降级发布">
-            降级发布
+          <span className="mode-tag degraded-tag" role="note" aria-label={t('research:result.degradedTagAria')}>
+            {t('research:result.degradedTag')}
           </span>
         )}
       </div>
       {r2?.degraded === true && (r2?.degradedReasons ?? []).length > 0 && (
         <ul className="missing-list">
-          <li>降级原因（已剔除未经校验的归纳内容，仅保留代码计算结论）：</li>
+          <li>{t('research:result.degradedReason')}</li>
           {(r2?.degradedReasons ?? []).slice(0, 5).map((x) => (
             <li key={x}>· {x}</li>
           ))}
         </ul>
       )}
       {r2?.synthesis != null && r2.synthesis.text !== '' && (
-        <div className="synthesis-block" aria-label="回应你的问题">
+        <div className="synthesis-block" aria-label={t('research:result.synthesisAria')}>
           <div className="synthesis-head">
-            <span>回应你的问题</span>
-            <span className="synthesis-src">{r2.synthesis.source === 'llm' ? (r2.synthesis.degraded === true ? '模型归纳（部分句被校验剔除）' : '模型归纳（受约束引用）') : '代码装配'}</span>
+            <span>{t('research:result.synthesisTitle')}</span>
+            <span className="synthesis-src">{r2.synthesis.source === 'llm' ? (r2.synthesis.degraded === true ? t('research:result.synthesisLlmDegraded') : t('research:result.synthesisLlm')) : t('research:result.synthesisCode')}</span>
           </div>
           <MiniMarkdown text={r2.synthesis.text} className="synthesis-md" />
         </div>
       )}
       {r2?.probability === null || r2?.probability === undefined ? (
-        <p className="prob-note">概率：不可用（{r2?.unavailableCode ?? 'model_not_published'}；不由 AI 编造）</p>
+        <p className="prob-note">{t('research:result.probUnavailable', { code: r2?.unavailableCode ?? 'model_not_published' })}</p>
       ) : (
         <p className="prob-note">
-          模型 {r2.probability.modelVersion}：P(高于执行价) = {(r2.probability.probabilityUp * 100).toFixed(1)}%{r2.probability.probabilityTie !== null ? `，平价 ${(r2.probability.probabilityTie * 100).toFixed(1)}%` : '（平价精度未知）'}
+          {t('research:result.probLine', { version: r2.probability.modelVersion, up: (r2.probability.probabilityUp * 100).toFixed(1), tie: r2.probability.probabilityTie !== null ? t('research:result.probTie', { pct: (r2.probability.probabilityTie * 100).toFixed(1) }) : t('research:result.probTieUnknown') })}
         </p>
       )}
       {Array.isArray(pp.unavailableGuidance) && (pp.unavailableGuidance as string[]).length > 0 && (
-        <ul className="guidance-list" aria-label="补全引导">
+        <ul className="guidance-list" aria-label={t('research:result.guidanceAria')}>
           {(pp.unavailableGuidance as string[]).map((g) => (
             <li key={g}>· {g}</li>
           ))}
         </ul>
       )}
       {(r2?.reasons ?? []).length > 0 && (
-        <ul className="missing-list">{(r2?.reasons ?? []).map((x) => <li key={x}>理由：{x}</li>)}</ul>
+        <ul className="missing-list">{(r2?.reasons ?? []).map((x) => <li key={x}>{t('research:result.reason', { reason: x })}</li>)}</ul>
       )}
       {result.missingInputs.length > 0 && (
         <ul className="missing-list">
           {result.missingInputs.map((m) => (
-            <li key={m}>缺少输入：{m}</li>
+            <li key={m}>{t('research:result.missingInput', { field: m })}</li>
           ))}
         </ul>
       )}
-      <h5>论断</h5>
+      <h5>{t('research:result.claimsTitle')}</h5>
       <ul className="claim-list">
         {result.claims.map((c, i) => (
           <li key={i} className={c.kind}>
-            <em>{c.kind === 'fact' ? '事实' : '解读'}</em>
+            <em>{c.kind === 'fact' ? t('research:result.claimFact') : t('research:result.claimInterpretation')}</em>
             {c.text}
             {c.evidenceIds.map((eid, j) => {
               const ev = evidenceMap?.get(eid)
@@ -206,19 +214,19 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
                   <button
                     className={`cite-mark c-${ev?.stance ?? 'unknown'}`}
                     onClick={() => onCitation ? onCitation(eid) : setOpenEvidence(openEvidence === `${i}:${eid}` ? null : `${i}:${eid}`)}
-                    aria-label={onCitation ? `查看引用 ${citationIds.indexOf(eid) + 1}` : ev ? `查看引用 ${j + 1}：${ev.docTitle ?? ev.kind}${ev.pageNo !== null ? ` 第${ev.pageNo}页` : ''}` : `引用 ${j + 1}（详情未加载）`}
-                    title={ev ? `${ev.docTitle ?? ev.kind}${ev.pageNo !== null ? ` · 第 ${ev.pageNo} 页` : ''}${ev.sourceTier !== null ? ` · ${ev.sourceTier}` : ''}` : '引用详情未加载'}
+                    aria-label={onCitation ? t('research:result.viewCitation', { n: citationIds.indexOf(eid) + 1 }) : ev ? t('research:result.viewCitationDetail', { n: j + 1, title: ev.docTitle ?? ev.kind, page: ev.pageNo !== null ? t('research:result.pageNo', { page: ev.pageNo }) : '' }) : t('research:result.citationNotLoaded', { n: j + 1 })}
+                    title={ev ? `${ev.docTitle ?? ev.kind}${ev.pageNo !== null ? t('research:result.pageNoTitle', { page: ev.pageNo }) : ''}${ev.sourceTier !== null ? ` · ${ev.sourceTier}` : ''}` : t('research:result.citationMissing')}
                   >
                     [{onCitation ? citationIds.indexOf(eid) + 1 : j + 1}]
                   </button>
                   {openEvidence === `${i}:${eid}` && ev !== undefined && (
                     <span className="cite-popover" role="note">
                       <span className="cite-pop-head">
-                        <span className={`stance s-${ev.stance}`}>{ev.stance === 'support' ? '支持' : '反证'}</span>
+                        <span className={`stance s-${ev.stance}`}>{ev.stance === 'support' ? t('research:result.support') : t('research:result.counter')}</span>
                         <span className="loc">
-                          {ev.docTitle !== '' && ev.docTitle !== undefined ? `${ev.docTitle}` : ev.kind === 'knowledge_chunk' ? '知识片段' : ev.kind}
-                          {ev.pageNo !== null ? ` · 第 ${ev.pageNo} 页` : ''}
-                          {ev.figureId !== null ? ` · 图 ${ev.figureId.slice(0, 8)}` : ''}
+                          {ev.docTitle !== '' && ev.docTitle !== undefined ? `${ev.docTitle}` : ev.kind === 'knowledge_chunk' ? t('research:result.knowledgeChunk') : ev.kind}
+                          {ev.pageNo !== null ? t('research:result.pageNoTitle', { page: ev.pageNo }) : ''}
+                          {ev.figureId !== null ? t('research:result.figureShort', { id: ev.figureId.slice(0, 8) }) : ''}
                           {ev.sourceTier !== null ? ` · ${ev.sourceTier}` : ''}
                         </span>
                       </span>
@@ -233,20 +241,20 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
       </ul>
       {result.scenarios.length > 0 && (
         <>
-          <h5>条件情景</h5>
+          <h5>{t('research:result.scenariosTitle')}</h5>
           <div className="scenario-list">
             {result.scenarios.map((s, i) => (
               <div key={i} className="scenario">
-                <p><strong>条件</strong>：{s.condition}</p>
-                <p><strong>应对</strong>：{s.response}</p>
-                <p><strong>失效</strong>：{s.invalidation}</p>
+                <p><strong>{t('research:result.condition')}</strong>：{s.condition}</p>
+                <p><strong>{t('research:result.response')}</strong>：{s.response}</p>
+                <p><strong>{t('research:result.invalidation')}</strong>：{s.invalidation}</p>
               </div>
             ))}
           </div>
         </>
       )}
       {onFollowUp !== undefined && (r2?.followUpActions ?? []).length > 0 && (
-        <div className="follow-up-chips" aria-label="可执行的下一步">
+        <div className="follow-up-chips" aria-label={t('research:result.nextStepsAria')}>
           {(r2?.followUpActions ?? []).map((a) => (
             <button key={`${a.action}:${a.label}`} className="follow-up-chip" onClick={() => onFollowUp(a)}>
               {a.label}
@@ -257,26 +265,26 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
       {pp.kind === 'perp' && Array.isArray(pp.pnlPoints) && (
         <>
           <h5>
-            计划盈亏矩阵（taker 双边费用）
+            {t('research:result.plTitle')}
             {pp.feeLegs !== null && pp.feeLegs !== undefined && (
               <span className="muted fee-legs-note"> — {(pp.feeLegs as { note: string }).note}</span>
             )}
           </h5>
           {pp.fundingStale === true && (
-            <p className="liq-note stale-warn" role="note">资金费率数据过期（funding_stale）：不提供情景估算，不以旧数据伪装实际统计</p>
+            <p className="liq-note stale-warn" role="note">{t('research:result.fundingStaleNote')}</p>
           )}
           {pp.riskCap !== null && pp.riskCap !== undefined && (
             <p className="liq-note">
-              仓位上限：{(pp.riskCap as { ok: boolean; maxQty: number | null; reason: string | null; bindingConstraint?: string | null }).ok
-                ? `≤ ${(pp.riskCap as { maxQty: number | null }).maxQty ?? '未知'}`
-                : `不可用（${(pp.riskCap as { reason: string | null }).reason ?? '未知原因'}）`}
+              {(pp.riskCap as { ok: boolean; maxQty: number | null; reason: string | null; bindingConstraint?: string | null }).ok
+                ? t('research:result.riskCapOk', { max: (pp.riskCap as { maxQty: number | null }).maxQty ?? t('research:result.riskCapUnknown') })
+                : t('research:result.riskCapUnavailable', { reason: (pp.riskCap as { reason: string | null }).reason ?? t('research:result.riskCapUnknownReason') })}
               {(pp.riskCap as { bindingConstraint?: string | null }).bindingConstraint != null &&
-                `；触发约束：${(pp.riskCap as { bindingConstraint?: string | null }).bindingConstraint}`}
+                t('research:result.bindingConstraint', { constraint: (pp.riskCap as { bindingConstraint?: string | null }).bindingConstraint })}
             </p>
           )}
           <table className="mini-table">
             <thead>
-              <tr><th>价格</th><th>整笔净盈亏</th><th>增量盈亏</th><th>ROE</th></tr>
+              <tr><th>{t('research:result.colPrice')}</th><th>{t('research:result.colNetPnl')}</th><th>{t('research:result.colIncPnl')}</th><th>ROE</th></tr>
             </thead>
             <tbody>
               {(pp.pnlPoints as { price: number; tradeNetPnl: number; incrementalPnl: number; roe: number }[]).map((r) => (
@@ -290,24 +298,24 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
             </tbody>
           </table>
           {pp.liquidation !== undefined && pp.liquidation !== null && (
-            <p className="liq-note">强平价：{(pp.liquidation as { price: number | null }).price ?? '未知'}（{(pp.liquidation as { note: string }).note}）</p>
+            <p className="liq-note">{t('research:result.liqPrice', { price: (pp.liquidation as { price: number | null }).price ?? t('research:result.riskCapUnknown'), note: (pp.liquidation as { note: string }).note })}</p>
           )}
           {pp.reducePlan !== undefined && (pp.reducePlan as { needed: boolean }).needed === true && (
-            <p className="liq-note">减仓计划：保留 ≤{(pp.reducePlan as { keepQty: number | null }).keepQty}，减 {(pp.reducePlan as { reduceQty: number | null }).reduceQty}（{(pp.reducePlan as { reason: string }).reason}）</p>
+            <p className="liq-note">{t('research:result.reducePlan', { keep: (pp.reducePlan as { keepQty: number | null }).keepQty, reduce: (pp.reducePlan as { reduceQty: number | null }).reduceQty, reason: (pp.reducePlan as { reason: string }).reason })}</p>
           )}
           {Array.isArray(pp.fundingScenarios) && (pp.fundingScenarios as unknown[]).length > 0 && (
-            <p className="liq-note">资金费率（实际数据）：{(pp.fundingScenarios as { label: string; cost24h: number }[]).map((f) => `${f.label}≈${f.cost24h}/24h`).join('；')}——{String(pp.fundingNote ?? '')}</p>
+            <p className="liq-note">{t('research:result.funding', { items: (pp.fundingScenarios as { label: string; cost24h: number }[]).map((f) => `${f.label}≈${f.cost24h}/24h`).join('；'), note: String(pp.fundingNote ?? '') })}</p>
           )}
         </>
       )}
       {pp.kind === 'event' && pp.quote !== null && pp.quote !== undefined && (
         <>
-          <h5>事件合约评估</h5>
+          <h5>{t('research:result.eventTitle')}</h5>
           <table className="mini-table">
             <tbody>
-              <tr><td>订单状态</td><td>{(pp.quote as { orderState: string }).orderState === 'submitted' ? '已提交（固定值；不建议提前平仓）' : `参与前预览${(pp.quote as { previewExpired: boolean }).previewExpired ? '（预览已过期请刷新）' : ''}`}</td></tr>
+              <tr><td>{t('research:result.orderState')}</td><td>{(pp.quote as { orderState: string }).orderState === 'submitted' ? t('research:result.orderSubmitted') : t('research:result.orderPreview', { expired: (pp.quote as { previewExpired: boolean }).previewExpired ? t('research:result.orderPreviewExpired') : '' })}</td></tr>
               <tr>
-                <td>倒计时</td>
+                <td>{t('research:result.countdownRow')}</td>
                 <td>
                   <ExpiryCountdown
                     expiryAt={(pp.quote as { expiryAt: number }).expiryAt}
@@ -315,12 +323,12 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
                   />
                 </td>
               </tr>
-              <tr><td>盈亏平衡胜率</td><td>{((pp.breakevenWinRate as number) * 100).toFixed(1)}%（非平价条件）</td></tr>
-              <tr><td>赢净得 / 输损失</td><td>{String(pp.winAmount)} / {String(pp.loseAmount)}</td></tr>
-              <tr><td>P(赢)/平价</td><td>{pp.pWin === null || pp.pWin === undefined ? '不可用' : `${((pp.pWin as number) * 100).toFixed(1)}%`}{pp.pTie === null || pp.pTie === undefined ? '（平价精度未知→EV 不可用）' : ` / ${((pp.pTie as number) * 100).toFixed(1)}%`}</td></tr>
-              <tr><td>期望净收益 EV</td><td>{pp.expectedNet === null || pp.expectedNet === undefined ? '不可用' : String(pp.expectedNet)}</td></tr>
+              <tr><td>{t('research:result.breakevenRow')}</td><td>{((pp.breakevenWinRate as number) * 100).toFixed(1)}%{t('research:result.breakevenNote')}</td></tr>
+              <tr><td>{t('research:result.winLoseRow')}</td><td>{String(pp.winAmount)} / {String(pp.loseAmount)}</td></tr>
+              <tr><td>{t('research:result.pWinRow')}</td><td>{pp.pWin === null || pp.pWin === undefined ? t('research:result.evUnavailable') : `${((pp.pWin as number) * 100).toFixed(1)}%`}{pp.pTie === null || pp.pTie === undefined ? t('research:result.pTieNote') : ` / ${((pp.pTie as number) * 100).toFixed(1)}%`}</td></tr>
+              <tr><td>{t('research:result.evRow')}</td><td>{pp.expectedNet === null || pp.expectedNet === undefined ? t('research:result.evUnavailable') : String(pp.expectedNet)}</td></tr>
               {typeof pp.unavailableCode === 'string' && (
-                <tr><td>不可用</td><td>{String(pp.unavailableCode)}：{String(pp.unavailableDetail ?? '')}</td></tr>
+                <tr><td>{t('research:result.unavailableRow')}</td><td>{String(pp.unavailableCode)}：{String(pp.unavailableDetail ?? '')}</td></tr>
               )}
             </tbody>
           </table>
@@ -332,6 +340,7 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
 }
 
 export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = false, selectedEvidenceId, citationIds = [] }: { runId: string; open: boolean; onClose: () => void; onLocateBar?: (atTime: number) => void; embedded?: boolean; selectedEvidenceId?: string | null; citationIds?: string[] }): JSX.Element {
+  const { t } = useTranslation()
   const [items, setItems] = useState<EvidenceItem[] | null>(null)
   const [structures, setStructures] = useState<StructureEventItem[]>([])
   const [error, setError] = useState('')
@@ -366,25 +375,25 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = f
 
   if (!open) return <></>
   return (
-    <div className={embedded ? 'wb-evidence-content' : 'evidence-drawer'} role={embedded ? undefined : 'dialog'} aria-label="证据抽屉">
+    <div className={embedded ? 'wb-evidence-content' : 'evidence-drawer'} role={embedded ? undefined : 'dialog'} aria-label={t('research:result.evidenceDrawerAria')}>
       <div className="drawer-head">
-        <strong>证据（{items?.length ?? '…'}）</strong>
-        {!embedded && <button className="icon-btn" onClick={onClose} aria-label="关闭">✕</button>}
+        <strong>{t('research:result.evidenceTitle', { count: items?.length ?? '…' })}</strong>
+        {!embedded && <button className="icon-btn" onClick={onClose} aria-label={t('common:toast.close')}>✕</button>}
       </div>
       {error && <p className="err-text">{error}</p>}
-      {items !== null && items.length === 0 && <p className="muted">无冻结证据（知识库未发布资料时检索为空，不编造引用）</p>}
-      {items === null && !error && <p className="dim" role="status">正在读取冻结证据…</p>}
-      {selectedEvidenceId && items && !items.some((e) => e.id === selectedEvidenceId) && <p className="err-text">该引用不在本次冻结证据中。</p>}
+      {items !== null && items.length === 0 && <p className="muted">{t('research:result.evidenceEmpty')}</p>}
+      {items === null && !error && <p className="dim" role="status">{t('research:result.evidenceLoading')}</p>}
+      {selectedEvidenceId && items && !items.some((e) => e.id === selectedEvidenceId) && <p className="err-text">{t('research:result.citationNotInRun')}</p>}
       <ul className="evidence-list" ref={listRef}>
         {(items ?? []).map((e) => (
           <li key={e.id} data-evidence-id={e.id} className={`${e.stance}${e.id === selectedEvidenceId ? ' selected' : ''}`}>
             <button className="evidence-toggle" aria-expanded={expanded === e.id} onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
               {citationIds.includes(e.id) && <span className="wb-cite-number">[{citationIds.indexOf(e.id) + 1}]</span>}
-              <span className={`stance s-${e.stance}`}>{e.stance === 'support' ? '支持' : '反证'}</span>
+              <span className={`stance s-${e.stance}`}>{e.stance === 'support' ? t('research:result.support') : t('research:result.counter')}</span>
               <span className="loc">
-                {e.docTitle !== undefined && e.docTitle !== '' ? e.docTitle : e.kind === 'knowledge_chunk' ? '知识片段' : e.kind}
-                {e.pageNo !== null ? ` · 第 ${e.pageNo} 页` : ''}
-                {e.figureId !== null ? ` · 图 ${e.figureId.slice(0, 8)}` : ''}
+                {e.docTitle !== undefined && e.docTitle !== '' ? e.docTitle : e.kind === 'knowledge_chunk' ? t('research:result.knowledgeChunk') : e.kind}
+                {e.pageNo !== null ? t('research:result.pageNoTitle', { page: e.pageNo }) : ''}
+                {e.figureId !== null ? t('research:result.figureShort', { id: e.figureId.slice(0, 8) }) : ''}
                 {e.sourceTier !== null ? ` · ${e.sourceTier}` : ''}
               </span>
             </button>
@@ -399,7 +408,7 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = f
       {structures.length > 0 && (
         <>
           <div className="drawer-head">
-            <strong>结构事件（{structures.length}）</strong>
+            <strong>{t('research:result.structuresTitle', { count: structures.length })}</strong>
           </div>
           <ul className="evidence-list">
             {structures.map((s) => (
@@ -407,14 +416,14 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = f
                 <button
                   className="evidence-toggle"
                   onClick={() => onLocateBar?.(s.atTime)}
-                  aria-label={`定位 ${s.kind} 到 K 线`}
+                  aria-label={t('research:result.locateAria', { kind: s.kind })}
                 >
-                  <span className={`stance ${s.provisional ? 's-counter' : 's-support'}`}>{s.provisional ? '待确认' : '已确认'}</span>
+                  <span className={`stance ${s.provisional ? 's-counter' : 's-support'}`}>{s.provisional ? t('research:result.pending') : t('research:result.confirmedTag')}</span>
                   <span className="loc">
                     {s.kind}
-                    {s.direction !== null ? ` · ${s.direction === 'long' ? '多' : s.direction === 'short' ? '空' : s.direction}` : ''}
+                    {s.direction !== null ? ` · ${s.direction === 'long' ? t('research:result.sideLong') : s.direction === 'short' ? t('research:result.sideShort') : s.direction}` : ''}
                     {' · '}{new Date(s.atTime).toLocaleTimeString()}
-                    {s.knownAtTime !== null ? `（确认于 ${new Date(s.knownAtTime).toLocaleTimeString()}）` : ''}
+                    {s.knownAtTime !== null ? t('research:result.confirmedAt', { time: new Date(s.knownAtTime).toLocaleTimeString() }) : ''}
                   </span>
                 </button>
                 {s.note !== '' && (

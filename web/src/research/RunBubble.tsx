@@ -5,8 +5,9 @@
  * security_interrupt 安全中断横幅；P1-1：场景徽章；P1-3：追问动作透传给结果卡。
  */
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { FollowUpAction, ResearchResult, ResearchRun, RunStepInfo } from 'biance-vision-brooks'
-import { SSE_CONN_LABEL, STEP_LABEL } from './useResearchRun'
+import { sseConnLabel, stepLabel } from './useResearchRun'
 import type { SseConnState, SecurityInterruptInfo, StepDetailRow } from './useResearchRun'
 import { ResultCard } from './ResearchResult'
 
@@ -32,21 +33,22 @@ interface Props {
   onFollowUp?: (action: FollowUpAction) => void
 }
 
-const DEGRADED_LABEL: Record<string, string> = {
-  repair_exhausted: '修复预算耗尽，已剔除未经校验的归纳内容',
-  data_stale: '数据过期',
-  model_unpublished: '模型未发布',
-  quote_missing: '报价缺失',
+/** 受控降级码 → research:degraded.* 词典 key */
+const DEGRADED_KEYS: Record<string, string> = {
+  repair_exhausted: 'research:degraded.repair_exhausted',
+  data_stale: 'research:degraded.data_stale',
+  model_unpublished: 'research:degraded.model_unpublished',
+  quote_missing: 'research:degraded.quote_missing',
 }
 
-/** P1-1 任务场景徽章（与服务端 scenes.ts 标签同源） */
-const SCENE_LABEL: Record<string, string> = {
-  'hold-review': '持仓复查',
-  'structure-scan': '结构扫描',
-  'concept-teach': '概念教学',
-  'quote-review': '报价评估',
-  'replay-analysis': '历史复盘',
-  'news-attribution': '消息归因',
+/** P1-1 任务场景徽章（与服务端 scenes.ts 场景同源）→ research:taskKind.* */
+const SCENE_KEYS: Record<string, string> = {
+  'hold-review': 'research:taskKind.hold-review',
+  'structure-scan': 'research:taskKind.structure-scan',
+  'concept-teach': 'research:taskKind.concept-teach',
+  'quote-review': 'research:taskKind.quote-review',
+  'replay-analysis': 'research:taskKind.replay-analysis',
+  'news-attribution': 'research:taskKind.news-attribution',
 }
 
 const DETAIL_KIND_ICON: Record<string, string> = {
@@ -59,24 +61,26 @@ const DETAIL_KIND_ICON: Record<string, string> = {
 }
 
 export function RunBubble({ run, steps, result, sseError, sseConn, degraded, details, securityInterrupt, onCancel, onRetry, footer, onCitation, onFollowUp }: Props): JSX.Element {
+  const { t } = useTranslation()
   const active = run.status !== 'published' && run.status !== 'failed' && run.status !== 'cancelled'
-  const sceneLabel = run.sceneCode !== undefined ? SCENE_LABEL[run.sceneCode] : undefined
+  const sceneKey = run.sceneCode !== undefined ? SCENE_KEYS[run.sceneCode] : undefined
+  const sceneLabel = sceneKey !== undefined ? t(sceneKey) : undefined
   return (
     <div
       className={`run-bubble rb-${run.status}${active ? ' fx-beam fx-pulse-line' : ''}`}
       role="status"
-      aria-label={`研究运行 ${run.id.slice(0, 8)} 状态 ${run.status}`}
+      aria-label={t('research:run.runAria', { id: run.id.slice(0, 8), status: run.status })}
     >
       <div className="run-bubble-head">
-        <strong>运行 {run.id.slice(0, 8)}</strong>
+        <strong>{t('research:run.runLabel', { id: run.id.slice(0, 8) })}</strong>
         {sceneLabel !== undefined && <span className="scene-badge">{sceneLabel}</span>}
         <span className={`run-status st-${run.status}`}>{run.status}</span>
-        <span className={`conn-badge conn-${sseConn}`} aria-label={`SSE 连接状态：${SSE_CONN_LABEL[sseConn]}`}>
-          SSE：{SSE_CONN_LABEL[sseConn]}
+        <span className={`conn-badge conn-${sseConn}`} aria-label={t('research:main.sseAria', { label: sseConnLabel(sseConn) })}>
+          {t('research:main.sseLabel', { label: sseConnLabel(sseConn) })}
         </span>
         {active && (
           <button className="btn btn-ghost btn-sm" onClick={onCancel}>
-            取消
+            {t('research:run.cancel')}
           </button>
         )}
       </div>
@@ -84,14 +88,14 @@ export function RunBubble({ run, steps, result, sseError, sseConn, degraded, det
         <ol className="step-list">
           {steps.map((s) => (
             <li key={s.step} className={s.status}>
-              {STEP_LABEL[s.step] ?? s.step}
+              {stepLabel(s.step)}
               {s.status === 'completed' && ' ✓'}
             </li>
           ))}
         </ol>
       )}
       {details !== undefined && details.length > 0 && (
-        <ul className="step-detail-list" aria-label="过程状态">
+        <ul className="step-detail-list" aria-label={t('research:run.processState')}>
           {details.map((d) => (
             <li key={d.key} className={`sd-${d.status}`}>
               <span aria-hidden>{DETAIL_KIND_ICON[d.kind] ?? '·'}</span> {d.label}
@@ -103,20 +107,20 @@ export function RunBubble({ run, steps, result, sseError, sseConn, degraded, det
       )}
       {securityInterrupt != null && (
         <p className="security-banner" role="alert">
-          安全中断（{securityInterrupt.code}）：{securityInterrupt.reason}——本次运行已停止，请重新发起。
+          {t('research:degraded.securityInterrupt', { code: securityInterrupt.code, reason: securityInterrupt.reason })}
         </p>
       )}
       {sseError !== '' && <p className="err-text">{sseError}</p>}
       {degraded !== null && degraded !== undefined && (
         <p className="degraded-note" role="status">
-          受控降级：{DEGRADED_LABEL[degraded.code] ?? degraded.code}
+          {t('research:degraded.label', { label: DEGRADED_KEYS[degraded.code] !== undefined ? t(DEGRADED_KEYS[degraded.code]) : degraded.code })}
           {degraded.reason !== '' ? `（${degraded.reason.slice(0, 200)}）` : ''}
         </p>
       )}
       {run.error !== undefined && run.error !== '' && <p className="err-text">{run.error}</p>}
       {run.status === 'failed' && onRetry !== undefined && (
-        <button className="btn btn-primary btn-sm" aria-label="以相同标的与期限重新发起研究" onClick={onRetry}>
-          重新发起（相同标的与期限）
+        <button className="btn btn-primary btn-sm" aria-label={t('research:run.retryAria')} onClick={onRetry}>
+          {t('research:run.retrySame')}
         </button>
       )}
       {result !== null && run.status === 'published' && <ResultCard result={result} horizon={run.horizon} runId={run.id} onCitation={onCitation} onFollowUp={onFollowUp} />}

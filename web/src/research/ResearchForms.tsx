@@ -4,6 +4,7 @@
  * 数值为十进制字符串（服务端 numeric 同源），confirmedAt/asOf 由提交时刻生成。
  */
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import type { EventQuote, Position } from 'biance-vision-brooks'
 import { Dropdown } from './Dropdown'
@@ -17,6 +18,7 @@ const input = (label: string, node: JSX.Element, hint?: string): JSX.Element => 
 )
 
 export function PositionForm({ symbol, onSaved }: { symbol: string; onSaved: (p: Position) => void }): JSX.Element {
+  const { t } = useTranslation()
   const [side, setSide] = useState<'long' | 'short'>('long')
   const [qty, setQty] = useState('0.01')
   const [entryPrice, setEntryPrice] = useState('')
@@ -57,30 +59,31 @@ export function PositionForm({ symbol, onSaved }: { symbol: string; onSaved: (p:
 
   return (
     <div className="research-form">
-      <h4>录入持仓（App 抄录）</h4>
+      <h4>{t('research:form.positionTitle')}</h4>
       <div className="form-grid">
-        {input('方向', (
-          <Dropdown value={side} onChange={(v) => setSide(v)} options={[{ value: 'long', label: '做多 long' }, { value: 'short', label: '做空 short' }]} />
+        {input(t('research:form.side'), (
+          <Dropdown value={side} onChange={(v) => setSide(v)} options={[{ value: 'long', label: t('research:form.long') }, { value: 'short', label: t('research:form.short') }]} />
         ))}
-        {input('数量', <input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" placeholder="0.01" />)}
-        {input('开仓价', <input value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} inputMode="decimal" placeholder="60000" />)}
-        {input('杠杆', <input type="number" min={1} max={125} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} />)}
-        {input('保证金模式', (
-          <Dropdown value={marginMode} onChange={(v) => setMarginMode(v)} options={[{ value: 'isolated', label: '逐仓 isolated' }, { value: 'cross', label: '全仓 cross' }]} />
+        {input(t('research:form.qty'), <input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" placeholder="0.01" />)}
+        {input(t('research:form.entryPrice'), <input value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} inputMode="decimal" placeholder="60000" />)}
+        {input(t('research:form.leverage'), <input type="number" min={1} max={125} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} />)}
+        {input(t('research:form.marginMode'), (
+          <Dropdown value={marginMode} onChange={(v) => setMarginMode(v)} options={[{ value: 'isolated', label: t('research:form.isolated') }, { value: 'cross', label: t('research:form.cross') }]} />
         ))}
-        {input('风险预算', <input value={riskBudget} onChange={(e) => setRiskBudget(e.target.value)} inputMode="decimal" placeholder="可承受损失金额" />)}
-        {input('止损价', <input value={stopPrice} onChange={(e) => setStopPrice(e.target.value)} inputMode="decimal" placeholder="可留空" />)}
-        {input('强平价', <input value={liquidationPrice} onChange={(e) => setLiquidationPrice(e.target.value)} inputMode="decimal" placeholder="从 App 抄录；未知留空" />, '未知留空：不显示简化估算')}
+        {input(t('research:form.riskBudget'), <input value={riskBudget} onChange={(e) => setRiskBudget(e.target.value)} inputMode="decimal" placeholder={t('research:form.riskBudgetPlaceholder')} />)}
+        {input(t('research:form.stopPrice'), <input value={stopPrice} onChange={(e) => setStopPrice(e.target.value)} inputMode="decimal" placeholder={t('research:form.stopPlaceholder')} />)}
+        {input(t('research:form.liqPrice'), <input value={liquidationPrice} onChange={(e) => setLiquidationPrice(e.target.value)} inputMode="decimal" placeholder={t('research:form.liqPlaceholder')} />, t('research:form.liqNote'))}
       </div>
       {error && <p className="err-text">{error}</p>}
       <button className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
-        {busy ? '保存中…' : '保存持仓'}
+        {busy ? t('research:form.saving') : t('research:form.savePosition')}
       </button>
     </div>
   )
 }
 
 export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: EventQuote) => void }): JSX.Element {
+  const { t } = useTranslation()
   const [strikePrice, setStrikePrice] = useState('')
   const [minutes, setMinutes] = useState(10)
   const [stake, setStake] = useState('')
@@ -111,7 +114,7 @@ export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: Ev
     setError('')
     const now = Date.now()
     if (orderState === 'submitted' && expiryMode !== 'exact') {
-      setError('已提交订单必须录入 App 显示的固定到期时刻（不能用「现在+期限」推算）')
+      setError(t('research:form.errSubmittedNeedsExact'))
       setBusy(false)
       return
     }
@@ -122,12 +125,12 @@ export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: Ev
           : new Date(expiryExact).getTime()
         : now + minutes * 60_000
     if (!Number.isFinite(expiryAt)) {
-      setError(expiryMode === 'exact' ? '请抄录 App 订单页显示的固定到期时刻' : '到期时间无效')
+      setError(expiryMode === 'exact' ? t('research:form.errExactRequired') : t('research:form.errInvalidExpiry'))
       setBusy(false)
       return
     }
     if (orderState === 'submitted' && expiryAt <= now) {
-      setError('已提交订单的到期时间必须晚于当前时刻（订单应尚未结算）')
+      setError(t('research:form.errExpiryInPast'))
       setBusy(false)
       return
     }
@@ -160,10 +163,10 @@ export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: Ev
 
   return (
     <div className="research-form">
-      <h4>录入事件报价（App 抄录）</h4>
+      <h4>{t('research:form.quoteTitle')}</h4>
       <div className="form-grid">
-        {input('执行价', <input value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} inputMode="decimal" />)}
-        {input('到期方式', (
+        {input(t('research:form.strike'), <input value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} inputMode="decimal" />)}
+        {input(t('research:form.expiryMode'), (
           <Dropdown
             value={expiryMode}
             onChange={(v) => {
@@ -172,50 +175,50 @@ export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: Ev
               setExpiryMode(v)
             }}
             options={[
-              { value: 'duration', label: '录入时刻 + 期限（预览）', disabled: orderState === 'submitted' },
-              { value: 'exact', label: 'App 固定到期时刻（已提交订单必选）' },
+              { value: 'duration', label: t('research:form.expiryDuration'), disabled: orderState === 'submitted' },
+              { value: 'exact', label: t('research:form.expiryExact') },
             ]}
           />
-        ), orderState === 'submitted' ? '已提交订单锁定为固定到期时刻，不能改回「现在+期限」' : undefined)}
+        ), orderState === 'submitted' ? t('research:form.expiryModeNote') : undefined)}
         {expiryMode === 'duration'
-          ? input('期限（分钟）', (
+          ? input(t('research:form.horizonMinutes'), (
               <Dropdown value={minutes} onChange={(v) => setMinutes(v)} options={[
-                { value: 10, label: '10 分钟' },
-                { value: 30, label: '30 分钟' },
-                { value: 60, label: '1 小时' },
-                { value: 1440, label: '1 天' },
-                { value: 10080, label: '1 周（研究模式）' },
+                { value: 10, label: t('research:form.h10m') },
+                { value: 30, label: t('research:form.h30m') },
+                { value: 60, label: t('research:form.h1h') },
+                { value: 1440, label: t('research:form.h1d') },
+                { value: 10080, label: t('research:form.h1w') },
               ]} />
-            ), '1 周为研究期限，非币安已有事件合约产品')
-          : input('到期时刻', (
+            ), t('research:form.weekNote'))
+          : input(t('research:form.expiryTime'), (
               <input
                 type="datetime-local"
                 value={expiryExact}
                 onChange={(e) => setExpiryExact(e.target.value)}
                 step={1}
-                placeholder="抄录 App 订单页的到期时间"
+                placeholder={t('research:form.expiryPlaceholder')}
               />
-            ), orderState === 'submitted' ? '必填：抄录 App 订单页显示的到期时间（本地时区），不要自行推算' : '抄录 App 显示的到期时间（本地时区）')}
-        {input('投入金额', <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" />)}
-        {input('总返还（含本金）', <input value={totalPayout} onChange={(e) => setTotalPayout(e.target.value)} inputMode="decimal" />, '不是净收益')}
-        {input('方向', (
+            ), orderState === 'submitted' ? t('research:form.expiryNoteSubmitted') : t('research:form.expiryNotePreview'))}
+        {input(t('research:form.stake'), <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" />)}
+        {input(t('research:form.totalPayout'), <input value={totalPayout} onChange={(e) => setTotalPayout(e.target.value)} inputMode="decimal" />, t('research:form.totalPayoutNote'))}
+        {input(t('research:form.direction'), (
           <select value={direction} onChange={(e) => setDirection(e.target.value as 'above' | 'below')}>
-            <option value="above">到期高于执行价</option>
-            <option value="below">到期低于执行价</option>
+            <option value="above">{t('research:form.above')}</option>
+            <option value="below">{t('research:form.below')}</option>
           </select>
         ))}
-        {input('结算参考价', <input value={refPrice} onChange={(e) => setRefPrice(e.target.value)} inputMode="decimal" placeholder="App 展示值，可留空" />)}
-        {input('订单状态', (
+        {input(t('research:form.refPrice'), <input value={refPrice} onChange={(e) => setRefPrice(e.target.value)} inputMode="decimal" placeholder={t('research:form.refPricePlaceholder')} />)}
+        {input(t('research:form.orderState'), (
           <select value={orderState} onChange={(e) => onOrderStateChange(e.target.value as 'preview' | 'submitted')}>
-            <option value="preview">参与前（预览价 60s 时效）</option>
-            <option value="submitted">已提交（固定值，只研究剩余期限）</option>
+            <option value="preview">{t('research:form.orderPreview')}</option>
+            <option value="submitted">{t('research:form.orderSubmitted')}</option>
           </select>
         ))}
-        {input('事件风险预算', <input value={eventRiskBudget} onChange={(e) => setEventRiskBudget(e.target.value)} inputMode="decimal" placeholder="单笔可承受损失（参与门槛必填）" />, '未填写时参与建议会被门槛拒绝')}
+        {input(t('research:form.eventRiskBudget'), <input value={eventRiskBudget} onChange={(e) => setEventRiskBudget(e.target.value)} inputMode="decimal" placeholder={t('research:form.eventRiskPlaceholder')} />, t('research:form.eventRiskNote'))}
       </div>
       {error && <p className="err-text">{error}</p>}
       <button className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
-        {busy ? '保存中…' : '保存报价'}
+        {busy ? t('research:form.saving') : t('research:form.saveQuote')}
       </button>
     </div>
   )
