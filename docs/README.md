@@ -8,6 +8,7 @@
 | --- | --- |
 | [user-manual-v2.md](user-manual-v2.md) | **用户手册 v2（v0.9.x 现行界面）**：双语切换、经典版/新版研究工作台双布局、三场景操作、翻译三种用法（消息按钮/会话指令/slash）、异常与 FAQ |
 | [admin-manual-v2.md](admin-manual-v2.md) | **管理手册 v2（v0.9.x 现行界面）**：六页后台速查、提示词与文案页（八模板版本治理/免责/输入配置）、翻译能力运维、意图升级红线 |
+| [knowledge-rag-guide.md](knowledge-rag-guide.md) | **知识库 RAG 完全指南**：上传 Brooks PDF → 解析(Docling) → 切分/向量化 → 发布(知识版本) → 三层检索(RRF+精排) → 证据引用全链路逐步讲解 + 批量导入最佳实践 |
 | [user-manual.md](user-manual.md) | 用户手册 v0.8 版：三场景操作细节与 AI Brooks 原理展开（v2 保留索引） |
 | [admin-manual.md](admin-manual.md) | 管理手册 v0.8 版：AI 设置/管控/知识库/Agent/评测完整操作（v2 保留索引） |
 
