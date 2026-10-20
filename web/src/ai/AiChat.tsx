@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import type { ResearchRun } from 'biance-vision-brooks'
 import { useAi } from './AiContext'
@@ -14,17 +15,13 @@ import { useResearchRun } from '../research/useResearchRun'
 import { PositionConfirmCard } from '../research/PositionConfirmCard'
 import { RunBubble } from '../research/RunBubble'
 import MiniMarkdown from '../components/MiniMarkdown'
+import { MessageTranslate } from '../research/MessageTranslate'
 
 interface Props {
   onClose: () => void
 }
 
-const SUGGESTIONS = [
-  'BTC 永续现在是什么结构？还能追多吗？',
-  '10 分钟后高于 60000 的事件合约值得参与吗？',
-  '什么是铁丝网（Barb Wire）？怎么识别？',
-  '帮我录入一笔 BTCUSDT 多头持仓',
-]
+/** 建议问题走 ai:chat.suggestions 词典（returnObjects 数组） */
 
 /** 列表里的相对时间（今天只显示时分，更早显示月日 + 时分） */
 function fmtBrief(ts: number): string {
@@ -38,6 +35,8 @@ function fmtBrief(ts: number): string {
 }
 
 export default function AiChat({ onClose }: Props): JSX.Element {
+  const { t } = useTranslation()
+  const suggestions = t('ai:chat.suggestions', { returnObjects: true }) as string[]
   const { status, pendingPrompt, consumePendingPrompt } = useAi()
   const { size, minimized, setMinimized, resizeHandleProps } = useChatSize()
   // 头部浮层：null 关闭 / history 历史会话
@@ -115,7 +114,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
       return
     }
     if (a.action === 'counter_search') {
-      void conv.send(`从反证角度重新研究 ${target?.symbol ?? ''}（${target?.horizon ?? ''}）：重点寻找不支持上一轮结论的证据`)
+      void conv.send(t('ai:chat.counterFollowUp', { symbol: target?.symbol ?? '', horizon: target?.horizon ?? '' }))
       return
     }
   }
@@ -142,18 +141,18 @@ export default function AiChat({ onClose }: Props): JSX.Element {
     <div
       className={`ai-chat${minimized ? ' min' : ''}`}
       role="dialog"
-      aria-label="AI 助手对话"
+      aria-label={t('ai:chat.aria')}
       style={minimized ? undefined : { width: `${size.w}px`, height: `${size.h}px` }}
     >
       <div className="ai-chat-head" onClick={minimized ? () => setMinimized(false) : undefined}>
         <span className="ai-chat-title">
           <span className="ai-avatar" aria-hidden="true">🤖</span>
-          AI 研究助手{status.model ? <em>{status.model}</em> : null}
+          {t('ai:chat.title')}{status.model ? <em>{status.model}</em> : null}
         </span>
         <span className="ai-chat-tools">
           <button
             className="ai-chat-tool"
-            title={minimized ? '展开' : '最小化'}
+            title={minimized ? t('ai:chat.expand') : t('ai:chat.minimize')}
             onClick={(e) => {
               e.stopPropagation()
               setMinimized((m) => !m)
@@ -166,7 +165,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
             <>
               <button
                 className={`ai-chat-tool${panel === 'history' ? ' on' : ''}`}
-                title="历史会话"
+                title={t('ai:chat.history')}
                 onClick={() => {
                   if (panel === 'history') setPanel(null)
                   else {
@@ -175,18 +174,18 @@ export default function AiChat({ onClose }: Props): JSX.Element {
                   }
                 }}
               >
-                历史
+                {t('ai:chat.historyShort')}
               </button>
               <button
                 className="ai-chat-tool"
-                title="开启新对话（历史会话仍可从「历史」找回）"
+                title={t('ai:chat.newChatTitle')}
                 onClick={() => {
                   setPanel(null)
                   conv.newConversation()
                 }}
                 disabled={conv.busy}
               >
-                ✚ 新对话
+                {t('ai:chat.newChat')}
               </button>
             </>
           )}
@@ -205,9 +204,9 @@ export default function AiChat({ onClose }: Props): JSX.Element {
 
       {panel === 'history' && (
         <div className="ai-pop">
-          <p className="ai-pop-title">🕘 历史会话</p>
+          <p className="ai-pop-title">{t('ai:chat.historyPopTitle')}</p>
           {conv.conversations.length === 0 ? (
-            <p className="ai-pop-empty">还没有历史会话</p>
+            <p className="ai-pop-empty">{t('ai:chat.historyEmpty')}</p>
           ) : (
             conv.conversations.map((c) => (
               <div key={c.id} className={`ai-conv-item${c.id === conv.convId ? ' on' : ''}`}>
@@ -218,7 +217,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
                     void conv.loadConversation(c.id)
                   }}
                 >
-                  <span className="ai-conv-title">{c.title !== '' ? c.title : '未命名会话'}</span>
+                  <span className="ai-conv-title">{c.title !== '' ? c.title : t('ai:chat.untitled')}</span>
                   <span className="ai-conv-meta">{fmtBrief(c.updatedAt)}</span>
                 </button>
               </div>
@@ -231,6 +230,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
         {conv.messages.map((m, i) => (
           <div key={i} className={`ai-bubble ${m.role === 'user' ? 'me' : 'bot'}`}>
             {m.role === 'user' ? m.text : <MiniMarkdown text={m.text} />}
+            {m.text !== '' && <MessageTranslate text={m.text} />}
             {m.card !== undefined && (
               <PositionConfirmCard card={m.card} busy={conv.cardBusy === i} onResolve={(confirm) => void conv.resolveCard(i, confirm)} />
             )}
@@ -238,7 +238,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
         ))}
         {conv.busy && (
           <div className="ai-bubble bot">
-            <span className="ai-typing">分析中…</span>
+            <span className="ai-typing">{t('ai:chat.typing')}</span>
           </div>
         )}
         {activeRun && (
@@ -257,7 +257,7 @@ export default function AiChat({ onClose }: Props): JSX.Element {
             footer={
               tracker.result !== null ? (
                 <Link className="btn btn-ghost btn-sm" to={`/research?run=${activeRun.id}`} onClick={onClose}>
-                  在研究工作台打开
+                  {t('ai:chat.openInWorkbench')}
                 </Link>
               ) : undefined
             }
@@ -265,9 +265,9 @@ export default function AiChat({ onClose }: Props): JSX.Element {
         )}
         {conv.messages.length <= 1 && !activeRun && (
           <div className="ai-welcome">
-            <p className="ai-welcome-sub">直接描述问题，我会自动识别场景并启动完整研究。试试：</p>
+            <p className="ai-welcome-sub">{t('ai:chat.welcomeSub')}</p>
             <div className="ai-chips">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button key={s} className="ai-chip" onClick={() => void conv.send(s)}>
                   {s}
                 </button>
@@ -284,15 +284,15 @@ export default function AiChat({ onClose }: Props): JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing) void conv.send()
           }}
-          placeholder="描述你的问题，自动启动研究…"
+          placeholder={t('ai:chat.placeholder')}
           disabled={conv.busy}
           spellCheck={false}
         />
         <button className="btn btn-sm btn-primary" onClick={() => void conv.send()} disabled={conv.busy || conv.input.trim() === ''}>
-          {conv.busy ? '…' : '发送'}
+          {conv.busy ? '…' : t('ai:chat.send')}
         </button>
       </div>
-      <p className="ai-disclaim">AI 输出仅供参考，不构成投资建议</p>
+      <p className="ai-disclaim">{t('ai:chat.disclaim')}</p>
       {!minimized && (
         <>
           <div className="ai-resize e" {...resizeHandleProps('e')} />

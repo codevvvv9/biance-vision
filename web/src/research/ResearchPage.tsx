@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { analyzeBrooks } from 'biance-vision-brooks'
 import type { BrooksDisplay, EventQuote, FollowUpAction, Position, ResearchRun } from 'biance-vision-brooks'
@@ -16,12 +17,14 @@ import BrooksChart from '../brooks/BrooksChart'
 import type { BrooksChartLevel } from '../brooks/BrooksChart'
 import { PositionForm, QuoteForm } from './ResearchForms'
 import { EvidenceDrawer } from './ResearchResult'
-import { useResearchRun, SSE_CONN_LABEL } from './useResearchRun'
+import { useResearchRun, sseConnLabel } from './useResearchRun'
 import { useResearchConversation } from './useResearchConversation'
 import { useResearchCandles } from './useResearchCandles'
+import { currentLocale } from '../i18n'
 import { PositionConfirmCard } from './PositionConfirmCard'
 import { RunBubble } from './RunBubble'
 import MiniMarkdown from '../components/MiniMarkdown'
+import { MessageTranslate } from './MessageTranslate'
 import { UiModeSwitch } from './UiModeSwitch'
 import { Dropdown } from './Dropdown'
 import { Combobox } from './Combobox'
@@ -62,6 +65,7 @@ interface Evaluation {
 }
 
 export default function ResearchPage(): JSX.Element {
+  const { t } = useTranslation()
   const [scenario, setScenario] = useState<Scenario>('perp')
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [horizon, setHorizon] = useState<Horizon>('1h')
@@ -112,9 +116,9 @@ export default function ResearchPage(): JSX.Element {
       setLeftError('')
     } catch (e) {
       // 数据服务不可用（DB 中断等）：显式只读横幅，保留旧数据不静默吞错
-      setLeftError(`数据服务不可用（只读）：${(e as Error).message}`)
+      setLeftError(t('research:main.leftDataError', { msg: (e as Error).message }))
     }
-  }, [])
+  }, [t])
 
   const tracker = useResearchRun({
     onPublished: () => void refreshLeft(),
@@ -137,7 +141,7 @@ export default function ResearchPage(): JSX.Element {
       setScenario(d.run.product === 'event' ? 'event' : d.run.product === 'teaching' ? 'spot' : 'perp')
       tracker.openRun(d.run)
     } catch (e) {
-      setLeftError(`研究加载失败：${(e as Error).message}`)
+      setLeftError(t('research:main.researchLoadFailed', { msg: (e as Error).message }))
     }
   }
 
@@ -294,7 +298,7 @@ export default function ResearchPage(): JSX.Element {
       return
     }
     if (a.action === 'counter_search') {
-      void conv.send(`从反证角度重新研究 ${tracker.activeRun?.symbol ?? symbol}（${tracker.activeRun?.horizon ?? horizon}）：重点寻找不支持上一轮结论的证据`)
+      void conv.send(t('research:main.counterFollowUp', { symbol: tracker.activeRun?.symbol ?? symbol, horizon: tracker.activeRun?.horizon ?? horizon }))
       return
     }
   }
@@ -319,7 +323,10 @@ export default function ResearchPage(): JSX.Element {
   const result = tracker.result
 
   /** 中栏叠加层：复用共享引擎分析已收盘 K 线（与 Brooks 复盘页同一份代码） */
-  const chartAnalysis = useMemo(() => analyzeBrooks(bars), [bars])
+  const chartAnalysis = useMemo(
+    () => analyzeBrooks(bars, { swingK: 3, locale: currentLocale() === 'en-US' ? 'en-US' : 'zh-CN' }),
+    [bars],
+  )
 
   /**
    * W3 多周期结论条：结果契约（ResearchResultV2）不直接携带 structureView，
@@ -344,16 +351,16 @@ export default function ResearchPage(): JSX.Element {
     if (pp.kind === 'perp') {
       const pos = pp.position as { stopPrice?: string | null } | null | undefined
       const stop = pos?.stopPrice !== null && pos?.stopPrice !== undefined ? Number(pos.stopPrice) : NaN
-      if (Number.isFinite(stop)) levels.push({ price: stop, label: '止损' })
+      if (Number.isFinite(stop)) levels.push({ price: stop, label: t('research:chart.stop') })
       const liq = (pp.liquidation as { price?: number | null } | undefined)?.price
-      if (typeof liq === 'number' && Number.isFinite(liq)) levels.push({ price: liq, label: '强平' })
+      if (typeof liq === 'number' && Number.isFinite(liq)) levels.push({ price: liq, label: t('research:chart.liq') })
     } else if (pp.kind === 'event') {
       const quote = pp.quote as { strikePrice?: string } | null | undefined
       const strike = quote?.strikePrice !== undefined ? Number(quote.strikePrice) : NaN
-      if (Number.isFinite(strike)) levels.push({ price: strike, label: '执行价' })
+      if (Number.isFinite(strike)) levels.push({ price: strike, label: t('research:chart.strike') })
     }
     return levels
-  }, [result, activeRun, symbol])
+  }, [result, activeRun, symbol, t])
 
   /** W4 顶栏行情时间与新鲜度：最后一根已收盘 closeTime；超过 周期长度+一个周期宽限 视为陈旧 */
   const dataFreshness = useMemo(() => {
@@ -371,78 +378,78 @@ export default function ResearchPage(): JSX.Element {
         <Dropdown
           value={scenario}
           onChange={(v) => { setScenario(v); setChartAsOf(null) }}
-          ariaLabel="研究场景"
+          ariaLabel={t('research:main.sceneAria')}
           options={[
-            { value: 'spot', label: '现货' },
-            { value: 'perp', label: 'USDT 永续' },
-            { value: 'event', label: '事件合约' },
+            { value: 'spot', label: t('research:main.sceneSpot') },
+            { value: 'perp', label: t('research:main.scenePerp') },
+            { value: 'event', label: t('research:main.sceneEvent') },
           ]}
         />
         <Combobox
           inputClassName="symbol-input"
           value={symbol}
           onChange={(v) => { setSymbol(v.toUpperCase()); setChartAsOf(null) }}
-          ariaLabel="交易对"
+          ariaLabel={t('research:main.symbolAria')}
           suggestions={symbolList}
         />
         <Dropdown
           value={horizon}
           onChange={(v) => { setHorizon(v); setChartAsOf(null) }}
-          ariaLabel="研究期限"
+          ariaLabel={t('research:main.horizonAria')}
           options={[
-            { value: '10m', label: '10 分钟' },
-            { value: '30m', label: '30 分钟' },
-            { value: '1h', label: '1 小时' },
-            { value: '1d', label: '1 天' },
-            { value: '1w', label: '1 周（研究模式）' },
+            { value: '10m', label: t('research:main.h10m') },
+            { value: '30m', label: t('research:main.h30m') },
+            { value: '1h', label: t('research:main.h1h') },
+            { value: '1d', label: t('research:main.h1d') },
+            { value: '1w', label: t('research:main.h1w') },
           ]}
         />
         <span className="muted">
           {dataFreshness !== null ? (
             <>
-              数据至 {new Date(dataFreshness.closeTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-              {dataFreshness.stale && <em className="stale-tag-inline">数据陈旧</em>}
+              {t('research:main.dataUntil', { time: new Date(dataFreshness.closeTime).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' }) })}
+              {dataFreshness.stale && <em className="stale-tag-inline">{t('research:main.dataStale')}</em>}
             </>
           ) : (
-            '数据源：库内已收盘 K 线（asOf 冻结）'
+            t('research:main.dataSource')
           )}
         </span>
-        <span className={`conn-badge conn-${tracker.sseConn}`} role="status" aria-label={`SSE 连接状态：${SSE_CONN_LABEL[tracker.sseConn]}`}>
-          SSE：{SSE_CONN_LABEL[tracker.sseConn]}
+        <span className={`conn-badge conn-${tracker.sseConn}`} role="status" aria-label={t('research:main.sseAria', { label: sseConnLabel(tracker.sseConn) })}>
+          {t('research:main.sseLabel', { label: sseConnLabel(tracker.sseConn) })}
         </span>
       </div>
 
       {leftError !== '' && (
         <div className="left-error-banner" role="alert">
-          {leftError}（持仓/报价/历史为上次成功拉取的快照，新增研究可能失败）
+          {leftError}{t('research:main.leftErrorNote')}
         </div>
       )}
 
       <div className="research-mobile-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'chart'} className={tab === 'chart' ? 'on' : ''} onClick={() => setTab('chart')}>图表</button>
-        <button role="tab" aria-selected={tab === 'run'} className={tab === 'run' ? 'on' : ''} onClick={() => setTab('run')}>对话</button>
-        <button role="tab" aria-selected={tab === 'evidence'} className={tab === 'evidence' ? 'on' : ''} onClick={() => { setDrawerOpen(true); setTab('evidence') }}>证据</button>
+        <button role="tab" aria-selected={tab === 'chart'} className={tab === 'chart' ? 'on' : ''} onClick={() => setTab('chart')}>{t('research:main.tabChart')}</button>
+        <button role="tab" aria-selected={tab === 'run'} className={tab === 'run' ? 'on' : ''} onClick={() => setTab('run')}>{t('research:main.tabChat')}</button>
+        <button role="tab" aria-selected={tab === 'evidence'} className={tab === 'evidence' ? 'on' : ''} onClick={() => { setDrawerOpen(true); setTab('evidence') }}>{t('research:main.tabEvidence')}</button>
       </div>
 
       <div className={`research-grid t-${tab}`}>
         <aside className="research-left">
           <div className="panel">
-            <h4>持仓（手动确认）</h4>
-            {positions.length === 0 && <p className="muted">尚未录入</p>}
+            <h4>{t('research:main.positionsTitle')}</h4>
+            {positions.length === 0 && <p className="muted">{t('research:main.notEntered')}</p>}
             <ul className="left-list">
               {positions.map((p) => (
                 <li key={p.id} className={selectedPosition === p.id ? 'sel' : ''}>
                   <button onClick={() => setSelectedPosition(p.id)}>
-                    <strong>{p.symbol}</strong> {p.side === 'long' ? '多' : '空'} ×{p.qty} @ {p.entryPrice}
-                    {p.isStale && <em className="stale-tag">已过期需重确认</em>}
+                    <strong>{p.symbol}</strong> {t(p.side === 'long' ? 'research:ctx.long' : 'research:ctx.short')} ×{p.qty} @ {p.entryPrice}
+                    {p.isStale && <em className="stale-tag">{t('research:main.staleNeedReconfirm')}</em>}
                   </button>
                 </li>
               ))}
             </ul>
           </div>
           <div className="panel">
-            <h4>事件报价</h4>
-            {quotes.length === 0 && <p className="muted">尚未录入</p>}
+            <h4>{t('research:main.quotesTitle')}</h4>
+            {quotes.length === 0 && <p className="muted">{t('research:main.notEntered')}</p>}
             {quoteConfirmError !== '' && <p className="err-text">{quoteConfirmError}</p>}
             <ul className="left-list">
               {quotes.map((q) => {
@@ -451,37 +458,37 @@ export default function ResearchPage(): JSX.Element {
                 return (
                   <li key={q.id} className={selectedQuote === q.id ? 'sel' : ''}>
                     <button onClick={() => setSelectedQuote(q.id)}>
-                      <strong>{q.symbol}</strong> {q.direction === 'above' ? '高于' : '低于'} {q.strikePrice}
-                      <span className="muted"> · 剩 {mins} 分</span>
-                      {ev && <span className={ev.horizonMatched ? 'match-ok' : 'match-no'}>{ev.horizonMatched ? '期限匹配' : '期限未匹配'}</span>}
-                      {q.userConfirmedOutcome !== null && q.userConfirmedOutcome !== undefined && <em>已确认 {q.userConfirmedOutcome}</em>}
-                      {q.estimatedOutcome !== null && q.estimatedOutcome !== undefined && <em>估算 {q.estimatedOutcome}</em>}
+                      <strong>{q.symbol}</strong> {t(q.direction === 'above' ? 'research:main.above' : 'research:main.below')} {q.strikePrice}
+                      <span className="muted">{t('research:main.remainMins', { mins })}</span>
+                      {ev && <span className={ev.horizonMatched ? 'match-ok' : 'match-no'}>{ev.horizonMatched ? t('research:main.horizonMatched') : t('research:main.horizonUnmatched')}</span>}
+                      {q.userConfirmedOutcome !== null && q.userConfirmedOutcome !== undefined && <em>{t('research:main.confirmed', { value: q.userConfirmedOutcome })}</em>}
+                      {q.estimatedOutcome !== null && q.estimatedOutcome !== undefined && <em>{t('research:main.estimated', { value: q.estimatedOutcome })}</em>}
                     </button>
                     {(q.userConfirmedOutcome === null || q.userConfirmedOutcome === undefined) &&
                       (confirmingQuote === q.id ? (
-                        <span className="quote-confirm-row" role="group" aria-label={`确认 ${q.symbol} 报价结算结果`}>
+                        <span className="quote-confirm-row" role="group" aria-label={t('research:main.confirmGroupAria', { symbol: q.symbol })}>
                           {(['above', 'below', 'tie'] as const).map((o) => (
                             <button
                               key={o}
                               disabled={quoteConfirmBusy}
-                              aria-label={`确认结算为${o === 'above' ? '高于' : o === 'below' ? '低于' : '平价'}`}
+                              aria-label={t('research:main.confirmAsAria', { label: t(o === 'above' ? 'research:main.above' : o === 'below' ? 'research:main.below' : 'research:main.tie') })}
                               onClick={() => void confirmQuoteOutcome(q.id, o)}
                             >
-                              {o === 'above' ? '高于' : o === 'below' ? '低于' : '平价'}
+                              {t(o === 'above' ? 'research:main.above' : o === 'below' ? 'research:main.below' : 'research:main.tie')}
                             </button>
                           ))}
-                          <button disabled={quoteConfirmBusy} aria-label="取消结算确认" onClick={() => setConfirmingQuote(null)}>取消</button>
+                          <button disabled={quoteConfirmBusy} aria-label={t('research:main.cancelConfirmAria')} onClick={() => setConfirmingQuote(null)}>{t('research:run.cancel')}</button>
                         </span>
                       ) : (
                         <button
                           className="quote-confirm-toggle"
-                          aria-label={`确认 ${q.symbol} 报价的到期结算结果`}
+                          aria-label={t('research:main.confirmSettlementAria', { symbol: q.symbol })}
                           onClick={() => {
                             setQuoteConfirmError('')
                             setConfirmingQuote(q.id)
                           }}
                         >
-                          确认结算
+                          {t('research:main.confirmSettlement')}
                         </button>
                       ))}
                   </li>
@@ -490,8 +497,8 @@ export default function ResearchPage(): JSX.Element {
             </ul>
           </div>
           <div className="panel">
-            <h4>历史研究</h4>
-            {runs.length === 0 && <p className="muted">暂无</p>}
+            <h4>{t('research:main.historyTitle')}</h4>
+            {runs.length === 0 && <p className="muted">{t('research:main.none')}</p>}
             <ul className="left-list">
               {runs.slice(0, 12).map((r) => (
                 <li key={r.id}>
@@ -506,19 +513,19 @@ export default function ResearchPage(): JSX.Element {
 
         <section className="research-center" id="research-chart">
           {structureFacts.length > 0 && (
-            <div className="mtf-bar" role="status" aria-label="多周期结构结论">
-              <strong>多周期结构</strong>
-              {structureFacts.map((t) => (
-                <span key={t} className={t.startsWith('周期冲突') ? 'mtf-conflict' : undefined}>{t}</span>
+            <div className="mtf-bar" role="status" aria-label={t('research:main.mtfAria')}>
+              <strong>{t('research:main.mtfTitle')}</strong>
+              {structureFacts.map((fact) => (
+                <span key={fact} className={fact.startsWith('周期冲突') ? 'mtf-conflict' : undefined}>{fact}</span>
               ))}
             </div>
           )}
           <div className="research-chart">
             <div className="research-chart-head">
               <strong>{symbol}</strong>
-              <span>{chartInterval} · {marketType === 'usdm_perp' ? '永续' : '现货'} · 已收盘</span>
-              {chartLoading && <span className="muted">加载中…</span>}
-              <span className="muted">{bars.length} 根{chartAsOf !== null ? ' · asOf 冻结' : ''}</span>
+              <span>{chartInterval} · {marketType === 'usdm_perp' ? t('research:main.marketPerp') : t('research:main.marketSpot')} · {t('research:main.closedOnly')}</span>
+              {chartLoading && <span className="muted">{t('research:main.loading')}</span>}
+              <span className="muted">{t('research:main.barsCount', { count: bars.length })}{chartAsOf !== null ? t('research:main.asOfFrozen') : ''}</span>
             </div>
             <div className="research-chart-body">
               <BrooksChart
@@ -529,7 +536,7 @@ export default function ResearchPage(): JSX.Element {
                 highlightTime={highlightTime}
                 levels={chartLevels}
               />
-              {chartLoading && <div className="chart-mask">加载 {symbol} K 线…</div>}
+              {chartLoading && <div className="chart-mask">{t('research:main.loadKline', { symbol })}</div>}
               {chartError !== '' && (
                 <div className="chart-mask error">
                   <span>{chartError}</span>
@@ -539,19 +546,19 @@ export default function ResearchPage(): JSX.Element {
           </div>
           {activeRun?.snapshotId && (
             <p className="muted snapshot-line">
-              冻结快照 {activeRun.snapshotId.slice(0, 8)} · 规则 {activeRun.ruleVersion ?? '-'} · 配置 {activeRun.configVersion ?? '-'} · 知识 {activeRun.knowledgeVersion ? activeRun.knowledgeVersion.slice(0, 8) : '无发布版本'}
+              {t('research:main.snapshotLine', { id: activeRun.snapshotId.slice(0, 8), rule: activeRun.ruleVersion ?? '-', config: activeRun.configVersion ?? '-', knowledge: activeRun.knowledgeVersion ? activeRun.knowledgeVersion.slice(0, 8) : t('research:main.noKnowledgeVersion') })}
               {chartAsOf !== null && (
                 <>
-                  {` · 图表按运行 asOf 冻结（${new Date(chartAsOf).toLocaleString()}）`}
-                  {chartSource === 'snapshot' ? ' · 输入包数据' : ''}
-                  <button className="btn btn-sm" onClick={() => setChartAsOf(null)}>回到实时</button>
+                  {t('research:main.chartFrozenAt', { time: new Date(chartAsOf).toLocaleString() })}
+                  {chartSource === 'snapshot' ? t('research:main.chartFromSnapshot') : ''}
+                  <button className="btn btn-sm" onClick={() => setChartAsOf(null)}>{t('research:main.backToLive')}</button>
                 </>
               )}
             </p>
           )}
           {chartAsOf !== null && chartFallback !== null && (
             <p className="snapshot-line warn-line" role="alert">
-              快照不可复现：{chartFallback}（图表未使用冻结输入包，结论仍有效，图仅作参考）
+              {t('research:main.snapshotFallback', { reason: chartFallback })}
             </p>
           )}
         </section>
@@ -559,26 +566,27 @@ export default function ResearchPage(): JSX.Element {
         <section className="research-right" id="research-run">
           <div className="panel chat-panel">
             <div className="chat-head-row">
-              <h4>研究对话</h4>
+              <h4>{t('research:main.chatTitle')}</h4>
               <button className="btn btn-ghost btn-sm" onClick={() => setToolsOpen(true)}>
-                发起研究 / 录入
+                {t('research:main.toolsButton')}
               </button>
             </div>
             <div className="chat-messages" role="log" aria-live="polite">
               {conv.messages.map((m, i) => (
                 <div key={i} className={`chat-msg ${m.role}`}>
                   {m.role === 'user' ? m.text : <MiniMarkdown text={m.text} />}
+                  {m.text !== '' && <MessageTranslate text={m.text} />}
                   {m.card !== undefined && (
                     <PositionConfirmCard card={m.card} busy={conv.cardBusy === i} onResolve={(confirm) => void conv.resolveCard(i, confirm)} />
                   )}
                   {m.runId !== undefined && (
                     <button className="chat-runlink" onClick={() => void openRunById(m.runId as string)}>
-                      查看研究 {(m.runId as string).slice(0, 8)}
+                      {t('research:main.viewRun', { id: (m.runId as string).slice(0, 8) })}
                     </button>
                   )}
                 </div>
               ))}
-              {conv.busy && <div className="chat-msg assistant muted">分析中…</div>}
+              {conv.busy && <div className="chat-msg assistant muted">{t('research:main.analyzing')}</div>}
               {activeRun && (
                 <RunBubble
                   run={activeRun}
@@ -595,7 +603,7 @@ export default function ResearchPage(): JSX.Element {
                   footer={
                     result !== null ? (
                       <button className="btn btn-ghost btn-sm" onClick={() => setDrawerOpen(true)}>
-                        查看证据
+                        {t('research:main.viewEvidence')}
                       </button>
                     ) : undefined
                   }
@@ -609,11 +617,11 @@ export default function ResearchPage(): JSX.Element {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing) void conv.send()
                 }}
-                placeholder="直接问：BTC 永续多头还能拿吗？/ 10 分钟高于 60000 值得参与吗？"
-                aria-label="研究对话输入"
+                placeholder={t('research:main.inputPlaceholder')}
+                aria-label={t('research:main.inputAria')}
               />
               <button className="btn btn-primary" disabled={conv.busy || conv.input.trim() === ''} onClick={() => void conv.send()}>
-                发送
+                {t('research:main.send')}
               </button>
             </div>
           </div>
@@ -622,27 +630,27 @@ export default function ResearchPage(): JSX.Element {
 
       {toolsOpen && (
         <div className="modal-overlay" onClick={() => setToolsOpen(false)}>
-          <div className="modal research-tools-modal" role="dialog" aria-label="发起研究与数据录入" onClick={(e) => e.stopPropagation()}>
+          <div className="modal research-tools-modal" role="dialog" aria-label={t('research:main.toolsModalAria')} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>发起研究 / 录入</h3>
-              <button className="modal-close" aria-label="关闭" onClick={() => setToolsOpen(false)}>✕</button>
+              <h3>{t('research:main.toolsTitle')}</h3>
+              <button className="modal-close" aria-label={t('common:toast.close')} onClick={() => setToolsOpen(false)}>✕</button>
             </div>
             <div className="modal-body">
               <div className="run-launcher">
-                <h4>发起研究</h4>
+                <h4>{t('research:main.startResearchTitle')}</h4>
                 <textarea
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  placeholder={product === 'event' ? '例：当前结构支持到期高于执行价吗？' : '例：多头持仓是否继续持有？回调二次进场怎么等？'}
+                  placeholder={product === 'event' ? t('research:main.questionPlaceholderEvent') : t('research:main.questionPlaceholderDefault')}
                   rows={2}
                 />
                 {product === 'perp' && (
-                  <p className="muted">{selectedPosition === '' ? '未选择持仓：按一般结构研究（无计划盈亏）' : `关联持仓 ${selectedPosition.slice(0, 8)}`}</p>
+                  <p className="muted">{selectedPosition === '' ? t('research:main.noPositionSelected') : t('research:main.positionLinked', { id: selectedPosition.slice(0, 8) })}</p>
                 )}
                 {product === 'event' && (
-                  <p className="muted">{selectedQuote === '' ? '未选择报价：EV 不可计算（可先在下方录入）' : `关联报价 ${selectedQuote.slice(0, 8)}`}</p>
+                  <p className="muted">{selectedQuote === '' ? t('research:main.noQuoteSelected') : t('research:main.quoteLinked', { id: selectedQuote.slice(0, 8) })}</p>
                 )}
-                <button className="btn btn-primary" onClick={() => void createRun()}>发起研究</button>
+                <button className="btn btn-primary" onClick={() => void createRun()}>{t('research:main.startResearch')}</button>
               </div>
               {product === 'perp' && <PositionForm symbol={symbol} onSaved={() => void refreshLeft()} />}
               {product === 'event' && <QuoteForm symbol={symbol} onSaved={() => void refreshLeft()} />}

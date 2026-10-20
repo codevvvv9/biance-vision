@@ -4,6 +4,7 @@
  * 历史复盘图表可复现，修订历史 K 线不改变已发布 run 的对应图）。OHLC 为十进制字符串（numeric 同源契约），入图前转数值。
  */
 import { useEffect, useMemo, useState } from 'react'
+import i18n from '../i18n'
 import { api } from '../api'
 import type { KlineBar } from '../types'
 
@@ -40,20 +41,20 @@ export interface ResearchCandles {
   fallbackReason: string | null
 }
 
-/** 冻结输入包不可用原因（服务端 /runs/:id/candles 的 reason 契约）→ 展示文案。
+/** 冻结输入包不可用原因（服务端 /runs/:id/candles 的 reason 契约）→ research:candle.* 词典 key。
  * 未知原因回退旧文案；不再把「后端不一致/缺周期」混为一谈（2026-10-19 双后端分裂教训） */
-const PACK_REASON_TEXT: Record<string, string> = {
-  no_snapshot: '该运行无快照记录（旧版本数据）',
-  no_key: '该运行未持久化输入包（旧版本运行）',
-  blob_missing: '输入包在当前对象存储后端读不到（写入与读取后端可能不一致）',
-  hash_mismatch: '输入包哈希校验失败，已拒绝使用',
-  no_interval: '输入包未冻结该周期（非原始输入，不可复现）',
+const PACK_REASON_KEYS: Record<string, string> = {
+  no_snapshot: 'research:candle.no_snapshot',
+  no_key: 'research:candle.no_key',
+  blob_missing: 'research:candle.blob_missing',
+  hash_mismatch: 'research:candle.hash_mismatch',
+  no_interval: 'research:candle.no_interval',
 }
 
 const packFallbackText = (reason?: string): string =>
-  reason !== undefined && PACK_REASON_TEXT[reason] !== undefined
-    ? PACK_REASON_TEXT[reason]
-    : '冻结输入包不存在或缺该周期（非原始输入，不可复现）'
+  reason !== undefined && PACK_REASON_KEYS[reason] !== undefined
+    ? i18n.t(PACK_REASON_KEYS[reason])
+    : i18n.t('research:candle.fallbackGeneric')
 
 export function useResearchCandles(
   symbol: string,
@@ -99,7 +100,7 @@ export function useResearchCandles(
           if (r.snapshot && r.candles.length > 0) return { rows: mapRows(r.candles), source: 'snapshot', fallbackReason: null }
           return { rows: await fetchLive(), source: 'live', fallbackReason: packFallbackText(r.reason) }
         } catch (e) {
-          return { rows: await fetchLive(), source: 'live', fallbackReason: `冻结输入包读取失败（${(e as Error).message}），当前为实时库重建数据` }
+          return { rows: await fetchLive(), source: 'live', fallbackReason: i18n.t("research:candle.fallbackWithReason", { msg: (e as Error).message }) }
         }
       }
       return { rows: await fetchLive(), source: 'live', fallbackReason: null }
