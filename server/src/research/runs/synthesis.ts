@@ -131,14 +131,25 @@ const URGENCY_RE = /立即|马上|务必|一定要/
 const LONG_RE = /做多|开多|买入|建多/
 const SHORT_RE = /做空|开空|建空/
 const ACT_RE = /做多|做空|买入|卖出|开仓|加仓|进场|入场|清仓|平仓/
-/** 子句分隔：标点 + 转折词（转折同时重置条件作用域） */
-const CLAUSE_SPLIT_RE = /[,，;；]|但是|然而|不过|却|只是|但/g
-/** 条件子句识别（豁免其后的动作/方向/动作检查直到转折或句末） */
-const COND_CLAUSE_RE = /若|如果|一旦|除非|当(?!前|时)|届时|否则|条件|触发|跌破|突破|等待.{0,12}[后再]|先等待/
-/** 被否定的承诺/动作目标词（「止损」不在表内——「不必止损」本身就是无止损建议，不得剥离） */
-const NEGATED_TARGETS = '保证|稳赚|必赚|包赚|无风险|零风险|万无一失|必涨|必跌|满仓|全仓|梭哈|加仓|减仓|清仓|平仓|退出|离场|入场|进场|做多|做空|买入|卖出'
+/** 子句分隔：标点 + 转折词。split 用捕获组保留分隔词——普通分隔延续条件作用域，
+ * 转折分隔显式重置（第四轮 #1：丢弃分隔词导致「…，但立即做多」仍被前文条件豁免）。 */
+const CLAUSE_SPLIT_RE = /([,，;；]|但是|然而|不过|却|只是|但)/
+const CLAUSE_TURN_RE = /但是|然而|不过|却|只是|但/
+const CLAUSE_PUNCT_RE = /[,，;；]/
+/** 条件子句识别（豁免其后的动作/方向检查直到转折或句末）。
+ * 「触发」带负向断言（第四轮 #2）：已/经/曾 触发是既成事实不是条件假设；
+ * 「等待」须带后继动作标记（后/再），「当」须非「当前/当时」。 */
+const COND_CLAUSE_RE = /若|如果|一旦|除非|当(?!前|时)|届时|否则|条件|(?<!已|经|曾)触发|跌破|突破|等待.{0,12}[后再]|先等待/
+/** 被否定的承诺/动作目标词（第四轮 #4 补 持有/开仓——「不建议继续持有」「暂不开仓」
+ * 是安全表述）。「止损」不在表内——「不必止损」本身就是无止损建议，不得剥离。 */
+const NEGATED_TARGETS = '保证|稳赚|必赚|包赚|无风险|零风险|万无一失|必涨|必跌|满仓|全仓|梭哈|加仓|减仓|清仓|平仓|退出|离场|入场|进场|开仓|做多|做空|买入|卖出|持有'
+/**
+ * 否定剥离（第四轮 #3 收紧）：多字否定（暂不/不能/无法/不建议/别急…）后 0-2 字内、
+ * 单字否定（不/没/别/非）须**紧邻**目标词才算被否定——单字否定带间隔会把「不妨满仓」
+ * 「不仅保证」这类肯定强调语误剥（「妨/仅」不是否定），放行红线词。
+ */
 const NEGATED_RE = new RegExp(
-  `(?:暂不|不建议|不值得|不能|无法|不可|难以|并非|不应|不得)[\\u4e00-\\u9fa5]{0,2}?(${NEGATED_TARGETS})|[不没别非][\\u4e00-\\u9fa5]{0,1}?(${NEGATED_TARGETS})`,
+  `(?:暂不|不建议|不值得|不能|无法|不可|难以|并非|不应|不得|别急)[\\u4e00-\\u9fa5]{0,2}?(${NEGATED_TARGETS})|[不没别非](${NEGATED_TARGETS})`,
   'g',
 )
 /** 持有建议的指令形态（描述性「结构支持持有」不触发；「建议继续持有」触发） */
@@ -156,9 +167,19 @@ const ACTION_ALLOW: ReadonlyArray<readonly [RegExp, ReadonlySet<string>]> = [
 function decisionConflict(bare: string, decision: SynthesisInput['decision']): boolean {
   // 否定剥离：移除被否定的目标词组合后再匹配（「不能保证收益」→ 不再命中承诺红线）
   const text = bare.replace(NEGATED_RE, '')
-  const clauses = text.split(CLAUSE_SPLIT_RE).map((c) => c.trim()).filter((c) => c !== '')
+  // 子句遍历（第四轮 #1）：捕获组 split 保留分隔词——普通分隔延续条件作用域，
+  // 转折分隔（但/然而/不过/却）显式重置，转折后的子句不再受前文条件豁免
+  const parts = text.split(CLAUSE_SPLIT_RE)
   let inConditional = false
-  for (const clause of clauses) {
+  for (const part of parts) {
+    if (part === '') continue
+    if (CLAUSE_TURN_RE.test(part)) {
+      inConditional = false
+      continue
+    }
+    if (CLAUSE_PUNCT_RE.test(part)) continue
+    const clause = part.trim()
+    if (clause === '') continue
     // 无条件红线：任何子句（含条件子句）都检查
     if (OVERSIZE_RE.test(clause) || NO_STOP_RE.test(clause) || PROMISE_RE.test(clause)) return true
     if (COND_CLAUSE_RE.test(clause)) {
