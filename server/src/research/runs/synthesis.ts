@@ -110,16 +110,20 @@ export function synthesisUserPrompt(input: SynthesisInput): { factsBlock: string
   return { factsBlock, counterBlock, evidenceBlock, user }
 }
 
-// ---- 决策一致性红线（2026-10-20 评审 #2 第二轮）----
-// 综合解释是「研究结论的转述」而非交易指令。三层检查：
-// 1) 无条件红线（条件句也不豁免）：满仓/全仓/梭哈（仓位上限纪律）、无止损建议（风控）、
-//    收益承诺（保证/稳赚/无风险——不做收益承诺是产品红线，问题措辞呼应也不行）；
-// 2) 条件句豁免层：真正的条件表达（若/如果/一旦/除非/否则/当…（非「当前/当时」）/等待…）
-//    允许讨论反向与应急动作；「当」必须带负向断言——单字匹配会把「当前/当时」误判为
-//    条件句，让「当前结构支持立即做多」绕过指令与方向检查；
-// 3) 无条件句的动作/方向一致性：立即指令（立即/马上/务必 × 动作词）、开仓方向矛盾
+// ---- 决策一致性红线（2026-10-20 评审 #2 第二轮 + 第三轮子句级）----
+// 综合解释是「研究结论的转述」而非交易指令。检查按子句进行（第三轮）：
+// 1) 无条件红线（条件子句也不豁免）：满仓/全仓/梭哈（仓位上限纪律）、无止损建议（风控）、
+//    收益承诺（保证/稳赚/无风险——不做收益承诺是产品红线）；
+// 2) 条件作用域：真正的条件子句（若/如果/一旦/除非/当…（非「当前/当时」）/届时/跌破/突破/
+//    「等待…后/再」）之后的子句豁免指令/方向/动作检查——但转折词（但/然而/不过/却）重置
+//    作用域；「等待」必须带后继动作标记（后/再/先等待），「无需等待…立即做多」「决策为等待，
+//    但建议立即做多」中的「等待」不构成条件（第三轮 #1）；
+// 3) 否定剥离：被否定的承诺/动作词不触发（「不能保证收益」「暂不减仓」是安全表述，第三轮 #3）；
+//    否定词+0-2 字（单字否定 0-1 字）内的目标词整体移除后再匹配；
+// 4) 作用域外子句的动作/方向一致性：立即指令（立即/马上/务必 × 动作词）、开仓方向矛盾
 //    （只匹配开仓词做多/买入——「看多」是结构描述、「卖出/平仓」可能是 exit 的平多）、
-//    动作冲突（加仓/减仓/清仓/退出/入场 vs decision.action 的允许集）。
+//    动作冲突（加仓/减仓/清仓/退出/入场 vs decision.action 允许集）、持有建议
+//    （「建议/应该…持有」指令形态 vs {hold, conditional_entry}——描述性「持有」不查，第三轮 #2）。
 const OVERSIZE_RE = /满仓|全仓|梭哈/
 const NO_STOP_RE = /无需?设?置?止损|不用止损|不需要止损|不必止损/
 const PROMISE_RE = /有保证|保证(?:收益|盈利|不亏)|稳赚|必赚|包赚|稳赚不赔|无风险|零风险|万无一失|必涨|必跌|一定能赚/
@@ -127,9 +131,20 @@ const URGENCY_RE = /立即|马上|务必|一定要/
 const LONG_RE = /做多|开多|买入|建多/
 const SHORT_RE = /做空|开空|建空/
 const ACT_RE = /做多|做空|买入|卖出|开仓|加仓|进场|入场|清仓|平仓/
-/** 条件表达（豁免指令/方向/动作检查）。注意「当」的负向断言与「等待」：见上方注释。 */
-const COND_RE = /若|如果|一旦|除非|否则|当(?!前|时)|条件|触发|跌破|突破|等待/
-/** 动作词 → decision.action 允许集（无条件句才检查；「持有」不进表——描述性太常见） */
+/** 子句分隔：标点 + 转折词（转折同时重置条件作用域） */
+const CLAUSE_SPLIT_RE = /[,，;；]|但是|然而|不过|却|只是|但/g
+/** 条件子句识别（豁免其后的动作/方向/动作检查直到转折或句末） */
+const COND_CLAUSE_RE = /若|如果|一旦|除非|当(?!前|时)|届时|否则|条件|触发|跌破|突破|等待.{0,12}[后再]|先等待/
+/** 被否定的承诺/动作目标词（「止损」不在表内——「不必止损」本身就是无止损建议，不得剥离） */
+const NEGATED_TARGETS = '保证|稳赚|必赚|包赚|无风险|零风险|万无一失|必涨|必跌|满仓|全仓|梭哈|加仓|减仓|清仓|平仓|退出|离场|入场|进场|做多|做空|买入|卖出'
+const NEGATED_RE = new RegExp(
+  `(?:暂不|不建议|不值得|不能|无法|不可|难以|并非|不应|不得)[\\u4e00-\\u9fa5]{0,2}?(${NEGATED_TARGETS})|[不没别非][\\u4e00-\\u9fa5]{0,1}?(${NEGATED_TARGETS})`,
+  'g',
+)
+/** 持有建议的指令形态（描述性「结构支持持有」不触发；「建议继续持有」触发） */
+const HOLD_ADVICE_RE = /(?:建议|应该|应当|可以|不妨|值得|最好)[^，。;；]{0,6}?(?:继续)?持有/
+const HOLD_ALLOW = new Set(['hold', 'conditional_entry'])
+/** 动作词 → decision.action 允许集（作用域外子句才检查；描述性「持有」走 HOLD_ADVICE_RE） */
 const ACTION_ALLOW: ReadonlyArray<readonly [RegExp, ReadonlySet<string>]> = [
   [/加仓/, new Set(['hold', 'conditional_entry', 'long'])],
   [/减仓/, new Set(['reduce', 'exit'])],
@@ -139,17 +154,25 @@ const ACTION_ALLOW: ReadonlyArray<readonly [RegExp, ReadonlySet<string>]> = [
 ]
 
 function decisionConflict(bare: string, decision: SynthesisInput['decision']): boolean {
-  // 无条件红线：任何句式（含条件句）都剔除
-  if (OVERSIZE_RE.test(bare)) return true
-  if (NO_STOP_RE.test(bare)) return true
-  if (PROMISE_RE.test(bare)) return true
-  // 条件句（真实条件表达）允许讨论反向/应急情形
-  if (COND_RE.test(bare)) return false
-  if (URGENCY_RE.test(bare) && ACT_RE.test(bare)) return true
-  if (decision.side !== 'long' && LONG_RE.test(bare)) return true
-  if (decision.side !== 'short' && SHORT_RE.test(bare)) return true
-  for (const [re, allow] of ACTION_ALLOW) {
-    if (re.test(bare) && !allow.has(decision.action)) return true
+  // 否定剥离：移除被否定的目标词组合后再匹配（「不能保证收益」→ 不再命中承诺红线）
+  const text = bare.replace(NEGATED_RE, '')
+  const clauses = text.split(CLAUSE_SPLIT_RE).map((c) => c.trim()).filter((c) => c !== '')
+  let inConditional = false
+  for (const clause of clauses) {
+    // 无条件红线：任何子句（含条件子句）都检查
+    if (OVERSIZE_RE.test(clause) || NO_STOP_RE.test(clause) || PROMISE_RE.test(clause)) return true
+    if (COND_CLAUSE_RE.test(clause)) {
+      inConditional = true
+      continue
+    }
+    if (inConditional) continue
+    if (URGENCY_RE.test(clause) && ACT_RE.test(clause)) return true
+    if (decision.side !== 'long' && LONG_RE.test(clause)) return true
+    if (decision.side !== 'short' && SHORT_RE.test(clause)) return true
+    for (const [re, allow] of ACTION_ALLOW) {
+      if (re.test(clause) && !allow.has(decision.action)) return true
+    }
+    if (HOLD_ADVICE_RE.test(clause) && !HOLD_ALLOW.has(decision.action)) return true
   }
   return false
 }
