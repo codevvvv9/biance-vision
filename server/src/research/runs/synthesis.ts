@@ -155,7 +155,10 @@ const WHEN_MARK_SRC = '时(?!间|候|刻|长|段|效|区|序|限|机)'
 const CONN_RE = new RegExp(`若(?!干)|如果|一旦|除非|(?<!应|正|适)当(?!前|时)[^，。;；]{0,10}(?:${WHEN_MARK_SRC}|之际)|届时|否则`)
 const DEFER_ANCHOR_RE = /先?等待/
 const DEFER_MARK_RE = new RegExp(`等待[^，。;；]{0,12}${TIME_MARK_SRC}`)
-const DEFER_NEG_TAIL_RE = /(?:无需|不用|不必|没|不)$/
+/** 推迟表达的否定前缀（第十一轮）：否定标记（含不需要/没必要等多字组合）后可带
+ *  「继续/再/一直」连接成分——匹配等待锚点前片段的**尾部**，不再要求否定词紧邻
+ *  （「不需要等待」以要结尾、「无需继续等待」以续结尾，词尾锚定均漏过）。 */
+const DEFER_NEG_TAIL_RE = /(?:无需|无须|不用|不必|不需要|没必要|难以|别|不|没)(?:继续|再|一直)*$/
 const COND_NOUN_RE = new RegExp(`条件[^，。;；]{0,8}${TIME_MARK_SRC}`)
 const EVENT_MARK_RE = new RegExp(`(?:触发|跌破|突破)[^，。;；]{0,6}${TIME_MARK_SRC}`)
 
@@ -163,7 +166,8 @@ function isConditionalClause(clause: string): boolean {
   const defer = DEFER_ANCHOR_RE.exec(clause)
   if (defer !== null) {
     const at = defer.index ?? 0
-    const prefix = clause.slice(Math.max(0, at - 4), at)
+    // 否定窗口取 6 字（「不需要继续等待」类组合不被 4 字窗口截断）
+    const prefix = clause.slice(Math.max(0, at - 6), at)
     // 统一否定拒绝（第九轮）：被否定的推迟表达使整子句非条件，短路后续全部分支
     if (DEFER_NEG_TAIL_RE.test(prefix)) return false
     if (defer[0] === '先等待' || DEFER_MARK_RE.test(clause)) return true

@@ -815,6 +815,13 @@ console.log('\n[R-评审#2] 综合解释全句校验：来源锚定 + 决策一�
   assert(n3.kept.length === 1 && n3.dropped === 0, '对照：「若回调确认，再评估入场」保留（真假设若 不受若干排除影响）')
   const n4 = checkSynthesisText('多头趋势延续，指标支持立即做多。', input)
   assert(n4.by.decision === 1, '对照：去掉「若干」后同样剔除（剔除来自立即指令本身）')
+  // ---- 第十一轮（否定识别匹配片段尾部而非紧邻词尾），与 /tmp/bv-dab00db-boundary-review.mts 同源 ----
+  const o1 = checkSynthesisText('不需要等待回调确认后再入场，立即做多。', input)
+  assert(o1.by.decision === 1 && o1.kept.length === 0, '「不需要等待…后再入场，立即做多」被剔除（否定标记含不需要；修复前以「要」结尾漏过）')
+  const o2 = checkSynthesisText('无需继续等待回调确认后再入场，立即做多。', input)
+  assert(o2.by.decision === 1 && o2.kept.length === 0, '「无需继续等待…后再入场，立即做多」被剔除（否定后接连接成分；修复前以「续」结尾漏过）')
+  const o3 = checkSynthesisText('需要等待回调确认后再考虑入场。', input)
+  assert(o3.kept.length === 1 && o3.dropped === 0, '对照：「需要等待…后再考虑入场」保留（无否定标记的推迟表达仍豁免）')
 }
 
 console.log('\n[R-评审#4] 综合解释 token/费用记账：buildSynthesis 透出 usage')
