@@ -27,6 +27,7 @@
     "chat:policy-check": "tsx scripts/chat-policy-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
     "admin:gate-check": "tsx scripts/admin-gate-check.ts",
+    "login:regression": "tsx scripts/login-regression.ts",
     "research:p1-check": "tsx scripts/p1-regression-check.ts",
     "eval:conversations": "tsx scripts/eval-conversations.ts",
     "knowledge:smoke": "tsx scripts/knowledge-smoke.ts",

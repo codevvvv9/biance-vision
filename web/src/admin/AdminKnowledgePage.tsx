@@ -33,9 +33,13 @@ export default function AdminKnowledgePage(): JSX.Element {
     void refresh()
   }, [refresh])
 
-  // 排队中的文档（uploaded=已入队未被 worker 领取 / parsing=解析中）都要轮询：
-  // 只盯 parsing 会让上传后读到的 uploaded 停在原状态，任务开始与完成都不再刷新
-  const pending = docs.some((d) => d.status === 'uploaded' || d.status === 'parsing')
+  // 排队中的文档（uploaded=已入队未被 worker 领取 / parsing=解析中）以及解析完成
+  // 但尚未索引完成的中间态（parsed=已入库块、chunked=已切分等向量化）都要轮询：
+  // 只盯前两态会在读到 chunked 时停止刷新，indexed 后页面永远不出现发布按钮；
+  // 轮询持续到所有文档到达终态（indexed/published/failed）才停
+  const pending = docs.some((d) =>
+    d.status === 'uploaded' || d.status === 'parsing' || d.status === 'parsed' || d.status === 'chunked',
+  )
   useEffect(() => {
     if (!pending) return
     const t = setInterval(() => void refresh(), 3000)

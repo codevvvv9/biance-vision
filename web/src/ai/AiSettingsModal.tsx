@@ -179,7 +179,7 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
           ]),
         ),
       }
-      await api('/ai/config', { method: 'PUT', body: payload })
+      await api('/admin/ai/config', { method: 'PUT', body: payload })
       await refresh()
       onClose()
     } catch (e) {
@@ -192,7 +192,7 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
   const removeAll = async (): Promise<void> => {
     if (!window.confirm('确定清空全部 AI 配置吗？删除后机器人与聊天窗口将不再出现（可随时重新配置）')) return
     try {
-      await api('/ai/config', { method: 'DELETE' })
+      await api('/admin/ai/config', { method: 'DELETE' })
       await refresh()
       onClose()
     } catch (e) {
