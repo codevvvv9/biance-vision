@@ -10,9 +10,11 @@ import type { AgentCapabilities, SearchDebugResult, SearchHit } from 'biance-vis
 import type { KnowledgeChunkRow, RuleCardRow } from '../models.js'
 import { getDb } from '../db.js'
 import { getCapabilities, resolveSecret } from '../admin/capabilities.js'
+import { ADMIN_VIEWER, PUBLIC_VIEWER, isRestrictedAccess } from './access.js'
+import type { KnowledgeAccessContext } from './access.js'
 import { resolveEmbeddingClient } from './embeddings.js'
 import { extractCjkBigrams, extractLatinTokens, normalizeQueryTerms } from './terms.js'
-import { getAdjacentChunks, getChunkById, getDocument, getKnowledgeVersion, publishedDocVersionIds } from './store.js'
+import { docAccessMap, getAdjacentChunks, getChunkById, getDocument, getKnowledgeVersion, publishedDocVersionIds } from './store.js'
 import { vectorSupportSync } from './vector.js'
 
 /** 规则卡/案例的伪 chunk 行（检索与引用统一形状；页码/图号不适用为 null） */
@@ -58,6 +60,9 @@ export interface SearchOptions {
   llmVariants?: number
   /** 冻结配置的能力（研究 run 内检索必传——配置冻结贯穿 RAG 执行，评审 F4）；
    * 缺省读全局生效配置（会话概念问答等非 run 路径） */
+  /** 权限上下文（W1-A）：缺省=普通用户（安全默认——受限内容不进结果；漏传只会更保守）。
+   * 用户路径按发起者角色构造（accessCtxFromSession/accessCtxForUser），管理端/评测显式传超管。 */
+  access?: KnowledgeAccessContext
   caps?: AgentCapabilities | null
   /** run 冻结的 query-rewrite 提示词全文（P0-6：run 内改写只读冻结文本；缺省走注册表指针解析） */
   frozenQueryRewritePrompt?: string
@@ -183,7 +188,7 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
   // 能力配置：run 内检索消费冻结配置（评审 F4），非 run 路径读全局生效配置
   const caps = options.caps ?? getCapabilities()
 
-  const versionIds = await publishedDocVersionIds(options.knowledgeVersionId)
+  let versionIds = await publishedDocVersionIds(options.knowledgeVersionId)
   if (versionIds.length === 0) {
     return {
       debug: {
@@ -199,6 +204,35 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
       },
       hits: [],
       noKnowledgeVersion: true,
+    }
+  }
+
+  // W1-A 权限过滤（方案甲）：普通用户上下文剔除 purchase/member 文档的全部版本——
+  // 词项与向量两路召回共用 versionIds，此一处过滤即覆盖两条路径；邻接扩展同文档自然安全
+  const viewer = options.access ?? PUBLIC_VIEWER
+  const accessOf = await docAccessMap([...new Set(versionIds.map((v) => v.split('#')[0]))])
+  if (viewer.viewerRole !== 'superadmin') {
+    const before = versionIds.length
+    versionIds = versionIds.filter((v) => !isRestrictedAccess(accessOf.get(v.split('#')[0])))
+    if (before !== versionIds.length) {
+      notes.push(`权限过滤：${before - versionIds.length} 个受限文档版本对普通用户不可见`)
+    }
+    if (versionIds.length === 0) {
+      return {
+        debug: {
+          query,
+          variants: [],
+          vectorHits: [],
+          termHits: [],
+          fused: [],
+          reranked: [],
+          adjacencyNotes: [],
+          notes: ['已发布资料均受限（purchase/member），当前上下文无可检索内容'],
+          hits: [],
+        },
+        hits: [],
+        noKnowledgeVersion: false,
+      }
     }
   }
 
@@ -267,8 +301,37 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
   const caseSnapshots = new Map<string, { id: string; docVersionId: string; text: string; title: string; annotation: string }>()
   try {
     const { publishedRuleCards, ruleCardToRetrievable, publishedCasesForRetrieval } = await import('./ruleCards.js')
+    // W1-A 派生联动：卡片草拟引用（citations）的源文档**当前**受限时，普通用户不召回该卡——
+    // 读取时按源文档当前 access 判定（源资料后来改受限，已发布卡片随之受限），非仅发布时检查。
+    // 案例窗是内部交易标注（不派生自资料文档），无联动面
+    const publishedCardList = await publishedRuleCards(knowledgeAsOf)
+    let restrictedCardIds: Set<string> | null = null
+    if (viewer.viewerRole !== 'superadmin') {
+      const citedDocIds = new Set<string>()
+      for (const card of publishedCardList) {
+        for (const cit of card.citations) citedDocIds.add(cit.docVersionId.split('#')[0])
+      }
+      if (citedDocIds.size > 0) {
+        const cardAccessOf = await docAccessMap([...citedDocIds])
+        for (const [docId, acc] of cardAccessOf) {
+          if (!isRestrictedAccess(acc)) cardAccessOf.delete(docId)
+        }
+        if (cardAccessOf.size > 0) {
+          const restricted = new Set(cardAccessOf.keys())
+          restrictedCardIds = new Set(
+            publishedCardList
+              .filter((c) => c.citations.some((cit) => restricted.has(cit.docVersionId.split('#')[0])))
+              .map((c) => c.id),
+          )
+          if (restrictedCardIds.size > 0) {
+            notes.push(`权限联动：${restrictedCardIds.size} 张规则卡因源文档受限对普通用户隐藏`)
+          }
+        }
+      }
+    }
     const cardHits: SearchHit[] = []
-    for (const card of await publishedRuleCards(knowledgeAsOf)) {
+    for (const card of publishedCardList) {
+      if (restrictedCardIds?.has(card.id)) continue
       const r = ruleCardToRetrievable(card)
       cardSnapshots.set(r.id, card)
       const docTerms = new Set([...extractLatinTokens(r.text.toLowerCase()), ...extractCjkBigrams(r.text), card.concept])
@@ -422,15 +485,27 @@ export async function searchHybrid(query: string, options: SearchOptions = {}): 
   return { debug, hits, noKnowledgeVersion: false }
 }
 
-/** 引用定位：取切块原文 + 邻接 + 所属文档信息（供 GET /chunks/:id）；规则卡/案例走各自存储 */
+/**
+ * 引用定位：取切块原文 + 邻接 + 所属文档信息（供 GET /chunks/:id）；规则卡/案例走各自存储。
+ * W1-A：默认按普通用户上下文判权（安全默认）——受限文档的 chunk 与「源文档受限的规则卡」
+ * 返回 null；管理端调用显式传超管。用户侧证据渲染走冻结快照不经过此处；
+ * W2 用户侧原文预览将复用本判权。
+ */
 export async function fetchCitation(
   chunkId: string,
+  options: { access?: KnowledgeAccessContext } = {},
 ): Promise<{ chunk: KnowledgeChunkRow; adjacent: KnowledgeChunkRow[]; docTitle: string; docSourceTier: string } | null> {
+  const viewer = options.access ?? PUBLIC_VIEWER
   if (chunkId.startsWith('rulecard:') || chunkId.startsWith('case:')) {
     const { getRuleCard, ruleCardToRetrievable, getCaseWindow } = await import('./ruleCards.js')
     if (chunkId.startsWith('rulecard:')) {
       const card = await getRuleCard(chunkId.slice('rulecard:'.length))
       if (card === null) return null
+      // 派生联动（与 searchHybrid 同语义）：源文档当前受限 → 普通用户不可定位
+      if (viewer.viewerRole !== 'superadmin' && card.citations.length > 0) {
+        const am = await docAccessMap([...new Set(card.citations.map((c) => c.docVersionId.split('#')[0]))])
+        if (card.citations.some((c) => isRestrictedAccess(am.get(c.docVersionId.split('#')[0])))) return null
+      }
       const r = ruleCardToRetrievable(card)
       return {
         chunk: pseudoChunk(r.id, r.docVersionId, r.text),
@@ -452,6 +527,8 @@ export async function fetchCitation(
   const chunk = await getChunkById(chunkId)
   if (!chunk) return null
   const doc = await getDocument(chunk.docId)
+  // W1-A：受限文档按当前 access 判权（原文读取按当前权限——历史快照三阶段语义的第三阶段）
+  if (viewer.viewerRole !== 'superadmin' && isRestrictedAccess(doc?.access)) return null
   return {
     chunk,
     adjacent: await getAdjacentChunks(chunk),

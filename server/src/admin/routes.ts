@@ -36,6 +36,7 @@ import { kv, log } from '../logger.js'
 import { evalDatasets, evalRuns, predictionModels } from '../models.js'
 import type { EvalDatasetRow, EvalRunRow, PredictionModelRow } from '../models.js'
 import { searchHybrid } from '../knowledge/retrieval.js'
+import { ADMIN_VIEWER } from '../knowledge/access.js'
 import { latestKnowledgeVersion } from '../knowledge/store.js'
 import { getCapabilities, refreshCapabilities, resolveSecret, saveCapabilities } from './capabilities.js'
 import {
@@ -165,6 +166,7 @@ function registerAgentRoutes(app: FastifyInstance, deps: AdminRouteDeps): void {
       finalLimit: config.retrieval?.finalLimit ?? 5,
       candidateLimit: config.retrieval?.candidateLimit,
       skipRerank: config.retrieval?.rerank === false,
+      access: ADMIN_VIEWER, // 管理端 debug-run 按超管全量（W1-A）
     })
     return {
       versionLabel: row.label,

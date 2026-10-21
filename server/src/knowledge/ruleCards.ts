@@ -14,6 +14,7 @@ import { caseWindows, knowledgePublications, ruleCards } from '../models.js'
 import type { CaseWindowRow, RuleCardRow } from '../models.js'
 import { readCandles } from '../market/read.js'
 import { searchHybrid } from './retrieval.js'
+import { ADMIN_VIEWER } from './access.js'
 import { normalizeQueryTerms } from './terms.js'
 import { resolveLlmClient, parseClaimLines } from '../research/llm.js'
 import { kv, log } from '../logger.js'
@@ -88,7 +89,9 @@ export async function draftRuleCard(concept: string, createdBy: string): Promise
   if (!db) throw Object.assign(new Error('数据库不可用'), { statusCode: 503 })
   const { matchedTerms } = normalizeQueryTerms(concept)
   const query = matchedTerms.length > 0 ? `${concept} ${matchedTerms.join(' ')}` : concept
-  const outcome = await searchHybrid(query, { finalLimit: 5 })
+  // W1-A：草拟检索按超管全量（运营者草拟需要看到全部资料；发布后卡片的可见性
+  // 由检索层派生联动按源文档当前 access 控制，草拟时可见 ≠ 使用时可见）
+  const outcome = await searchHybrid(query, { finalLimit: 5, access: ADMIN_VIEWER })
   const texts = outcome.hits.map((h) => h.chunk.text)
   const citations = outcome.hits.map((h) => ({
     docVersionId: h.chunk.docVersionId,

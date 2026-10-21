@@ -31,6 +31,7 @@
     "research:p1-check": "tsx scripts/p1-regression-check.ts",
     "eval:conversations": "tsx scripts/eval-conversations.ts",
     "knowledge:smoke": "tsx scripts/knowledge-smoke.ts",
+    "knowledge:access-check": "tsx scripts/knowledge-access-check.ts",
     "research:smoke": "tsx scripts/research-smoke.ts",
     "vector:smoke": "tsx scripts/vector-smoke.ts",
     "release:gate": "tsx scripts/release-gate.ts",

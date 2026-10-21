@@ -15,6 +15,7 @@ import { kv, log } from '../../logger.js'
 import { eventQuotes, evidenceItems, portfolioPositions, predictions, structureEvents } from '../../models.js'
 import type { EventQuoteRow, PortfolioPositionRow } from '../../models.js'
 import { searchHybrid } from '../../knowledge/retrieval.js'
+import { accessCtxForUser } from '../../knowledge/access.js'
 import { getCapabilities } from '../../admin/capabilities.js'
 import { searchAndVerify } from '../search.js'
 import { listFunding } from '../../market/funding.js'
@@ -445,8 +446,10 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
       const variantsOn = variantCap > 0 && chatCapOn && llmBudgetLeft >= 2
       // P0-6：run 内改写提示词只读冻结全文（红线 #2：执行阶段不再解析发布指针）
       const frozenRewritePrompt = frozenPrompt(ctx.frozenConfig?.raw as Parameters<typeof frozenPrompt>[0], 'query-rewrite')?.content
-      const support = await searchHybrid(primary, { finalLimit: supportLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? variantCap : 0, caps: frozenCaps, frozenQueryRewritePrompt: frozenRewritePrompt ?? undefined })
-      const counter = await searchHybrid(`${primary} failure invalidation risk`, { mode: 'counter', finalLimit: counterLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? 1 : 0, caps: frozenCaps, frozenQueryRewritePrompt: frozenRewritePrompt ?? undefined })
+      // W1-A 权限上下文：研究检索按发起者当前角色（受限资料不进普通用户的证据与 LLM 上下文）
+      const accessCtx = accessCtxForUser(ctx.userId)
+      const support = await searchHybrid(primary, { finalLimit: supportLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? variantCap : 0, caps: frozenCaps, frozenQueryRewritePrompt: frozenRewritePrompt ?? undefined, access: accessCtx })
+      const counter = await searchHybrid(`${primary} failure invalidation risk`, { mode: 'counter', finalLimit: counterLimit, knowledgeVersionId: kvId ?? undefined, llmVariants: variantsOn ? 1 : 0, caps: frozenCaps, frozenQueryRewritePrompt: frozenRewritePrompt ?? undefined, access: accessCtx })
       if (variantsOn) ctx.usage.llmCalls += 2
       const freeze = async (stance: 'support' | 'counter', hits: typeof support.hits): Promise<string[]> =>
         freezeEvidence(
@@ -481,8 +484,8 @@ export function buildStages(positionOverride: { leverage?: number } | null = nul
         })
         for (const t of targets) {
           try {
-            const sup = await searchHybrid(t.queryText, { finalLimit: 2, knowledgeVersionId: kvId ?? undefined, caps: frozenCaps })
-            const cnt = await searchHybrid(t.counterText, { mode: 'counter', finalLimit: 2, knowledgeVersionId: kvId ?? undefined, caps: frozenCaps })
+            const sup = await searchHybrid(t.queryText, { finalLimit: 2, knowledgeVersionId: kvId ?? undefined, caps: frozenCaps, access: accessCtx })
+            const cnt = await searchHybrid(t.counterText, { mode: 'counter', finalLimit: 2, knowledgeVersionId: kvId ?? undefined, caps: frozenCaps, access: accessCtx })
             const supIds = await freeze('support', sup.hits)
             const cntIds = await freeze('counter', cnt.hits)
             ruleLinks.push({
