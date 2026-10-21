@@ -26,6 +26,7 @@
     "brooks:causality": "tsx scripts/causality-check.ts",
     "chat:policy-check": "tsx scripts/chat-policy-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
+    "admin:gate-check": "tsx scripts/admin-gate-check.ts",
     "research:p1-check": "tsx scripts/p1-regression-check.ts",
     "eval:conversations": "tsx scripts/eval-conversations.ts",
     "knowledge:smoke": "tsx scripts/knowledge-smoke.ts",
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
+    "fastify": "^4.28.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }

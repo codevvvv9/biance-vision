@@ -2,14 +2,39 @@
 # Caddy 自动签发/续期 Let's Encrypt 证书（需 80/443 放行 + DNS A 记录已指向本机）。
 # SSE（研究运行进度）与 WebSocket（实时行情）：Caddy 反代原生支持；
 # flush_interval -1 关闭响应缓冲，保证 SSE 事件即时推送到浏览器。
+#
+# 双域名架构（docs/admin-isolation-plan.md）：
+# - 用户端域名：admin 路径在 Caddy 层直接 404（第一层屏蔽；server 的 ADMIN_HOSTS 门禁是第二层兜底）；
+# - 管理端域名（duckdns 独立二级域名，常规 HTTP-01 签证书，无需插件）：整站在 Basic Auth
+#   门禁之后（caddy hash-password 生成哈希；真实用户名/哈希只写服务器上的 Caddyfile，不入库）。
+# 上线顺序：先加 admin 站点块验证可达 → 发版启用 ADMIN_HOSTS → 最后才给用户端块加 404 屏蔽
+#（任意时刻超管都至少有一个可用入口，不会把自己锁在门外）。
+
 bv.example.com {
 	encode zstd gzip
+	@admin path /admin /admin/* /api/admin /api/admin/*
+	respond @admin 404
 	reverse_proxy 127.0.0.1:3200 {
 		flush_interval -1
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
-		X-Content-Type-Options "nosniff"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+}
+
+admin.example.com {
+	encode zstd gzip
+	basic_auth {
+		bvadmin <bcrypt哈希，caddy hash-password 生成后替换>
+	}
+	reverse_proxy 127.0.0.1:3200 {
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
 	}
 }
