@@ -82,7 +82,7 @@ import {
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
-import { isAdminHost, registerAdminGate } from './adminGate.js'
+import { isAdminHost, loginEntryPolicy, registerAdminGate } from './adminGate.js'
 import { startQueue } from './queue.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
@@ -481,6 +481,19 @@ app.post('/api/auth/login', async (req, reply) => {
   }
   // 成功登录清零该 IP 的失败计数
   loginGuards.delete(ip)
+  // 登录入口分离（ADMIN_HOSTS 已配置时生效）：superadmin 会话只在管理域名签发，
+  // 普通账号只在用户域名——管理员密码的验证入口不暴露给用户端爆破；存量跨域
+  // 超管会话由域名门禁拦截管理路径兜底，随 7 天有效期自然消亡
+  const entry = loginEntryPolicy(user.role, isAdminHost(req.headers.host))
+  if (!entry.ok) {
+    log.warn('auth', '登录入口与账号角色不匹配被拒', kv({
+      用户: user.username,
+      角色: user.role === 'superadmin' ? '超管' : '用户',
+      入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
+      ip,
+    }))
+    throw Object.assign(new Error(entry.message ?? '该账号不允许在此入口登录'), { statusCode: 403 })
+  }
   const session = createSession(user)
   startSessionAudit(session, { ip, userAgent: ua })
   log.ok('auth', '登录成功', kv({
@@ -654,12 +667,15 @@ function requireSuperadmin(req: FastifyRequest): SessionRecord {
   return session
 }
 
-app.get('/api/ai/config', async (req) => {
+// AI 配置管理（超管）——挂在 /api/admin/ai/* 命名空间：与 admin/routes.ts 的
+// ai/overview 等同族，域名门禁对 /api/admin 前缀整体生效（含编码路径规范化）；
+// 物理位置待双系统拆分时随 admin-api 收口。用户端只留 /ai/status|news|chat。
+app.get('/api/admin/ai/config', async (req) => {
   requireSuperadmin(req)
   return { profiles: getAiProfilesMasked() }
 })
 
-app.put('/api/ai/config', async (req) => {
+app.put('/api/admin/ai/config', async (req) => {
   const session = requireSuperadmin(req)
   saveAiProfiles((req.body ?? {}) as Record<string, unknown>, session.username)
   recordAudit(session, {
@@ -671,7 +687,7 @@ app.put('/api/ai/config', async (req) => {
 })
 
 // 删除：?name=xxx 删单个档案（default 不可删）；不带 name 清空全部
-app.delete('/api/ai/config', async (req) => {
+app.delete('/api/admin/ai/config', async (req) => {
   const session = requireSuperadmin(req)
   const name = (req.query as { name?: string }).name
   if (name) {
@@ -684,7 +700,7 @@ app.delete('/api/ai/config', async (req) => {
   return { ok: true }
 })
 
-app.post('/api/ai/test', async (req) => {
+app.post('/api/admin/ai/test', async (req) => {
   const session = requireSuperadmin(req)
   const body = (req.body ?? {}) as Record<string, unknown>
   const baseUrl = String(body.baseUrl ?? '').trim().replace(/\/+$/, '')
@@ -714,7 +730,7 @@ app.post('/api/ai/test', async (req) => {
 app.get('/api/ai/news', async () => ({ news: await getAiNews() }))
 
 /** 指定档案当前生效的完整系统提示词（内置 + 追加 + 实时快照示例），设置弹窗"❗"查看 */
-app.get('/api/ai/prompt', async (req) => {
+app.get('/api/admin/ai/prompt', async (req) => {
   requireSuperadmin(req)
   const profile = aiProfileByName((req.query as { name?: string }).name)
   if (!profile) throw badRequest('档案不存在或未配置完整')
@@ -722,7 +738,7 @@ app.get('/api/ai/prompt', async (req) => {
 })
 
 /** 指定档案服务的可用模型列表（设置弹窗模型输入框候选） */
-app.get('/api/ai/models', async (req) => {
+app.get('/api/admin/ai/models', async (req) => {
   requireSuperadmin(req)
   return { models: await listAiModels((req.query as { name?: string }).name) }
 })

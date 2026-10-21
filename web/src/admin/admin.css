@@ -579,6 +579,34 @@
 .kb-side-row input { flex: 1; min-width: 0; }
 .kb-side-msg { margin: 0; font-size: 11.5px; color: var(--cyan); }
 
+/* 默认清单条目列表（ImportZone「查看默认清单」展开区） */
+.kb-manifest-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+}
+.kb-manifest-list li {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(16, 24, 42, 0.55);
+  font-size: 11.5px;
+}
+.kb-manifest-list li.disabled { opacity: 0.45; }
+.kb-manifest-title {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-manifest-meta { color: var(--text-3); font-size: 10.5px; }
+
 /* 文档卡片栅格 */
 .kb-docs-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .kb-filter { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--bg-2); }
