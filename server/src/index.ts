@@ -367,8 +367,10 @@ registerAdminGate(app)
 // 每 IP 每分钟最多 5 次尝试；累计失败 10 次锁定 15 分钟（成功登录即清零）
 // ---------------------------------------------------------------------------
 const LOGIN_WINDOW_MS = 60_000
-const LOGIN_MAX_PER_WINDOW = 5
-const LOGIN_LOCK_FAILS = 10
+// 每分钟失败上限与锁定阈值可经 env 覆盖（默认=线上语义不变）：
+// scripts/login-regression.ts 注入小值以便数秒内验证失败计数与锁定行为
+const LOGIN_MAX_PER_WINDOW = Number(process.env.LOGIN_MAX_PER_WINDOW || 5)
+const LOGIN_LOCK_FAILS = Number(process.env.LOGIN_LOCK_FAILS || 10)
 const LOGIN_LOCK_MS = 15 * 60_000
 const LOGIN_GUARD_MAX_KEYS = 20_000
 
@@ -467,8 +469,8 @@ app.post('/api/auth/login', async (req, reply) => {
     log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: guard.winCount }))
     throw Object.assign(new Error('尝试过于频繁，请一分钟后再试'), { statusCode: 429 })
   }
-  const user = verifyLogin(name, String(body.password ?? ''))
-  if (!user) {
+  /** 统一失败出口：计数/锁定/审计/401 一处收口——入口不匹配与密码错误对外完全同构 */
+  function failLogin(logMsg: string, detail: Record<string, unknown>): never {
     guard.fails++
     if (guard.fails >= LOGIN_LOCK_FAILS) {
       guard.lockedUntil = Date.now() + LOGIN_LOCK_MS
@@ -476,24 +478,25 @@ app.post('/api/auth/login', async (req, reply) => {
       log.warn('auth', '连续登录失败触发锁定', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 锁定分钟: LOGIN_LOCK_MS / 60_000 }))
     }
     recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
-    log.warn('auth', '登录失败', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua), 累计失败: guard.fails }))
+    log.warn('auth', logMsg, kv({ ...detail, 累计失败: guard.fails }))
     throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
-  }
-  // 成功登录清零该 IP 的失败计数
-  loginGuards.delete(ip)
+  }  const user = verifyLogin(name, String(body.password ?? ''))
   // 登录入口分离（ADMIN_HOSTS 已配置时生效）：superadmin 会话只在管理域名签发，
-  // 普通账号只在用户域名——管理员密码的验证入口不暴露给用户端爆破；存量跨域
-  // 超管会话由域名门禁拦截管理路径兜底，随 7 天有效期自然消亡
-  const entry = loginEntryPolicy(user.role, isAdminHost(req.headers.host))
-  if (!entry.ok) {
-    log.warn('auth', '登录入口与账号角色不匹配被拒', kv({
+  // 普通账号只在用户域名。入口不匹配必须与「密码错误」完全同构——同一个 401 出口、
+  // 同一段失败计数/审计，且同样先经过 verifyLogin（时序一致）。此前的顺序是先
+  // verifyLogin 再查入口并抛 403，导致主站探测管理员密码可用 401/403 差异判断
+  // 是否命中（2026-10-21 审查 P1）；存量跨域超管会话由域名门禁拦截管理路径兜底。
+  if (user && !loginEntryPolicy(user.role, isAdminHost(req.headers.host)).ok) {
+    failLogin('登录入口与账号角色不匹配被拒（对客户端与密码错误同构）', {
       用户: user.username,
       角色: user.role === 'superadmin' ? '超管' : '用户',
       入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
       ip,
-    }))
-    throw Object.assign(new Error(entry.message ?? '该账号不允许在此入口登录'), { statusCode: 403 })
+    })
   }
+  if (!user) failLogin('登录失败', { 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua) })
+  // 成功登录清零该 IP 的失败计数
+  loginGuards.delete(ip)
   const session = createSession(user)
   startSessionAudit(session, { ip, userAgent: ua })
   log.ok('auth', '登录成功', kv({

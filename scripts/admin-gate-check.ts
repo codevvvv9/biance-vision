@@ -137,11 +137,6 @@ const ADMIN = 'admin.example.com'
   await app.close()
 }
 
-if (failed > 0) {
-  console.error(`\n管理端域名门禁自测未通过 ✖（${failed} 项失败）`)
-  process.exit(1)
-}
-
 // ---- D. 登录入口策略 loginEntryPolicy（生产绑默认实例；测试注入已启用工厂实例）----
 {
   check('D1 未配置 ADMIN_HOSTS 时入口策略不设限（本地开发零影响）', loginEntryPolicy('superadmin', false).ok, true)
@@ -151,6 +146,13 @@ if (failed > 0) {
   check('D4 已配置：主站普通账号正常', loginEntryPolicy('user', false, on).ok, true)
   check('D5 已配置：管理域名 superadmin 正常', loginEntryPolicy('superadmin', true, on).ok, true)
   check('D6 拒绝文案非空（供前端展示）', loginEntryPolicy('superadmin', false, on).message !== undefined, true)
+}
+
+// 失败退出必须放在全部测试组（含 D 组登录策略）之后：此前检查位于 D 组之前，
+// D 组失败不会非零退出、release gate 拦不住这类回归（2026-10-21 审查 P2）
+if (failed > 0) {
+  console.error(`\n管理端域名门禁自测未通过 ✖（${failed} 项失败）`)
+  process.exit(1)
 }
 
 console.log('\n管理端域名门禁自测全部通过 ✔（27 项）')
