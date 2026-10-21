@@ -1,4 +1,4 @@
-import './env.js'
+import { LOGIN_LOCK_FAILS, LOGIN_MAX_PER_WINDOW } from './env.js'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
@@ -75,6 +75,7 @@ import {
   findSession,
   initUsers,
   readSessionToken,
+  roleOfUsername,
   sessionCookie,
   toPublic,
   verifyLogin,
@@ -82,7 +83,7 @@ import {
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
-import { isAdminHost, loginEntryPolicy, registerAdminGate } from './adminGate.js'
+import { isAdminHost, loginEntryPolicy, loginPrecheck, registerAdminGate } from './adminGate.js'
 import { startQueue } from './queue.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
@@ -98,22 +99,6 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 const PORT = Number(process.env.PORT || 3200)
 // 监听地址：默认只绑本机；Docker / 容器部署时用 HOST=0.0.0.0 覆盖
 const HOST = process.env.HOST || '127.0.0.1'
-
-// 登录限速阈值（env 可覆盖，默认=线上语义不变；scripts/login-regression.ts 注入小值）。
-// ❗必须为正整数：Number('abc')=NaN 会让阈值比较恒为假，限速/锁定被静默关闭；
-// ❗校验必须先于一切初始化（initStorage/initUsers 连库写文件都在其后）——非法配置
-// 应在触碰任何数据前就拒绝启动
-function positiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name]
-  if (raw === undefined || raw.trim() === '') return fallback
-  const v = Number(raw)
-  if (!Number.isInteger(v) || v <= 0) {
-    throw new Error(`环境变量 ${name} 非法（"${raw}"）：必须为正整数——安全阈值不允许静默失效，拒绝启动`)
-  }
-  return v
-}
-const LOGIN_MAX_PER_WINDOW = positiveIntEnv('LOGIN_MAX_PER_WINDOW', 5)
-const LOGIN_LOCK_FAILS = positiveIntEnv('LOGIN_LOCK_FAILS', 10)
 
 // 前端构建产物目录：生产模式下由本服务直接托管（前后端同源）
 const WEB_DIST = process.env.BV_WEB_DIST || fileURLToPath(new URL('../../web/dist', import.meta.url))
@@ -384,8 +369,8 @@ registerAdminGate(app)
 // 每 IP 每分钟最多 5 次尝试；累计失败 10 次锁定 15 分钟（成功登录即清零）
 // ---------------------------------------------------------------------------
 const LOGIN_WINDOW_MS = 60_000
-// LOGIN_MAX_PER_WINDOW / LOGIN_LOCK_FAILS 的定义与 positiveIntEnv 校验已上移至文件
-// 顶部（先于 initStorage/initUsers——非法配置必须在触碰任何数据前拒绝启动）
+// LOGIN_MAX_PER_WINDOW / LOGIN_LOCK_FAILS 的定义与 positiveIntEnv 校验在 env.ts
+//（入口 import 首位，先于 alerts 等模块的顶层写盘与一切初始化——非法配置须零副作用拒绝启动）
 const LOGIN_LOCK_MS = 15 * 60_000
 const LOGIN_GUARD_MAX_KEYS = 20_000
 
@@ -495,12 +480,25 @@ app.post('/api/auth/login', async (req, reply) => {
     recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
     log.warn('auth', logMsg, kv({ ...detail, 累计失败: guard.fails }))
     throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
-  }  const user = verifyLogin(name, String(body.password ?? ''))
-  // 登录入口分离（ADMIN_HOSTS 已配置时生效）：superadmin 会话只在管理域名签发，
-  // 普通账号只在用户域名。入口不匹配必须与「密码错误」完全同构——同一个 401 出口、
-  // 同一段失败计数/审计，且同样先经过 verifyLogin（时序一致）。此前的顺序是先
-  // verifyLogin 再查入口并抛 403，导致主站探测管理员密码可用 401/403 差异判断
-  // 是否命中（2026-10-21 审查 P1）；存量跨域超管会话由域名门禁拦截管理路径兜底。
+  }
+
+  // 验证前预检（2026-10-21 三轮审查 P1）：错误入口的账号在密码验证之前拒绝——
+  // server 端不执行 scrypt（彻底消除主站对管理员密码的爆破确认通道，哪怕响应
+  // 同构也不再消耗验证算力）。拒绝与密码错误完全同构（failLogin 同出口）；
+  // 未知用户名放行至 verifyLogin 正常 401（不暴露账号存在性）。
+  const pre = loginPrecheck(name, isAdminHost(req.headers.host), roleOfUsername)
+  if (!pre.allowed) {
+    failLogin('登录入口与账号角色不匹配被拒（验证前预检，密码校验未执行）', {
+      用户: name.slice(0, 64),
+      角色: pre.role === 'superadmin' ? '超管' : '用户',
+      入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
+      ip,
+    })
+  }
+
+  const user = verifyLogin(name, String(body.password ?? ''))
+  // 入口纵深二次校验：预检放行但 verifyLogin 结果角色不匹配时仍拒绝（防
+  // roleOfUsername 与 verifyLogin 的用户名匹配语义漂移），同样走同构 failLogin
   if (user && !loginEntryPolicy(user.role, isAdminHost(req.headers.host)).ok) {
     failLogin('登录入口与账号角色不匹配被拒（对客户端与密码错误同构）', {
       用户: user.username,

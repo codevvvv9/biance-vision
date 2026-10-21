@@ -7,7 +7,8 @@
  *   R0        server 实际连接独立测试库（未降级 JSON 存储）
  *   R1-R8     入口同构（主站正确/错误密码 401 逐字节一致）/ 正常签发（管理域名 200+cookie）
  *             / 失败计数与按 IP 锁定（锁定期内管理域名正确密码也 429）
- *   C1-C2     限速 env 非法值（如 'abc'→NaN）拒绝启动且错误信息指明变量——
+ *   C1-C3     限速 env 非法值（如 'abc'→NaN）拒绝启动且错误信息指明变量、
+ *             崩溃子进程对数据目录零写入（校验位于 env.ts，先于一切模块副作用）——
  *             防止安全阈值被静默关闭
  *
  * 数据隔离（不触碰业务数据，可与开发服务并行）：
@@ -23,7 +24,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { request } from 'node:http'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -97,17 +98,21 @@ function login(host: string, username: string, password: string): Promise<LoginR
   })
 }
 
-/** 与 server/src/db.ts 同语义地取基础 DATABASE_URL（含 .env 回退），再换库名 */
+/** 与 server/src/db.ts 同语义地取基础 DATABASE_URL：环境变量 → server/.env → 默认值。
+ * （env 必须最优先：隔离环境用 DATABASE_URL 覆盖端口/实例时，否则测试库会建到
+ * .env 指向的实例上——曾实测 6543 覆盖被忽略、仍操作 5434） */
 function baseDatabaseUrl(): URL {
-  let url = 'postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision'
-  try {
-    const text = readFileSync(path.join(SERVER_DIR, '.env'), 'utf8')
-    const m = text.match(/^DATABASE_URL=(.+)$/m)
-    if (m) url = m[1].trim().replace(/^["']|["']$/g, '')
-  } catch {
-    /* 无 .env 用默认 */
+  let url: string | undefined = process.env.DATABASE_URL
+  if (!url) {
+    try {
+      const text = readFileSync(path.join(SERVER_DIR, '.env'), 'utf8')
+      const m = text.match(/^DATABASE_URL=(.+)$/m)
+      if (m) url = m[1].trim().replace(/^["']|["']$/g, '')
+    } catch {
+      /* 无 .env 用默认 */
+    }
   }
-  return new URL(url)
+  return new URL(url ?? 'postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision')
 }
 
 function startServer(overrides: Record<string, string>): { child: ChildProcess; log: string[] } {
@@ -123,7 +128,10 @@ function startServer(overrides: Record<string, string>): { child: ChildProcess; 
 }
 
 async function stopServer(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null) return
+  // exitCode 仅覆盖正常退出：被信号终止的进程 exitCode=null、signalCode='SIGTERM'/
+  // 'SIGKILL'——只查 exitCode 会对已终止的进程再等一次（不会再到来的）exit 事件而
+  // 永久挂起（隔离复现确认）
+  if (child.exitCode !== null || child.signalCode !== null) return
   // 一次 exit 监听 + 定时升级 SIGKILL：进程只会 emit 一次 exit，
   // 分两段各挂一个 await 会在第一段消费掉事件后让第二段永等（实测挂死）
   await new Promise<void>((resolve) => {
@@ -251,10 +259,20 @@ try {
     await stopServer(child)
   }
 
+  // ---- R4b：验证前预检生效的日志证据（serverLog 于 stopServer 后完整；
+  //      「验证前预检，密码校验未执行」= 错误入口在 scrypt 之前被拒的直接证据，
+  //      主站超管正确密码（R4）全程未产生第二次登录成功）----
+  {
+    const fullLog = serverLog.join('\n')
+    check('R4b 预检路径生效（错误入口在密码校验之前拒绝）', fullLog.includes('验证前预检，密码校验未执行'), true)
+    check('R4b 全程仅一次登录成功（R1 管理域；主站正确密码未成功）', fullLog.split('登录成功').length - 1, 1)
+  }
+
   // ---- C 组：限速 env 非法值拒绝启动 ----
   // ❗必须同样传全套隔离 env：校验虽已上移到一切初始化之前，但不传隔离意味着
   // 回归一旦失效（校验被挪后）就会连业务库、写业务 data——测试不能依赖被测行为
   {
+    const before = await readdir(dataDir).then((l) => l.sort().join(','))
     const { child, log } = startServer({
       PORT: String(PORT),
       LOGIN_LOCK_FAILS: 'abc',
@@ -273,6 +291,10 @@ try {
     })
     check('C1 非法 LOGIN_LOCK_FAILS → 拒绝启动（非零退出，且未依赖业务数据）', code !== null && code !== 0, true)
     check('C2 错误信息指明变量名', log.join('\n').includes('LOGIN_LOCK_FAILS'), true)
+    // C3 严格零写入：校验位于 env.ts（入口 import 首位），崩溃先于 alerts.ts 等任何
+    // 顶层写盘——数据目录在崩溃前后文件清单必须完全一致（此前 alerts.ts 会留 rules.json）
+    const after = await readdir(dataDir).then((l) => l.sort().join(','))
+    check('C3 崩溃子进程零文件写入（校验先于一切模块副作用）', after, before)
   }
 } catch (err) {
   console.error(`✖ ${(err as Error).message}`)
@@ -286,4 +308,4 @@ if (failed > 0) {
   console.error(`\n登录回归未通过 ✖（${failed} 项失败）`)
   process.exit(1)
 }
-console.log('\n登录回归全部通过 ✔（13 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动）')
+console.log('\n登录回归全部通过 ✔（16 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入）')

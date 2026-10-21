@@ -1,8 +1,13 @@
 # Spec：知识库与 RAG（knowledge-rag）
 
-> 状态：implemented
+> 状态：implemented（W1/W2 变更项为 planned，以实际提交为准更新）
 
 > 增强（2026-10-13，feat/chat-first-advisor）：`searchHybrid` 新增 `llmVariants` 选项消费改写变体——`knowledge/queryRewrite.ts` 由 chat LLM 生成变体（反漂移校验须共享词项，失败/未配置降级确定性），变体词项进词项召回并集、变体（≤2）批量 embed 后各自成列表进 RRF；缺省关闭时召回行为与历史一致（确定性变体此前仅出现在 debug，不参与召回）。概念问答会话路径已开启（support=2/counter=1）；流水线 retrieve 按冻结策略接入为后续项。
+
+> **方案变更（2026-10-21，统一路线 `docs/unified-roadmap.md`，详设见两份 v2 方案文档）**：
+> ① **access 语义定案为方案甲（参与检索过滤）**——purchase/member 资料对普通用户不可见（superadmin 由服务端判定的权限上下文例外），过滤贯穿六条检索/消费路径且先于送入 LLM；「已确定决策」中检索流水线的「权限/版本过滤」从规划性表述落为硬约束（W1-A 实施）。历史快照语义：冻结证据按冻结时授权供原研究所有者渲染，新检索/新研究/自动上下文一律按当前权限。
+> ② **删除语义改两段式**——默认「移出当前发布集合+归档」（chunks/blob 保留，历史版本可恢复）；彻底清除为独立流程（DB 删除标记+幂等异步清理，冻结证据自包含不依赖文档行回查，服务端校验版本恢复能力）。
+> ③ 解析事件表按 `attemptId` 组织（异步任务取消/迟到结果隔离/自动重试与手动重解析区分），管线九步/staging/三类指纹等详设见 `docs/rag-pipeline-design.md` v2。
 
 ## 实现状态（2026-10-01）
 

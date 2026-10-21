@@ -20,3 +20,21 @@ try {
 } catch {
   /* .env 不存在（容器 / 最小部署）：仅用进程环境变量 */
 }
+
+// ---- 启动期配置校验（必须在 .env 合并之后、所有业务模块副作用之前）----
+// 放在这里而非 index.ts 主体：本模块是入口 import 列表第一位，先于 alerts.ts 等
+// 在模块顶层写文件的依赖执行——非法配置在触碰任何数据前就拒绝启动。
+// ❗必须为正整数：Number('abc')=NaN 会让阈值比较恒为假，限速/锁定被静默关闭。
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw.trim() === '') return fallback
+  const v = Number(raw)
+  if (!Number.isInteger(v) || v <= 0) {
+    throw new Error(`环境变量 ${name} 非法（"${raw}"）：必须为正整数——安全阈值不允许静默失效，拒绝启动`)
+  }
+  return v
+}
+
+/** 登录限速：每分钟失败上限 / 锁定阈值（env 可覆盖；scripts/login-regression.ts 注入小值） */
+export const LOGIN_MAX_PER_WINDOW = positiveIntEnv('LOGIN_MAX_PER_WINDOW', 5)
+export const LOGIN_LOCK_FAILS = positiveIntEnv('LOGIN_LOCK_FAILS', 10)
