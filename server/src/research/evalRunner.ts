@@ -13,6 +13,7 @@ import { evalDatasets, evalRuns, structureEvents } from '../models.js'
 import type { EvalDatasetRow } from '../models.js'
 import { readCandles } from '../market/read.js'
 import { searchHybrid } from '../knowledge/retrieval.js'
+import { ADMIN_VIEWER } from '../knowledge/access.js'
 import { createRun, getRun } from './runs/store.js'
 import { executeRun } from './runs/runner.js'
 import { kv, log } from '../logger.js'
@@ -52,7 +53,8 @@ async function evalRag(items: RagItem[]): Promise<{ metrics: Record<string, numb
   let mrrSum = 0
   const details: { query: string; rank: number | null; topTitle: string }[] = []
   for (const item of items) {
-    const outcome = await searchHybrid(item.query, { finalLimit: k })
+    // W1-A：RAG 评测按超管全量（评测度量的是检索质量本身，权限影响由 knowledge:access-check 单独覆盖）
+    const outcome = await searchHybrid(item.query, { finalLimit: k, access: ADMIN_VIEWER })
     const titles = outcome.hits.map((h) => h.docTitle.toLowerCase())
     let rank: number | null = null
     if (item.expectDocTitle !== undefined) {

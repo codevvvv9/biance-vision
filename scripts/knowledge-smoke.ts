@@ -19,6 +19,7 @@ import { chunkBlocks } from '../server/src/knowledge/chunk.js'
 import { extractDocTerms, normalizeQueryTerms } from '../server/src/knowledge/terms.js'
 import { parseNative } from '../server/src/knowledge/parse.js'
 import { fetchCitation, fuseRRF, searchHybrid } from '../server/src/knowledge/retrieval.js'
+import { ADMIN_VIEWER } from '../server/src/knowledge/access.js'
 import { processDocument } from '../server/src/knowledge/pipeline.js'
 import { ingestBuffer } from '../server/src/knowledge/ingest.js'
 import {
@@ -123,7 +124,7 @@ check(
 
 // ---- 3) 未发布不参与检索 ----
 {
-  const before = await searchHybrid('H2 second entry')
+  const before = await searchHybrid('H2 second entry', { access: ADMIN_VIEWER })
   check('未发布文档不可见', !before.hits.some((h) => h.chunk.docId === ingested.docId), `hits=${before.hits.length}`)
 }
 
@@ -133,7 +134,7 @@ check('发布生成知识版本', pub.knowledgeVersion.docVersionIds.includes(`$
 check('文档状态 published + version=1', pub.doc.status === 'published' && pub.doc.version === 1)
 
 {
-  const outcome = await searchHybrid('H2 是什么')
+  const outcome = await searchHybrid('H2 是什么', { access: ADMIN_VIEWER })
   check('「H2 是什么」词项召回命中', outcome.hits.some((h) => h.chunk.docId === ingested.docId), `hits=${outcome.hits.length}`)
   check('命中含文档标题与切片', outcome.hits.every((h) => h.docTitle !== '' && h.chunk.text !== ''))
   check('调试打点含词项命中', outcome.debug.termHits.length > 0, `termHits=${outcome.debug.termHits.length}`)
@@ -141,7 +142,7 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
 }
 
 {
-  const outcome = await searchHybrid('H2 fails in barbwire', { mode: 'counter' })
+  const outcome = await searchHybrid('H2 fails in barbwire', { mode: 'counter', access: ADMIN_VIEWER })
   check('反证模式命中失败语境', outcome.hits.length > 0 && outcome.hits.some((h) => /barbwire|fails/i.test(h.chunk.text)))
 }
 
@@ -154,13 +155,13 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
     console.log('✖ FAIL 后续引用断言跳过（无切块）')
     failures++
   } else {
-  const citation = await fetchCitation(target.id)
+  const citation = await fetchCitation(target.id, { access: ADMIN_VIEWER })
   check('引用定位返回原文与文档', citation !== null && citation.docTitle === 'smoke-h2-guide')
   check('引用含标题路径', (citation?.chunk.headingPath.length ?? 0) > 0)
 
   // 重解析生成新工作版本 → 已发布 #1 切块不变
   await processDocument(ingested.docId)
-  const after = await fetchCitation(target.id)
+  const after = await fetchCitation(target.id, { access: ADMIN_VIEWER })
   check('发布后重解析不影响旧引用', after?.chunk.id === target.id && after?.chunk.contentHash === citation?.chunk.contentHash)
   const docAfter = await getDocument(ingested.docId)
   check('重解析后回到 indexed（工作版本 #2）', docAfter?.status === 'indexed', `status=${docAfter?.status}`)
@@ -169,7 +170,7 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
   }
 
   // 检索仍命中已发布 #1（工作版本 #2 不可见）
-  const outcome = await searchHybrid('H2 second entry')
+  const outcome = await searchHybrid('H2 second entry', { access: ADMIN_VIEWER })
   check('检索只命中已发布版本（工作版本 #2 不可见）', outcome.hits.every((h) => h.chunk.docVersionId !== `${ingested.docId}#2`))
 }
 
@@ -254,16 +255,16 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
   }
   check('已发布规则卡不可编辑', publishedImmutable)
 
-  const outcome = await searchHybrid('H2 second entry 是什么')
+  const outcome = await searchHybrid('H2 second entry 是什么', { access: ADMIN_VIEWER })
   const cardHit = outcome.hits.find((h) => h.chunk.id.startsWith('rulecard:'))
   check('规则卡进入检索命中', cardHit !== undefined && cardHit.docTitle.startsWith('规则卡：h2'), cardHit?.docTitle ?? '未命中')
   const { fetchCitation } = await import('../server/src/knowledge/retrieval.js')
-  const citation = cardHit ? await fetchCitation(cardHit.chunk.id) : null
+  const citation = cardHit ? await fetchCitation(cardHit.chunk.id, { access: ADMIN_VIEWER }) : null
   check('规则卡引用定位', citation !== null && citation.docTitle.includes('h2'))
 
   // 草稿不可见：再草拟一张不发布 → 检索不命中
   const draft2 = await draftRuleCard('barbwire', 'knowledge-smoke')
-  const outcome2 = await searchHybrid('barbwire 铁丝网')
+  const outcome2 = await searchHybrid('barbwire 铁丝网', { access: ADMIN_VIEWER })
   check('未发布规则卡不参与检索', !outcome2.hits.some((h) => h.chunk.id === `rulecard:${draft2.card.id}`))
   await deleteRuleCardDraft(draft2.card.id)
 }
@@ -281,10 +282,10 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
   check('案例未来结果单独存储', typeof oc.returnPct === 'number' && typeof oc.direction === 'string', `${oc.direction} ${oc.returnPct}%`)
   check('案例默认未发布', cw.published === false)
 
-  const beforePublish = await searchHybrid('BTCUSDT 案例')
+  const beforePublish = await searchHybrid('BTCUSDT 案例', { access: ADMIN_VIEWER })
   check('未发布案例不参与检索', !beforePublish.hits.some((h) => h.chunk.id === `case:${cw.id}`))
   await setCasePublished(cw.id, true)
-  const afterPublish = await searchHybrid('BTCUSDT 案例')
+  const afterPublish = await searchHybrid('BTCUSDT 案例', { access: ADMIN_VIEWER })
   const caseHit = afterPublish.hits.find((h) => h.chunk.id === `case:${cw.id}`)
   check('发布案例进入检索（只见可见字段）', caseHit !== undefined && !JSON.stringify(caseHit.chunk).includes('returnPct'), caseHit?.docTitle ?? '未命中')
 }

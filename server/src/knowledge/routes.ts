@@ -21,6 +21,7 @@ import { kv, log } from '../logger.js'
 import { fetchUrlContent, ingestBuffer } from './ingest.js'
 import { enqueueKnowledgeParse } from './jobs.js'
 import { fetchCitation, searchHybrid } from './retrieval.js'
+import { ADMIN_VIEWER } from './access.js'
 import {
   buildCaseWindow,
   deleteRuleCardDraft,
@@ -364,6 +365,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
     const outcome = await searchHybrid(q.data.query, {
       mode: q.data.mode,
       knowledgeVersionId: q.data.knowledgeVersionId,
+      access: ADMIN_VIEWER, // 管理端检索调试按超管全量（W1-A）
     })
     const debug: SearchDebugResult = {
       ...outcome.debug,
@@ -519,7 +521,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
     deps.requireSuperadmin(req)
     if (!ensureStorage(reply)) return reply
     const { id } = req.params as { id: string }
-    const citation = await fetchCitation(id)
+    const citation = await fetchCitation(id, { access: ADMIN_VIEWER }) // 管理端按超管全量（W1-A）
     if (!citation) return reply.code(404).send({ code: 'not_found', message: '切块不存在' })
     return {
       chunk: {

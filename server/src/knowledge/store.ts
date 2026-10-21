@@ -232,6 +232,22 @@ export async function publishedDocVersionIds(knowledgeVersionId?: string): Promi
   return v?.docVersionIds ?? []
 }
 
+/**
+ * 批量查文档 access（docId → access）：W1-A 权限过滤的数据源——检索层据此把
+ * purchase/member 文档的版本从普通用户的可见集合中剔除，规则卡派生联动同用。
+ */
+export async function docAccessMap(docIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (docIds.length === 0) return out
+  const d = getDb()
+  if (!d) return out
+  const rows = await d.select({ id: knowledgeDocuments.id, access: knowledgeDocuments.access })
+    .from(knowledgeDocuments)
+    .where(inArray(knowledgeDocuments.id, docIds))
+  for (const r of rows) out.set(r.id, r.access)
+  return out
+}
+
 function nextVersionLabel(existing: KnowledgeVersionRow | null): string {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const prefix = `kv-${today}-`

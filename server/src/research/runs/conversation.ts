@@ -638,8 +638,11 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
   // 概念问答（#6 修复）：直接 RAG + 反证作答（可选用 LLM 组织解释），不启动行情八步流程
   if (intent === 'concept') {
     const { searchHybrid } = await import('../../knowledge/retrieval.js')
-    const support = await searchHybrid(text, { finalLimit: 4, llmVariants: 2 })
-    const counter = await searchHybrid(`${text} failure risk counter`, { mode: 'counter', finalLimit: 2, llmVariants: 1 })
+    const { accessCtxForUser } = await import('../../knowledge/access.js')
+    // W1-A：会话问答按会话归属用户当前角色过滤（受限资料不进普通用户引用与 LLM 上下文）
+    const accessCtx = accessCtxForUser(conv.userId)
+    const support = await searchHybrid(text, { finalLimit: 4, llmVariants: 2, access: accessCtx })
+    const counter = await searchHybrid(`${text} failure risk counter`, { mode: 'counter', finalLimit: 2, llmVariants: 1, access: accessCtx })
     const evidenceBlock = support.hits.map((h) => `【${h.docTitle}${h.chunk.pageNo !== null ? ` 第${h.chunk.pageNo}页` : ''}】${h.chunk.text.slice(0, 300)}`).join('\n')
     let answer = ''
     const { resolveLlmClient, parseClaimLines } = await import('../llm.js')
@@ -917,7 +920,8 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
     if (classifyIntent(sub) !== 'concept') continue
     try {
       const { searchHybrid } = await import('../../knowledge/retrieval.js')
-      const r = await searchHybrid(sub, { finalLimit: 2, llmVariants: 1, skipRerank: true })
+      const { accessCtxForUser } = await import('../../knowledge/access.js')
+      const r = await searchHybrid(sub, { finalLimit: 2, llmVariants: 1, skipRerank: true, access: accessCtxForUser(conv.userId) })
       const top = r.hits[0]
       if (top !== undefined) {
         subAnswer =
