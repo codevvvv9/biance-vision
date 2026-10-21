@@ -52,7 +52,9 @@
   flex-wrap: wrap;
 }
 
-.admin-nav a {
+/* a=导航页；.admin-nav-action=非路由动作按钮（如 AI 设置弹窗入口），同一视觉 */
+.admin-nav a,
+.admin-nav button.admin-nav-action {
   padding: 5px 12px;
   border-radius: 999px;
   font-size: 12px;
@@ -63,7 +65,13 @@
   transition: all 0.15s ease;
 }
 
-.admin-nav a:hover {
+.admin-nav button.admin-nav-action {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.admin-nav a:hover,
+.admin-nav button.admin-nav-action:hover {
   color: var(--text-1);
   border-color: rgba(0, 229, 255, 0.35);
 }

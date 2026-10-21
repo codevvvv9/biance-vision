@@ -301,7 +301,7 @@ export default function WorkbenchPage(): JSX.Element {
               onClick={() => { setNavOpen(false); nearBottom.current = true; updateUrl({ conversation: c.id, run: null }) }}>{c.title || t('research:wb.untitled')}</button></div>)}
         </>}
       </div>
-      <div className="wb-sidebar-foot"><nav aria-label={t('research:wb.otherWorkbench')}><Link to="/">◫ <span>{t('research:wb.markets')}</span></Link><Link to="/brooks">⌁ <span>{t('research:wb.priceAction')}</span></Link>{user?.role === 'superadmin' && <Link to="/admin">⚙ <span>{t('research:wb.admin')}</span></Link>}</nav>
+      <div className="wb-sidebar-foot"><nav aria-label={t('research:wb.otherWorkbench')}><Link to="/">◫ <span>{t('research:wb.markets')}</span></Link><Link to="/brooks">⌁ <span>{t('research:wb.priceAction')}</span></Link></nav>
         <div className="wb-account">{user ? <><span className="wb-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="wb-account-name">{user.username}</span><button onClick={() => void logout()} aria-label={t('research:wb.logoutAria')}>{t('research:wb.logout')}</button></> : <button className="wb-login" onClick={login}><span className="wb-avatar">↗</span><span>{t('research:wb.login')}</span></button>}</div>
       </div>
     </aside>

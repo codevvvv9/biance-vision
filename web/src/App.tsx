@@ -87,6 +87,8 @@ function AuthedApp(): JSX.Element {
                 </ErrorBoundary>
               }
             />
+            {/* 管理后台子应用：主域名经 Caddy + ADMIN_HOSTS 门禁双层 404 不可达，
+                本路由仅供管理域名（btcpilot-admin，Basic Auth 门禁内）渲染界面 */}
             <Route
               path="/admin/*"
               element={
