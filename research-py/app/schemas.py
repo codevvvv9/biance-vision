@@ -14,12 +14,15 @@ from pydantic import BaseModel, Field, model_validator
 # ---------------------------------------------------------------------------
 
 class ParseBlock(BaseModel):
-    kind: Literal["text", "figure", "table"]
+    kind: Literal["text", "figure", "table", "heading"]
     text: Optional[str] = None
     pageNo: Optional[int] = None
     figureId: Optional[str] = None
     # Bounding box as [left, top, right, bottom] in PDF page coordinates when known.
     bbox: Optional[List[float]] = None
+    # heading 层级（1-6）；kind=heading 时由 docling label 映射（title→1，
+    # section_header→1+item.level）。契约只增不改（红线 R-B）。
+    level: Optional[int] = None
 
 
 class ParseDocumentRequest(BaseModel):
@@ -27,6 +30,40 @@ class ParseDocumentRequest(BaseModel):
     fileName: str = Field(min_length=1)
     contentBase64: Optional[str] = None
     fetchUrl: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# parse-document-async / parse-status / parse-cancel（W1-B 异步任务化）
+# ---------------------------------------------------------------------------
+
+class ParseAsyncRequest(BaseModel):
+    taskId: str = Field(min_length=1)
+    docId: str = Field(min_length=1)
+    fileName: str = Field(min_length=1)
+    contentBase64: str
+    """页范围（1-based 闭区间）；缺省=整档。分批由 Node 侧编排：20 页/批顺序提交"""
+    pageFrom: Optional[int] = Field(default=None, ge=1)
+    pageTo: Optional[int] = Field(default=None, ge=1)
+
+
+class ParseEvent(BaseModel):
+    seq: int
+    stage: str
+    message: Optional[str] = None
+    atMs: int
+    durationMs: Optional[int] = None
+
+
+class ParseTaskSnapshot(BaseModel):
+    taskId: str
+    status: Literal["pending", "running", "completed", "failed", "cancelled"]
+    stage: Optional[str] = None
+    pageNo: Optional[int] = None
+    totalPages: Optional[int] = None
+    error: Optional[str] = None
+    events: List[ParseEvent] = []
+    blocks: Optional[List[ParseBlock]] = None
+    pageCount: Optional[int] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ParseDocumentRequest":

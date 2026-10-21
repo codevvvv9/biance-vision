@@ -88,8 +88,10 @@ await boss.work<OiJob>(Q_OI, async (jobs) => {
   for (const job of jobs) await ingestOpenInterest(job.data.symbol, job.data.interval)
 })
 
-// 知识库：文档解析任务（PDF/DOCX 走 research-py Docling，TXT/MD/HTML 原生）
-await registerKnowledgeWorkers(boss)
+// 知识库：文档解析任务（PDF/DOCX 走 research-py Docling 异步分批，TXT/MD/HTML 原生）
+// W1-B：batchSize=1 显式串行——同一时刻只有一份文档在解析（research-py 内存预算
+// 的全局闸，rag-pipeline §4.3；singletonKey 只防同文档重复，不承担全局限流）
+await registerKnowledgeWorkers(boss, 1)
 void probeVectorSupport().catch(() => {})
 
 // 研究流程：固定流水线执行 + 报价到期研究估算（*/10 分钟）

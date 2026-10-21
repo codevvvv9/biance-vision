@@ -9,8 +9,10 @@
 import type { ParsedBlock } from './chunk.js'
 import { chunkBlocks } from './chunk.js'
 import { nativeFormatOf, parseNative } from './parse.js'
-import type { PyParseBlock } from '../researchpy.js'
-import { parseDocument } from '../researchpy.js'
+import type { PyParseBlock, PyParseEvent } from '../researchpy.js'
+import { cancelParse, parseStatus, submitParseBatch } from '../researchpy.js'
+import { cleanBlocks } from './clean.js'
+import { qualityGate } from './qualityGate.js'
 import { getBlobStore } from './blobstore.js'
 import { getCapabilities } from '../admin/capabilities.js'
 import { resolveEmbeddingClient } from './embeddings.js'
@@ -25,6 +27,7 @@ import {
   workingVersionId,
 } from './store.js'
 import type { KnowledgeDocumentRow } from '../models.js'
+import { randomUUID } from 'node:crypto'
 import { kv, log } from '../logger.js'
 
 const DOCLING_EXTS = new Set(['pdf', 'docx', 'doc'])
@@ -32,6 +35,11 @@ const DOCLING_EXTS = new Set(['pdf', 'docx', 'doc'])
 export function isDoclingFile(fileName: string): boolean {
   return DOCLING_EXTS.has((fileName.toLowerCase().split('.').pop() ?? ''))
 }
+
+/** W1-B 异步分批参数（rag-pipeline §4.3）：20 页/批、批间 3s 轮询、总预算 15min */
+const BATCH_PAGES = 20
+const POLL_INTERVAL_MS = 3_000
+const PARSE_BUDGET_MS = 15 * 60_000
 
 function toParsedBlocks(py: PyParseBlock[]): ParsedBlock[] {
   return py
@@ -41,28 +49,81 @@ function toParsedBlocks(py: PyParseBlock[]): ParsedBlock[] {
       text: (b.text ?? '') || undefined,
       pageNo: b.pageNo ?? undefined,
       figureId: b.figureId ?? undefined,
+      level: b.level ?? undefined,
     }))
 }
 
 /** 解析一步：读原始内容 → blocks；返回标题与元信息 */
-async function parseStep(doc: KnowledgeDocumentRow): Promise<{ blocks: ParsedBlock[]; meta: Record<string, unknown> }> {
+async function parseStep(
+  doc: KnowledgeDocumentRow,
+  attemptId: string,
+): Promise<{ blocks: ParsedBlock[]; meta: Record<string, unknown> }> {
   const store = getBlobStore()
   const buf = doc.blobKey ? await store.get(doc.blobKey) : null
   if (!buf) throw new Error(`原始内容不可读（blobKey=${doc.blobKey ?? 'null'}），请重新导入`)
   if (isDoclingFile(doc.fileName)) {
-    const res = await parseDocument({
-      docId: doc.id,
-      fileName: doc.fileName,
-      contentBase64: buf.toString('base64'),
-    })
-    if (res.status !== 'ok') throw new Error(`Docling 解析失败：${res.error ?? '未知原因'}`)
+    // W1-B：异步分批解析（整书同步单请求 >280s 必超时的根因修复）。
+    // 20 页/批顺序提交（单进程一次一批，天然全局串行）；轮询含事件；
+    // 每批完成即校验当前 attemptId——迟到的旧轮次结果在此被拒绝落库。
+    const contentBase64 = buf.toString('base64')
+    const allBlocks: ParsedBlock[] = []
+    const events: PyParseEvent[] = []
+    let pageCount: number | null = null
+    const deadline = Date.now() + PARSE_BUDGET_MS
+    // 先提交第 1 批拿 totalPages（Python 侧 docling pages 元数据），随后按 20 页推进
+    let pageFrom = 1
+    let pageTo: number | null = null
+    for (;;) {
+      const taskId = `${attemptId}:${pageFrom}`
+      await submitParseBatch(
+        { taskId, docId: doc.id, fileName: doc.fileName, contentBase64, ...(pageTo !== null ? { pageFrom, pageTo } : {}) },
+      )
+      events.push({ seq: events.length + 1, stage: 'parsing', message: `batch ${taskId} submitted`, atMs: Date.now() })
+      let snap = await parseStatus(taskId)
+      while (snap.status === 'pending' || snap.status === 'running') {
+        if (Date.now() > deadline) {
+          void cancelParse(taskId).catch(() => {})
+          throw new Error('解析超时（15 分钟预算；页数过多或服务器繁忙）')
+        }
+        // 迟到防护：轮询期间文档已被新一轮解析接手 → 立即取消本批并抛错
+        const current = await getDocument(doc.id)
+        if (!current || (current.parseMeta as Record<string, unknown>).attemptId !== attemptId) {
+          void cancelParse(taskId).catch(() => {})
+          throw new Error('解析轮次已失效（新轮次已接管），旧轮次终止')
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+        snap = await parseStatus(taskId)
+      }
+      events.push(...snap.events.slice(-20))
+      if (snap.status !== 'completed' || !snap.blocks) {
+        throw new Error(`Docling 批解析失败（pages ${pageFrom}-${pageTo ?? 'end'}）：${snap.error ?? '未知原因'}`)
+      }
+      allBlocks.push(...toParsedBlocks(snap.blocks))
+      pageCount = snap.pageCount ?? pageCount
+      if (pageTo === null) {
+        // 第一批返回后确定总页数；不足一批则整书已完成
+        pageCount = snap.pageCount ?? null
+        if (pageCount === null || pageCount <= BATCH_PAGES) break
+        pageTo = BATCH_PAGES
+        continue
+      }
+      if (pageTo >= (pageCount ?? pageTo)) break
+      pageFrom = pageTo + 1
+      pageTo = Math.min(pageFrom + BATCH_PAGES - 1, pageCount!)
+    }
+    if (allBlocks.every((b) => (b.text ?? '').trim() === '')) {
+      throw new Error('解析结果文本为空（疑似扫描版无文本层，暂不支持 OCR，请更换数字版文件）')
+    }
     return {
-      blocks: toParsedBlocks(res.blocks),
+      blocks: allBlocks,
       meta: {
-        parser: 'docling',
-        pageCount: res.pageCount ?? null,
-        blockCount: res.blocks.length,
-        figureCount: res.blocks.filter((b) => b.kind === 'figure').length,
+        parser: 'docling-async',
+        pageCount,
+        blockCount: allBlocks.length,
+        figureCount: allBlocks.filter((b) => b.kind === 'figure').length,
+        headingCount: allBlocks.filter((b) => b.kind === 'heading').length,
+        attemptId,
+        events: events.slice(-100),
       },
     }
   }
@@ -72,7 +133,7 @@ async function parseStep(doc: KnowledgeDocumentRow): Promise<{ blocks: ParsedBlo
   if (blocks.length === 0) throw new Error('解析结果为空（文件损坏或内容为空）')
   return {
     blocks,
-    meta: { parser: `native-${format}`, blockCount: blocks.length, title },
+    meta: { parser: `native-${format}`, blockCount: blocks.length, title, attemptId, events: [] },
   }
 }
 
@@ -104,14 +165,31 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
   if (!doc) throw new Error(`文档不存在：${docId}`)
   if (doc.status === 'parsing') throw new Error('文档正在解析中')
   try {
-    await setDocStatus(docId, 'parsing')
+    // W1-B attemptId：每次处理生成新轮次；旧轮次的迟到结果（轮询校验）被拒绝落库
+    const attemptId = randomUUID()
+    await setDocStatus(docId, 'parsing', { parseMeta: { ...doc.parseMeta, attemptId, events: [] } })
     doc = (await getDocument(docId))!
     const startedAt = Date.now()
 
-    const { blocks, meta } = await parseStep(doc)
-    await setDocStatus(docId, 'parsed', { parseMeta: { ...doc.parseMeta, ...meta } })
+    const parsed = await parseStep(doc, attemptId)
+    // 迟到防护：解析期间轮次被替换（手动重解析/删除重传）→ 丢弃本结果
+    if ((await getDocument(docId))?.parseMeta.attemptId !== attemptId) {
+      throw new Error('解析轮次已失效（新轮次已接管），结果丢弃')
+    }
+    // W1-B 清洗（§4.5）+ 质量门（§4.7 empty_text 硬门）
+    const cleaned = cleanBlocks(parsed.blocks)
+    const gate = qualityGate(cleaned.blocks, parsed.blocks)
+    if (gate.blocked) throw new Error(gate.blockReason ?? '质量门拦截')
+    await setDocStatus(docId, 'parsed', {
+      parseMeta: {
+        ...doc.parseMeta,
+        ...parsed.meta,
+        cleanStats: cleaned.stats,
+        qualityWarnings: gate.warnings,
+      },
+    })
 
-    const chunks = chunkBlocks(blocks)
+    const chunks = chunkBlocks(cleaned.blocks)
     if (chunks.length === 0) throw new Error('切分结果为空')
     await replaceChunks(doc, chunks)
     await setDocStatus(docId, 'chunked')

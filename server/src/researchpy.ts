@@ -45,11 +45,13 @@ async function call<T>(path: string, body: unknown, timeoutMs: number): Promise<
 // ---- /tasks/parse-document（Docling；对齐 research-py/app/schemas.py） ----
 
 export interface PyParseBlock {
-  kind: 'text' | 'figure' | 'table'
+  kind: 'text' | 'figure' | 'table' | 'heading'
   text?: string | null
   pageNo?: number | null
   figureId?: string | null
   bbox?: number[] | null
+  /** heading 层级（1-6）：W1-B 缺口 A 修复后由 docling label 映射产出 */
+  level?: number | null
 }
 
 export interface PyParseResponse {
@@ -65,6 +67,60 @@ export function parseDocument(
   timeoutMs = 120_000,
 ): Promise<PyParseResponse> {
   return call('/tasks/parse-document', input, timeoutMs)
+}
+
+// ---- /tasks/parse-document-async + parse-status + parse-cancel（W1-B 异步任务化） ----
+
+export interface PyParseEvent {
+  seq: number
+  stage: string
+  message?: string | null
+  atMs: number
+  durationMs?: number | null
+}
+
+export interface PyParseTaskSnapshot {
+  taskId: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  stage?: string | null
+  pageNo?: number | null
+  totalPages?: number | null
+  error?: string | null
+  events: PyParseEvent[]
+  blocks?: PyParseBlock[] | null
+  pageCount?: number | null
+}
+
+/** 提交一批异步解析（20 页/批；立即返回，进度经 parseStatus 轮询） */
+export function submitParseBatch(
+  input: { taskId: string; docId: string; fileName: string; contentBase64: string; pageFrom?: number; pageTo?: number },
+  timeoutMs = 30_000,
+): Promise<PyParseTaskSnapshot> {
+  return call('/tasks/parse-document-async', input, timeoutMs)
+}
+
+async function getRaw<T>(path: string, timeoutMs: number): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`${RESEARCH_PY_URL}${path}`, { signal: AbortSignal.timeout(timeoutMs) })
+  } catch (err) {
+    throw new ResearchPyError(`research-py 不可达：${(err as Error).message}`, 'service_down')
+  }
+  if (!res.ok) {
+    const text = (await res.text().catch(() => '')).slice(0, 500)
+    throw new ResearchPyError(`research-py ${path} → ${res.status}：${text}`, 'remote_error')
+  }
+  return (await res.json()) as T
+}
+
+/** 轮询任务状态；completed 且 includeBlocks=true 时返回 blocks */
+export function parseStatus(taskId: string, includeBlocks = false, timeoutMs = 10_000): Promise<PyParseTaskSnapshot> {
+  return getRaw(`/tasks/parse-status/${encodeURIComponent(taskId)}${includeBlocks ? '?includeBlocks=true' : ''}`, timeoutMs)
+}
+
+/** 协作取消（批间生效；白跑上限=一个在飞批次） */
+export function cancelParse(taskId: string, timeoutMs = 10_000): Promise<PyParseTaskSnapshot> {
+  return call(`/tasks/parse-cancel/${encodeURIComponent(taskId)}`, {}, timeoutMs)
 }
 
 // ---- /tasks/predict（分位 GBM 推理）与 /tasks/train（训练） ----

@@ -68,12 +68,50 @@ def _item_location(item) -> Tuple[Optional[int], Optional[List[float]]]:
         return None, None
 
 
-def _convert_with_docling(file_name: str, data: bytes) -> Tuple[List[ParseBlock], Optional[int]]:
-    """Synchronous docling conversion; run in a worker thread by the caller."""
-    from docling.datamodel.base_models import DocumentStream
-    from docling.document_converter import DocumentConverter
+def _label_to_block(item, text_of) -> Optional[ParseBlock]:
+    """Map a docling text item's label to a ParseBlock (W1-B 缺口 A 修复).
 
-    converter = DocumentConverter()
+    Docling items carry `label` (title/section_header/paragraph/list_item/
+    page_header/page_footer/...). The previous mapping dropped it entirely,
+    producing only text/table/figure — so Node's heading stack stayed empty
+    and chapter-aware chunking never fired. Mapping (contract is add-only, R-B):
+      title            → heading level 1
+      section_header   → heading level 1 + item.level (clamped to 1-6)
+      page_header/footer → text (isPageFurniture note in text prefix omitted;
+                           Node-side cleaning drops furniture by repetition rule)
+      everything else  → text
+    """
+    page_no, bbox = _item_location(item)
+    label = getattr(item, "label", None)
+    label_name = getattr(label, "name", label) or ""
+    text = text_of(item)
+    if label_name == "title":
+        return ParseBlock(kind="heading", text=text, pageNo=page_no, bbox=bbox, level=1)
+    if label_name == "section_header":
+        try:
+            level = min(6, max(1, 1 + int(getattr(item, "level", 0) or 0)))
+        except (TypeError, ValueError):
+            level = 1
+        return ParseBlock(kind="heading", text=text, pageNo=page_no, bbox=bbox, level=level)
+    return ParseBlock(kind="text", text=text, pageNo=page_no, bbox=bbox)
+
+
+def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress=None) -> Tuple[List[ParseBlock], Optional[int]]:
+    """Synchronous docling conversion; run in a worker thread by the caller.
+
+    page_range: optional (from, to) 1-based inclusive tuple — one batch of the
+    Node-orchestrated 20-page batches (W1-B). progress: optional callable
+    invoked as progress(stage, page_no, total_pages) between batches of the
+    internal loop; raising inside progress aborts (cooperative cancel).
+    """
+    from docling.datamodel.base_models import DocumentStream
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    opts = PdfPipelineOptions()
+    if page_range is not None:
+        opts.page_range = tuple(page_range)
+    converter = DocumentConverter(format_options={"pdf": PdfFormatOption(pipeline_options=opts)})
     result = converter.convert(DocumentStream(name=file_name, stream=io.BytesIO(data)))
     doc = result.document
 
@@ -89,8 +127,9 @@ def _convert_with_docling(file_name: str, data: bytes) -> Tuple[List[ParseBlock]
             return ""
 
     for item in getattr(doc, "texts", []) or []:
-        page_no, bbox = _item_location(item)
-        blocks.append(ParseBlock(kind="text", text=_text_of(item), pageNo=page_no, bbox=bbox))
+        block = _label_to_block(item, _text_of)
+        if block is not None:
+            blocks.append(block)
 
     for item in getattr(doc, "tables", []) or []:
         page_no, bbox = _item_location(item)
@@ -120,6 +159,8 @@ def _convert_with_docling(file_name: str, data: bytes) -> Tuple[List[ParseBlock]
         page_count = len(doc.pages) or None
     except Exception:
         pass
+    if progress is not None and page_count:
+        progress("parsed_batch", page_range[1] if page_range else page_count, page_count)
     return blocks, page_count
 
 
