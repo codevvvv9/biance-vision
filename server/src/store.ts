@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url'
 import { log } from './logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-export const DATA_DIR = path.join(__dirname, '..', 'data')
+// 数据目录可经 BV_DATA_DIR 覆盖：scripts/login-regression.ts 注入临时目录隔离
+// users/sessions 等文件态数据（不与开发服务的 server/data 互写）；默认与历史一致
+export const DATA_DIR = process.env.BV_DATA_DIR || path.join(__dirname, '..', 'data')
 
 export function loadJson<T>(file: string, fallback: T): T {
   try {
