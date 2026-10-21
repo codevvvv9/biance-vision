@@ -22,7 +22,7 @@ const steps: Step[] = [
   { name: '结构引擎因果性（456 项）', cmd: 'pnpm brooks:causality' },
   { name: '结构引擎自测（36 项）', cmd: 'pnpm brooks:selftest' },
   { name: '产品计算锚点（30 项）', cmd: 'pnpm research:calc-check' },
-  { name: '管理端域名门禁（27 项）', cmd: 'pnpm admin:gate-check' },
+  { name: '管理端域名门禁（35 项）', cmd: 'pnpm admin:gate-check' },
   { name: '登录回归（入口同构/计数/锁定，需 PG）', cmd: 'pnpm login:regression', skip: skipDb },
   { name: '知识库集成（需 PG）', cmd: 'pnpm knowledge:smoke', skip: skipDb },
   { name: '研究流程集成（需 PG+行情）', cmd: 'pnpm research:smoke', skip: skipDb },

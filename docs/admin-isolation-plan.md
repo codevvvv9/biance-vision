@@ -395,31 +395,44 @@ pnpm workspace
 部署形态（二选一，建议先 A 后视需要升 B）：
 
 - **A. 单镜像双入口**（起步推荐）：一个镜像含 user-api/admin-api 两个入口与两份前端产物，
-  compose 起两个容器（不同 command + 端口 3200/3201），Caddy 分流——CI 零改动，运维最简；
+  compose 起两个容器（不同 command + 端口 3200/3201），Caddy 分流，运维最简；
+  ❗引入四包与双构建后，Docker 构建、根 package.json 脚本与 CI 验证范围**仍需同步调整**
+  （多包构建顺序/产物清单/typecheck 范围——「单镜像所以 CI 不动」不成立）；
 - **B. 双镜像**（彻底独立发布）：release 工作流出 user/admin 两个镜像，版本节奏完全解耦——
   当两端发版节奏明显分化时再升级。
 
-### 3.2 迁移批次（PR 切分，每批独立可发布）
+### 3.2 迁移批次（v2 重排：收敛先于双进程切流；每批独立可发布）
 
-- **PR-S1 前端拆分**：workspace 加 shared-ui（组件下沉）+ user-web/admin-web 双构建
-  （vite 双配置）；主进程暂仍单入口托管双产物（行为不变）。
-- **PR-S2 server 拆分**：index.ts 移除全部管理注册（含 index.ts 内散落的 /api/admin/ai/* 物理收口
-  到 admin 路由模块）；新增 admin-api 入口；compose 加 admin 服务（127.0.0.1:3201）；
-  Caddy admin 域名改指 3201；ADMIN_HOSTS Host 门禁退役（路由物理不存在，不再需要）。
-- **PR-S3 存储与会话收敛**：admin 容器独立 data 目录；users/sessions 真源切 PostgreSQL 优先
-  （双进程不再共用 JSON 镜像互踩）；登录限速计数入 PG 表（跨端合并计数+重启不清零）。
-- **PR-S4 数据库分权**：user-api 专用 DB 账号表级最小权限；管理配置文件只挂 admin 容器卷。
+- **S1 公共包与双构建**：workspace 加 shared-ui（组件下沉，按 admin-web 实际引用集切分）+
+  user-web/admin-web 双构建（vite 双配置）；主进程暂仍单入口托管双产物（行为不变）；
+  Docker 构建、根脚本、CI 验证范围随多包调整。
+- **S2 存储与配置收敛（❗必须先于双进程上线）**：users/sessions 真源切 PostgreSQL
+  （认证数据 fail-closed：生产 PG 不可用时**拒绝新登录与管理认证**，不降级 JSON 判权；
+  JSON 仅备份、**移除「JSON 优先合并回数据库」的初始化逻辑**、不自动反向覆盖 PG）；
+  ❗**DB 迁移从服务启动流程分离**（独立迁移命令/容器，为 S4 后 user-api 不承担 DDL 铺路）；
+  ❗**存量无用途标记会话批量失效**（升级时要求重登，不猜测用途）；AI 档案（ai-config.json）、
+  能力配置与密钥引用**跨进程化**（迁 PG 或共享存储+版本号，admin 修改后 user-api/worker
+  的进程内缓存刷新机制先定义再实施——仅给 admin 挂配置卷会让其他进程读不到新配置）；
+  会话增加**用途标记**（user/admin），服务端拒绝跨用途使用；登录限速计数入 PG。
+- **S3 双进程切流**：index.ts 移除全部管理注册（含 /api/admin/ai/* 物理收口到 admin 路由模块）；
+  新增 admin-api 入口（不注册用户路由）；compose 双容器（127.0.0.1:3200/3201）；
+  Caddy admin 域名改指 3201；ADMIN_HOSTS 门禁退役（路由物理不存在）。
+- **S4 数据库分权收尾**：user-api 专用 DB 账号表级最小权限；管理配置卷只挂 admin 容器（S2 已保证其他进程不依赖该卷）。
 
 ### 3.3 已知设计难点（实施前必须想清楚）
 
 **sessions.json / users.json 的双进程写冲突**：现有实现是「内存 Map + JSON 文件镜像，按 mtime
 热加载」（`server/src/users.ts`）。两个进程挂同一 `./server/data` 卷时，双方都写 sessions.json
-会互相覆盖丢登录态；users.json 同理。PR-S3 的解法：登录态与用户表以 PostgreSQL 为唯一真源
-（双写机制里 PG 已是主源，需核对读路径确实 PG 优先），JSON 镜像仅 user-api 进程负责写。
+会互相覆盖丢登录态；users.json 同理。**S2 收敛先行**（v2 重排）正是为在双进程上线前消除此冲突：
+登录态与用户表以 PostgreSQL 为唯一真源，JSON 镜像仅 user-api 进程负责写。
 不做「一处登录两域通用」的跨域 SSO（复杂度高、收益低）。
 
 **shared-ui 下沉的迁移面**：web 的组件被两端共用（Header 部分复用、MiniMarkdown、fx/、表单控件），
 下沉时按「admin-web 实际引用集」切分，避免一次性大迁移；未引用的留在 user-web。
+
+**回滚 ≠ 退镜像（v2 新增）**：S2/S3 同时改变存储真源、Compose、Caddy 上游、数据目录与数据库权限，
+退回旧 BV_VERSION 不会自动恢复这些。每批保存对应配置与数据备份、明确 DB 迁移兼容范围；
+S3 切流上线前在 VPS **实际演练一次回滚**（切流→验证→切回）。
 
 ### 3.4 资源评估（2C2G VPS）
 
@@ -437,7 +450,8 @@ admin-api 容器为纯 Node 进程，参照 app 实测 ~60MB；当前发版后�
 - [ ] 主站超管账号登录被拒（提示走管理域名）；管理域名普通账号登录被拒
 - [ ] 登录限速跨域名合并计数（admin 域连败 5 次后主站同 IP 也受限）且重启不丢（PG 持久化）
 - [ ] user-api 数据库账号无管理表写权限（直连尝试写 users 表被拒）
-- [ ] 回滚演练：BV_VERSION 回上一 tag 恢复单容器形态
+- [ ] 回滚演练（v2）：按 §3.3 回滚条款执行——保存配置/数据备份、切流→验证→切回全程演练，DB 迁移兼容范围核对；不只是退 BV_VERSION
+- [ ] 会话用途标记生效：user 会话访问管理 API 被拒、admin 会话访问用户端按设计判定（服务端校验，非 UI 禁用）
 
 ---
 

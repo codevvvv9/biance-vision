@@ -1,7 +1,7 @@
 /**
  * 管理端域名门禁自测（pnpm admin:gate-check）。
  *
- * 用生产同款 createAdminGate/register 挂在最小 Fastify 实例上断言四组行为：
+ * 用生产同款 createAdminGate/register 挂在最小 Fastify 实例上断言五组行为：
  * A. 未配置（空 hosts）→ 门禁关闭：任意 Host 的 /api/admin/* 正常进路由、/admin 正常落 SPA 回退
  * B. 已配置 → 错误 Host：/api/admin、/api/admin/*、/admin、/admin/* 一律 404，
  *    且 /admin 不得落 SPA 回退（否则等于把 admin 前端壳发给爬虫）；
@@ -10,9 +10,11 @@
  * C. 已配置 → 正确 Host（含带端口/大写变体）放行；无关路径与撞前缀路径（/api/administrator）不受影响
  * D. 登录入口策略（loginEntryPolicy）：已配置时 superadmin 只能管理域名、普通账号只能用户域名；
  *    未配置时不设限（本地开发零影响）
+ * E. 登录验证前预检（loginPrecheck）：错误入口在 scrypt 之前按用户名拒绝（roleOf 桩断言）；
+ *    HTTP 层「scrypt 未执行」证据由 login-regression R4b 日志断言钉住
  */
 import Fastify from 'fastify'
-import { createAdminGate, gatePath, loginEntryPolicy } from '../server/src/adminGate.js'
+import { createAdminGate, gatePath, loginEntryPolicy, loginPrecheck } from '../server/src/adminGate.js'
 
 let failed = 0
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -148,11 +150,31 @@ const ADMIN = 'admin.example.com'
   check('D6 拒绝文案非空（供前端展示）', loginEntryPolicy('superadmin', false, on).message !== undefined, true)
 }
 
-// 失败退出必须放在全部测试组（含 D 组登录策略）之后：此前检查位于 D 组之前，
+// ---- E. 登录验证前预检 loginPrecheck（scrypt 之前按用户名拒错误入口；
+//      roleOf 桩记录调用，断言预检确实查询了角色且结构上不接触密码）----
+{
+  check('E1 未配置时不限制（放行至密码验证）', loginPrecheck('admin', false, () => 'superadmin').allowed, true)
+  const on = createAdminGate(ADMIN)
+  let calls = 0
+  const roleOf = (u: string): 'user' | 'superadmin' | null => {
+    calls++
+    return u === 'admin' ? 'superadmin' : u === 'bob' ? 'user' : null
+  }
+  check('E2 已配置：主站收到 superadmin 用户名 → 预检拒绝', loginPrecheck('admin', false, roleOf, on).allowed, false)
+  check('E3 已配置：管理域收到普通用户名 → 预检拒绝', loginPrecheck('bob', true, roleOf, on).allowed, false)
+  check('E4 已配置：主站普通用户名放行', loginPrecheck('bob', false, roleOf, on).allowed, true)
+  check('E5 已配置：管理域 superadmin 放行', loginPrecheck('admin', true, roleOf, on).allowed, true)
+  check('E6 未知用户名放行（交给 verifyLogin 正常 401，不暴露存在性）', loginPrecheck('nobody', false, roleOf, on).allowed, true)
+  check('E7 预检确实执行了角色查询（roleOf 被调用 5 次：E2-E6 各一次）', calls, 5)
+  // 结构性保证：loginPrecheck 签名不含密码参数——密码校验在预检拒绝路径上不可能发生；
+  // HTTP 层的「scrypt 未执行」证据由 login-regression 的 R4b 日志断言钉住
+}
+
+// 失败退出必须放在全部测试组（含 D/E 组登录策略）之后：此前检查位于 D 组之前，
 // D 组失败不会非零退出、release gate 拦不住这类回归（2026-10-21 审查 P2）
 if (failed > 0) {
   console.error(`\n管理端域名门禁自测未通过 ✖（${failed} 项失败）`)
   process.exit(1)
 }
 
-console.log('\n管理端域名门禁自测全部通过 ✔（27 项）')
+console.log('\n管理端域名门禁自测全部通过 ✔（35 项）')

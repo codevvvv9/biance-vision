@@ -102,6 +102,27 @@ export function loginEntryPolicy(
   return { ok: true }
 }
 
+/**
+ * 登录验证前预检：在密码验证（scrypt）之前按用户名查角色，错误入口的账号
+ * 直接拒绝且**不执行密码校验**——消除主站对管理员密码的爆破确认通道。
+ * 拒绝对外与密码错误完全同构（由调用方走 failLogin 统一出口）；未知用户名
+ * 放行至 verifyLogin 正常 401（不暴露账号存在性）。
+ * roleOf 由调用方注入（生产传 users.ts 的 roleOfUsername；测试注入桩以断言
+ * 调用行为）。gate 参数仅供注入测试用的已启用实例。
+ */
+export function loginPrecheck(
+  username: string,
+  adminEntry: boolean,
+  roleOf: (username: string) => 'user' | 'superadmin' | null,
+  gate: Pick<AdminGate, 'enabled'> = adminGate,
+): { allowed: boolean; role?: 'user' | 'superadmin' } {
+  if (!gate.enabled) return { allowed: true }
+  const role = roleOf(username)
+  if (role === null) return { allowed: true }
+  if ((role === 'superadmin') !== adminEntry) return { allowed: false, role }
+  return { allowed: true, role }
+}
+
 /** 进程默认门禁（读 ADMIN_HOSTS，模块加载时定值；未配置=关闭） */
 export const adminGate = createAdminGate(process.env.ADMIN_HOSTS ?? '')
 

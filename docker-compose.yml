@@ -99,7 +99,13 @@ services:
 
   # Python 研究服务：Docling 文档解析 + 分位 GBM 训练/推理（固定任务端点，无任意代码执行）
   research-py:
-    build: ./research-py
+    # ❗构建参数实配在 Compose（而非只写脚本/注释）：直接 docker compose build 也不会
+    # 落回轻量镜像——本地曾因旧镜像无 Docling 导致知识库 PDF 解析全线失败（根因①，
+    # 2026-10-21 诊断）；Dockerfile 的 ARG 默认值 0 仅供 GHCR 轻量变体，本地一律覆盖
+    build:
+      context: ./research-py
+      args:
+        WITH_DOCLING: "1"
     image: biance-vision-research-py:latest
     container_name: biance-vision-research-py
     restart: unless-stopped

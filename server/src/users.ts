@@ -238,6 +238,15 @@ export function verifyLogin(username: string, password: string): UserRecord | nu
   return u
 }
 
+/**
+ * 按用户名查角色（不验证密码），用户名匹配语义与 verifyLogin 一致。
+ * 登录验证前预检用：错误入口的账号在 scrypt 之前被拒（防爆破确认通道）。
+ */
+export function roleOfUsername(username: string): UserRole | null {
+  const u = getUsers().find((x) => x.username === String(username ?? '').trim())
+  return u ? u.role : null
+}
+
 // ---------------------------------------------------------------------------
 // 会话：内存 Map + sessions.json 镜像（服务重启不掉线），惰性清理过期；
 // 同样按 mtime 热加载——改密码脚本踢掉会话后，运行中的服务立即生效
