@@ -35,7 +35,7 @@ W1-A 先于 W1-B 的发布节点：**首次发布受限资料（purchase/member�
 
 **登录回归隔离条款（定稿表述）**：登录回归使用独立临时数据目录、独立测试数据库和自建凭据；退出时清理资源，不读写开发或生产数据（`b855035` 实现达标：BV_DATA_DIR=mkdtemp + 独立库 bv_login_regression DROP/CREATE/退出 DROP + 随机强密码测试超管）。
 
-**环境核验（2026-10-21 记录）**：MemTotal 3723MB / MemAvailable 2645MB；磁盘 vda 70G、文件系统 69G、使用 28%；五容器健康。构建参数 `WITH_DOCLING=1` **实配进根 docker-compose.yml 的 `build.args`**（`docker compose build research-py` 即带 Docling；本地镜像已重建）。本地验收含实际小文档解析（见 §4 W0 验收记录）。
+**环境核验（2026-10-21 记录）**：MemTotal 3723MB / MemAvailable 2645MB；磁盘 vda 70G、文件系统 69G、使用 28%；五容器健康。构建参数 `WITH_DOCLING=1` **实配进根 docker-compose.yml 的 `build.args`**（`docker compose build research-py` 即带 Docling；本地镜像已重建成功，需宿主代理 build-arg 时用 `docker compose build research-py --build-arg http_proxy=http://host.docker.internal:7897 --build-arg https_proxy=...`）。**实际小文档解析验证在生产链路完成**（v0.9.6 线上 research-py Docling 真实解析 PDF 返回完整 blocks）；本地 health `docling:true` 已达，但本地完整解析暂被「Docling 模型运行时从 HF Hub 下载（构建期未预置、缓存不在 research-models 卷内）」阻塞——模型预置 + `DOCLING_ARTIFACTS_PATH` 指向持久卷是 W1-B R1 的既有任务，届时本地一并解决。
 
 ## 3. W1-A · 知识库权限底座（详设要点；实施细案在 W0 交付时展开）
 
