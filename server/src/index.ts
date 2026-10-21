@@ -82,6 +82,7 @@ import {
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
+import { isAdminHost, registerAdminGate } from './adminGate.js'
 import { startQueue } from './queue.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
@@ -352,8 +353,14 @@ function clientIp(req: FastifyRequest): string {
   return String(req.ip ?? '')
 }
 
-// 地域封锁钩子：onRequest 阶段执行，早于鉴权与所有路由（与限速/审计同用 clientIp 口径）
-registerGeoBlock(app, clientIp)
+// 地域封锁钩子：onRequest 阶段执行，早于鉴权与所有路由（与限速/审计同用 clientIp 口径）；
+// 管理端域名豁免地域封锁——admin 入口有 Caddy Basic Auth 门禁在前，运营者可能
+// 从大陆直连管理端而不挂代理，应用层地域封锁对它没有意义
+registerGeoBlock(app, clientIp, (req) => isAdminHost(req.headers.host))
+
+// 管理端域名门禁（ADMIN_HOSTS 未配置时零行为变化；详见 server/src/adminGate.ts）：
+// 非管理域 Host 的 /admin* 与 /api/admin/* 一律 404，与 Caddy 主域名屏蔽互为纵深
+registerAdminGate(app)
 
 // ---------------------------------------------------------------------------
 // 登录限速（公网爆破防线，进程内计数，重启即清）：
@@ -890,7 +897,8 @@ await startQueue()
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
 app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {
   // 地域封锁兜底：WS 升级请求未必都经过全局 onRequest 钩子（依赖插件版本行为），此处显式再判一次
-  if (isRegionBlocked(clientIp(req))) {
+  // （管理端域名豁免，与 onRequest 钩子口径一致）
+  if (!isAdminHost(req.headers.host) && isRegionBlocked(clientIp(req))) {
     connection.socket.close(4003, 'region_blocked')
     return
   }

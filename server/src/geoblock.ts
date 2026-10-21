@@ -431,12 +431,16 @@ function replyBlocked(ip: string, req: FastifyRequest, reply: FastifyReply): voi
 /**
  * 注册全局拦截钩子（onRequest 阶段，早于鉴权）。
  * ipOf 复用 index.ts 的 clientIp（取 XFF 末段，防伪造语义与限速/审计一致）。
+ * skipIf：可选豁免回调——管理端域名豁免地域封锁（admin 入口有 Caddy Basic Auth
+ * 门禁在前，运营者可能从大陆直连管理端而不挂代理，应用层地域封锁对它没有意义）。
  */
 export function registerGeoBlock(
   app: FastifyInstance,
   ipOf: (req: FastifyRequest) => string,
+  skipIf?: (req: FastifyRequest) => boolean,
 ): void {
   app.addHook('onRequest', async (req, reply) => {
+    if (skipIf?.(req)) return
     const ip = ipOf(req)
     if (isRegionBlocked(ip)) replyBlocked(ip, req, reply)
   })
