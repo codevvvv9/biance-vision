@@ -1,14 +1,18 @@
 /**
  * 管理端域名门禁自测（pnpm admin:gate-check）。
  *
- * 用生产同款 createAdminGate/register 挂在最小 Fastify 实例上断言三组行为：
+ * 用生产同款 createAdminGate/register 挂在最小 Fastify 实例上断言四组行为：
  * A. 未配置（空 hosts）→ 门禁关闭：任意 Host 的 /api/admin/* 正常进路由、/admin 正常落 SPA 回退
  * B. 已配置 → 错误 Host：/api/admin、/api/admin/*、/admin、/admin/* 一律 404，
- *    且 /admin 不得落 SPA 回退（否则等于把 admin 前端壳发给爬虫）
+ *    且 /admin 不得落 SPA 回退（否则等于把 admin 前端壳发给爬虫）；
+ *    编码路径不得绕过（/api/%61dmin、//api/admin 双斜杠、%2561 双重编码）——
+ *    路由匹配按解码后路径命中，门禁判断必须与之间层（gatePath 规范化）
  * C. 已配置 → 正确 Host（含带端口/大写变体）放行；无关路径与撞前缀路径（/api/administrator）不受影响
+ * D. 登录入口策略（loginEntryPolicy）：已配置时 superadmin 只能管理域名、普通账号只能用户域名；
+ *    未配置时不设限（本地开发零影响）
  */
 import Fastify from 'fastify'
-import { createAdminGate } from '../server/src/adminGate.js'
+import { createAdminGate, gatePath, loginEntryPolicy } from '../server/src/adminGate.js'
 
 let failed = 0
 function check(name: string, actual: unknown, expected: unknown): void {
@@ -76,6 +80,29 @@ const ADMIN = 'admin.example.com'
     (await app.inject({ method: 'GET', url: '/api/admin/users?x=1', headers: { host: MAIN } })).statusCode,
     404,
   )
+  // B7-B9 编码绕过：门禁判断与路由匹配必须同层（gatePath 解码+压缩斜杠）
+  check(
+    'B7 /api/%61dmin/users（URL 编码 a）→ 404',
+    (await app.inject({ method: 'GET', url: '/api/%61dmin/users', headers: { host: MAIN } })).statusCode,
+    404,
+  )
+  check(
+    'B8 //api/admin/users（双斜杠）→ 404',
+    (await app.inject({ method: 'GET', url: '//api/admin/users', headers: { host: MAIN } })).statusCode,
+    404,
+  )
+  check(
+    'B9 /api/%2561dmin/users（双重编码）→ 404',
+    (await app.inject({ method: 'GET', url: '/api/%2561dmin/users', headers: { host: MAIN } })).statusCode,
+    404,
+  )
+  check(
+    'B10 /%61dmin（前端路径编码）→ 404',
+    (await app.inject({ method: 'GET', url: '/%61dmin/knowledge', headers: { host: MAIN } })).statusCode,
+    404,
+  )
+  check('B11 gatePath 规范化（%61 → a）', gatePath('/api/%61dmin/users'), '/api/admin/users')
+  check('B12 gatePath 压缩双斜杠', gatePath('//api//admin//users'), '/api/admin/users')
   await app.close()
 }
 
@@ -114,4 +141,16 @@ if (failed > 0) {
   console.error(`\n管理端域名门禁自测未通过 ✖（${failed} 项失败）`)
   process.exit(1)
 }
-console.log('\n管理端域名门禁自测全部通过 ✔（14 项）')
+
+// ---- D. 登录入口策略 loginEntryPolicy（生产绑默认实例；测试注入已启用工厂实例）----
+{
+  check('D1 未配置 ADMIN_HOSTS 时入口策略不设限（本地开发零影响）', loginEntryPolicy('superadmin', false).ok, true)
+  const on = createAdminGate(ADMIN) // 已启用实例：验证「已配置」分支的双向拒绝
+  check('D2 已配置：主站拒绝 superadmin 签发会话', loginEntryPolicy('superadmin', false, on).ok, false)
+  check('D3 已配置：管理域名拒绝普通账号登录', loginEntryPolicy('user', true, on).ok, false)
+  check('D4 已配置：主站普通账号正常', loginEntryPolicy('user', false, on).ok, true)
+  check('D5 已配置：管理域名 superadmin 正常', loginEntryPolicy('superadmin', true, on).ok, true)
+  check('D6 拒绝文案非空（供前端展示）', loginEntryPolicy('superadmin', false, on).message !== undefined, true)
+}
+
+console.log('\n管理端域名门禁自测全部通过 ✔（27 项）')

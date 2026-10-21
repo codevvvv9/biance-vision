@@ -5,9 +5,27 @@ import type { CSSProperties } from 'react'
  * sourceTier/access 默认 community/public，商业资料走有权限文件上传（spec 纪律）。
  */
 import { useRef, useState } from 'react'
+import defaultManifest from './default-manifest.json'
 
 const ACCEPT = '.pdf,.docx,.txt,.md,.html'
 const MAX_BYTES = 50 * 1024 * 1024
+
+/** 默认清单条目（default-manifest.json 是 docs/references/knowledge-source-manifest.json 的构建副本） */
+interface ManifestEntry {
+  id: string
+  url: string
+  type: string
+  title: string
+  topics: string[]
+  access: string
+  sourceTier: string
+  importMethod: string
+  enabled: boolean
+  notes?: string
+}
+
+const MANIFEST_ENTRIES = (defaultManifest as { entries: ManifestEntry[] }).entries
+const MANIFEST_ENABLED = MANIFEST_ENTRIES.filter((e) => e.enabled)
 
 export interface UploadItem {
   name: string
@@ -41,6 +59,7 @@ export default function ImportZone({ onDone }: { onDone: () => void }): JSX.Elem
   const [urlMsg, setUrlMsg] = useState('')
   const [manifestBusy, setManifestBusy] = useState(false)
   const [manifestMsg, setManifestMsg] = useState('')
+  const [manifestOpen, setManifestOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const handleFiles = (files: FileList | File[]): void => {
@@ -90,13 +109,19 @@ export default function ImportZone({ onDone }: { onDone: () => void }): JSX.Elem
   }
 
   const importManifest = async (): Promise<void> => {
+    if (MANIFEST_ENABLED.length === 0) {
+      setManifestMsg('清单没有启用中的条目')
+      return
+    }
     setManifestBusy(true)
     setManifestMsg('')
     try {
       const res = await fetch('/api/admin/knowledge/documents/import-manifest', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ entries: [] }),
+        // 提交启用条目的完整字段（url_fetch 自动抓取；user_upload/非 public 由后端
+        // 归为 pendingUpload/skipped，提示走有使用权文件上传）
+        body: JSON.stringify({ entries: MANIFEST_ENABLED }),
       })
       const data = (await res.json().catch(() => ({}))) as {
         summary?: { imported: number; duplicates: number; failed: number; pendingUpload: number }
@@ -188,12 +213,32 @@ export default function ImportZone({ onDone }: { onDone: () => void }): JSX.Elem
         <div className="kb-side-card">
           <h5>清单批量导入</h5>
           <div className="kb-side-row">
-            <button className="btn" disabled={manifestBusy} onClick={() => void importManifest()}>
-              {manifestBusy ? '导入中…' : '从默认清单导入'}
+            <button className="btn" disabled={manifestBusy} onClick={() => setManifestOpen((v) => !v)}>
+              {manifestOpen ? '收起清单' : `查看默认清单（${MANIFEST_ENTRIES.length} 条）`}
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={manifestBusy || MANIFEST_ENABLED.length === 0}
+              onClick={() => void importManifest()}
+            >
+              {manifestBusy ? '导入中…' : `导入 ${MANIFEST_ENABLED.length} 条启用条目`}
             </button>
           </div>
+          {manifestOpen && (
+            <ul className="kb-manifest-list" onClick={(e) => e.stopPropagation()}>
+              {MANIFEST_ENTRIES.map((e) => (
+                <li key={e.id} className={e.enabled ? '' : 'disabled'}>
+                  <span className="kb-manifest-title" title={e.url}>{e.title}</span>
+                  <span className="kb-manifest-meta">
+                    {e.sourceTier}/{e.access} · {e.importMethod === 'url_fetch' ? '自动抓取' : '需手动上传'}
+                    {!e.enabled && ' · 未启用'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           {manifestMsg !== '' && <p className="kb-side-msg">{manifestMsg}</p>}
-          <p className="muted">条目：docs/references/knowledge-source-manifest.json</p>
+          <p className="muted">维护 docs/references/knowledge-source-manifest.json（与构建副本 default-manifest.json 同步）</p>
         </div>
       </div>
     </div>

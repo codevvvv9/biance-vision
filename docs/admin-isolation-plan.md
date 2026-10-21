@@ -13,13 +13,15 @@
 | 步骤 | 内容 | 解决什么 | 风险 | 预计工作量 | 依赖 |
 |---|---|---|---|---|---|
 | 第一步 | VPS 磁盘清理 | 磁盘 91% 红线：PG 写入失败/日志爆/镜像拉不动 | 低（只删未运行镜像） | 10 分钟 | 无，**立即执行** |
-| 第二步 | admin 域名隔离+网络防护（方案 B） | 爬虫攻破 admin 登录的核心诉求 | 中（涉及一次容器重启） | 代码 1 个 PR + 线上配置 30 分钟 | 第一步（磁盘须有余量拉新镜像） |
-| 第三步 | 双系统拆分（方案 A，**可选**） | 管理端独立演进的架构诉求 | 中高 | 3~4 个 PR + 配置 | 第二步稳定运行一段时间后 |
+| 第二步 | admin 域名隔离+网络防护（方案 B）+ 2026-10-21 补丁 | 防爬虫攻击面收敛（入口/路由/登录/编码绕过） | 中（涉及一次容器重启） | 已完成（v0.9.3~v0.9.5） | 第一步 |
+| 第三步 | 双系统拆分（**目标态，分批必做**） | 用户端与管理端成为独立系统：独立构建/部署/域名，用户 API 不注册任何管理能力 | 中高 | 3~4 个 PR 批次 | 第二步稳定运行 |
 
-**关键认知**（决定为什么这么排序）：拆域名/拆系统本身只提供「隐蔽性」，不提供「安全性」——爬虫扫子域名是基本功。
-真正砍掉攻击面的是第二步里的两件事：①主域名上 admin 路由**彻底消失**（404）；②admin 域名入口有
-**网络层门禁**（Caddy Basic Auth）。做到这两点，防爬虫目标即达成；第三步是给「管理端长期独立演进」
-预留的架构升级，不是安全必需。
+**关键认知**（2026-10-21 审查修正后的定论）：拆域名/拆系统提供的是**架构隔离**，网络层门禁
+（Caddy Basic Auth + 主域名 404）提供**攻击面收敛**——两者都做才算达成完整目标。第二步上线后
+经代码审查发现三处缺口（主站可签发超管会话、/api/ai 管理端点漏过门禁、编码路径绕过 server 门禁），
+已在 v0.9.5 补丁修复（登录入口分离 + AI 端点迁入 /api/admin/ai/* + gatePath 规范化，
+自测 27 项钉住）。当前安全闭环成立，但**双系统独立部署（第三步）不再是可选项**——它是原始
+目标的直接要求，升格为分批必做。
 
 ### 0.2 全局红线（每一步都适用）
 
@@ -364,126 +366,78 @@ ssh bv-prod 'sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl
 
 ---
 
-## 3. 第三步：双系统拆分（方案 A，中期可选）
+## 3. 第三步：双系统拆分（目标态，分批必做）
 
-> **先读 3.1 再决定做不做。** 这一步解决的是「管理端独立演进」的架构问题（独立发布节奏、主站彻底
-> 不含管理代码、未来多人后台协作），不是安全问题——第二步已经把安全问题解决完了。不做这步，
-> 防爬虫目标同样达成。
+> **定位（2026-10-21 审查修正）**：本步是原始目标「管理端和用户端成为独立系统」的直接要求，
+> 不再是安全增强的可选项。第二步+v0.9.5 补丁已把攻击面收敛到网络层门禁之后，本步解决的是
+> **代码与部署层的彻底分离**：用户 API 不注册任何管理能力，管理会话不能在用户入口签发，
+> 两端独立构建、独立部署、独立配置域名。
 
-### 3.1 决策触发信号（满足任意一条再做）
-
-- 主站要做公开推广/上 CDN，希望主站产物里彻底不含任何管理端代码与路由；
-- 管理端开始长出独立功能域（更多后台模块、给协作者用的受限后台角色），发布节奏与主站脱钩；
-- 出现主站流量增长，需要给 admin 单独的伸缩/保护策略。
-
-都不满足 → 维持方案 B 形态，本节留档备查。
-
-### 3.2 目标架构：单镜像、双入口、双容器
-
-核心决策：**不拆第三个镜像**。同一份 Docker 镜像内含两套前端产物与两个 server 入口，compose 用
-不同 `command` 起两个容器。这样 CI/release 工作流零改动（仍是 app+research-py 双镜像），产物管理
-最简单，资源开销最小（admin 容器 ~60MB 内存）。
+### 3.1 目标架构（四包 + 公共包）
 
 ```
-镜像 ghcr.io/.../biance-vision:<tag>（一个）
-├─ server/dist/index.js       入口 A：用户端 server（不注册任何 /api/admin 路由），托管 web/dist-user
-├─ server/dist/admin-entry.js 入口 B：管理端 server（只注册 auth/health/admin 路由），托管 web/dist-admin
-├─ web/dist-user              用户端前端（无 admin chunk）
-└─ web/dist-admin             管理端前端（只有 admin 应用）
-
-VPS compose：
-  app     : command 默认        → 127.0.0.1:3200 ← Caddy <主域名>
-  admin   : command=node server/dist/admin-entry.js → 127.0.0.1:3201 ← Caddy <admin域名>（Basic Auth 保留）
-共享：postgres / minio / pg-boss 队列（worker 不动，admin 职责是入队不是消费）
+pnpm workspace
+├─ packages/shared（现 shared，保留）     契约（zod schema）+ 领域代码（Brooks 引擎）
+├─ packages/shared-ui（新）               两端共用的 UI 组件（fx/ 动效、MiniMarkdown、
+│                                        Dropdown/Combobox、登录壳样式体系）——从 web 下沉
+├─ apps/user-web（现 web 瘦身）           用户端前端：无 /admin 路由、无 admin chunk、无 AiSettingsModal
+├─ apps/admin-web（新）                   管理端前端：独立入口（admin-main），六页 + AI 设置
+├─ apps/user-api（现 server index.ts）    用户 API：不注册 registerAdminRoutes/
+│                                        registerKnowledgeRoutes/管理 AI 端点，托管 user-web 产物
+└─ apps/admin-api（新入口）               管理 API：auth + health + admin/knowledge/AI 配置，
+                                         托管 admin-web 产物；登录入口策略固定为「仅超管」
 ```
 
-第二步的 `ADMIN_HOSTS` Host 门禁在此步**退役**（admin 进程里物理上没有用户路由，主进程里物理上没有
-admin 路由，Host 判断不再需要）——保留代码无害，也可随本步删除。
+共享基础设施：PostgreSQL / MinIO / pg-boss 队列 / worker 均共享（管理动作入队、worker 消费，
+本就是跨端协作）；需补齐：数据库账号按端分权（admin-api 用高权限账号，user-api 最小权限——
+表级 GRANT 白名单），配置更新机制（ai-config.json 等管理配置只由 admin-api 写）。
 
-### 3.3 结构定义
+部署形态（二选一，建议先 A 后视需要升 B）：
 
-**前端**（推荐「同包双构建」而非独立 workspace 包，避免把 fx/MiniMarkdown/Dropdown 等共享组件
-下沉成第三个包的大迁移）：
+- **A. 单镜像双入口**（起步推荐）：一个镜像含 user-api/admin-api 两个入口与两份前端产物，
+  compose 起两个容器（不同 command + 端口 3200/3201），Caddy 分流——CI 零改动，运维最简；
+- **B. 双镜像**（彻底独立发布）：release 工作流出 user/admin 两个镜像，版本节奏完全解耦——
+  当两端发版节奏明显分化时再升级。
 
-```
-web/
-├─ vite.config.ts              用户端构建（现状，entry 不变）→ 输出 dist-user
-│                              改动：构建配置剔除 /admin 懒加载路由（或构建时注入 VITE_ADMIN_BUNDLE=0
-│                              让 App.tsx 不注册 /admin/*）
-├─ vite.config.admin.ts        管理端构建：entry=src/admin-main.tsx（只挂 AdminLayout 六页）→ dist-admin
-├─ src/admin-main.tsx          新增：admin 应用入口（复用现有样式系统与 App 壳）
-└─ src/admin/*                 现有代码不动，两份构建共享同一份源码
-```
+### 3.2 迁移批次（PR 切分，每批独立可发布）
 
-**server**：
+- **PR-S1 前端拆分**：workspace 加 shared-ui（组件下沉）+ user-web/admin-web 双构建
+  （vite 双配置）；主进程暂仍单入口托管双产物（行为不变）。
+- **PR-S2 server 拆分**：index.ts 移除全部管理注册（含 index.ts 内散落的 /api/admin/ai/* 物理收口
+  到 admin 路由模块）；新增 admin-api 入口；compose 加 admin 服务（127.0.0.1:3201）；
+  Caddy admin 域名改指 3201；ADMIN_HOSTS Host 门禁退役（路由物理不存在，不再需要）。
+- **PR-S3 存储与会话收敛**：admin 容器独立 data 目录；users/sessions 真源切 PostgreSQL 优先
+  （双进程不再共用 JSON 镜像互踩）；登录限速计数入 PG 表（跨端合并计数+重启不清零）。
+- **PR-S4 数据库分权**：user-api 专用 DB 账号表级最小权限；管理配置文件只挂 admin 容器卷。
 
-```
-server/src/
-├─ index.ts          用户入口：删除 L876 registerKnowledgeRoutes、L885 registerAdminRoutes、
-│                    L650-721 散落超管端点（/api/ai/config|test|prompt|models）的注册，
-│                    静态托管 root 改 web/dist-user
-└─ admin-entry.ts    新增：独立 Fastify 实例 = cors + geoBlock(豁免本域) + /api/auth/*（登录必需）
-                     + /api/health + requireSuperadmin + registerKnowledgeRoutes + registerAdminRoutes
-                     + /api/ai 超管端点簇 + 静态托管 web/dist-admin（SPA 回退同现有实现）
-```
+### 3.3 已知设计难点（实施前必须想清楚）
 
-**Dockerfile**：build 阶段追加 admin 前端构建（`pnpm --filter biance-vision-web build -- --config
-vite.config.admin.ts` 或等价 script），两份 dist 都拷入 runtime；无其他变化。
+**sessions.json / users.json 的双进程写冲突**：现有实现是「内存 Map + JSON 文件镜像，按 mtime
+热加载」（`server/src/users.ts`）。两个进程挂同一 `./server/data` 卷时，双方都写 sessions.json
+会互相覆盖丢登录态；users.json 同理。PR-S3 的解法：登录态与用户表以 PostgreSQL 为唯一真源
+（双写机制里 PG 已是主源，需核对读路径确实 PG 优先），JSON 镜像仅 user-api 进程负责写。
+不做「一处登录两域通用」的跨域 SSO（复杂度高、收益低）。
 
-### 3.4 迁移批次（PR 切分，每批独立可发布）
+**shared-ui 下沉的迁移面**：web 的组件被两端共用（Header 部分复用、MiniMarkdown、fx/、表单控件），
+下沉时按「admin-web 实际引用集」切分，避免一次性大迁移；未引用的留在 user-web。
 
-- **PR-A1 前端双构建**：加 `vite.config.admin.ts` + `admin-main.tsx`，Dockerfile 构建两份 dist；
-  主进程/容器行为暂不变（admin-entry 还没接）。验收：镜像内两份 dist 均存在且各自可静态预览。
-- **PR-A2 admin-entry**：新增管理端 server 入口（路由从 index.ts 挪出但 index.ts 暂保留注册，
-  双入口并存过渡）；compose 加 `admin` 服务（command 覆盖 + `127.0.0.1:3201:3200`）；
-  VPS Caddy admin 域名改指 3201。验收：admin 域名走新容器、主域名不受影响。
-- **PR-A3 主入口瘦身**：index.ts 移除全部 admin 路由注册与散落超管端点，web 用户构建剔除
-  admin chunk，ADMIN_HOSTS 门禁代码删除。验收：主域名 /api/admin/* 返回 404（物理不存在）；
-  主站 dist 体积下降（admin chunk 消失）。
-- **PR-A4 登录限速入 PG**（见 3.5）+ 存储真源收敛（见 3.6）。
+### 3.4 资源评估（2C2G VPS）
 
-### 3.5 登录限速入 PostgreSQL（顺带修复「重启清零」旧账）
+admin-api 容器为纯 Node 进程，参照 app 实测 ~60MB；当前发版后水位（2026-10-21）：磁盘 28%
+（19G/40G+）、内存 available 约 1.1G——跑双容器无压力。若内存吃紧的降级路径：admin 容器
+按需启停（管理低频），或 systemd socket 激活。
 
-现状：每 IP 每分钟 5 次、连败 10 锁 15 分钟的计数在**进程内存**（`server/src/index.ts:358-487` 一带），
-进程重启即清零；拆成两进程后还会各自计数（防护力减半）。迁 PG 方案：
+### 3.5 验收清单
 
-- 新表 `login_rate_limits`（key TEXT PK=ip，window_start TIMESTAMPTZ，count INT，locked_until TIMESTAMPTZ），
-  迁移脚本走既有 drizzle 目录（当前 0025+ 顺延）；
-- 判定/计数改为一次 UPSERT 事务（`INSERT ... ON CONFLICT (key) DO UPDATE` 原子完成窗口滚动+计数+锁定）；
-  读路径失败时降级为进程内存计数（沿用现有实现作 fallback，与项目「PG 主、JSON/内存降级」的存储纪律一致）；
-- 两进程（app/admin）共享同一张表 → 合并计数，防爆破能力反而比单进程时强。
-
-### 3.6 已知设计难点（实施前必须想清楚）
-
-**sessions.json / users.json 的双进程写冲突**：现有实现是「内存 Map + JSON 文件镜像，按 mtime 热加载」
-（`server/src/users.ts`）。两个进程挂同一 `./server/data` 卷时，双方都写 sessions.json 会互相覆盖丢
-登录态；users.json 同理（admin 进程改密码/加用户，主进程读用户）。
-
-推荐解法（按优先序）：
-
-1. **admin 容器独立 data 目录**（`./server/data-admin` 单独卷）：两域名登录态本来就各自独立
-   （host-only cookie），互不共享无损；用户/密码表以 **PostgreSQL 为唯一真源**（双写机制里 PG 已是
-   主源），admin 进程改密码写 PG，主进程读 PG 拿到新密码哈希——需要核对现有读路径确实 PG 优先、
-   JSON 只是降级镜像（记忆口径如此，实施时以代码为准），不满足则把 users 读路径调成 PG 优先。
-2. 若登录态想要「一处登录两域通用」→ 需要跨域 SSO，**不建议**（复杂度高、收益低，运营者就一个人）。
-
-### 3.7 资源评估（2C2G VPS）
-
-- 内存：admin 容器为纯 Node 进程，参照 app 实测 ~60MB；当前可用 789MB + swap 已用 235MB，
-  **跑得动但不宽裕**（research-py 训练峰值 1~2GB 时会更紧）。磁盘清理完成后空间无虞。
-- 如果内存成为瓶颈的降级路径：admin 容器不必常驻，改用 `docker compose run` 按需起（管理是低频操作），
-  或用 systemd socket 激活。此为备选，不默认做。
-
-### 3.8 验收清单
-
-- [ ] 主域名 dist 产物无任何 admin chunk（构建产物清单核查），`/admin` 路径 404
-- [ ] admin 域名（Basic Auth → 登录 → /admin 六页）全部功能正常，含知识库上传→解析→发布全流程冒烟
-- [ ] 主进程 `GET /api/admin/users` 404（路由物理不存在，非门禁拦截）
-- [ ] worker 队列（知识库解析、研究 run）跨入口正常：admin 域名上传文档 → worker 消费 → admin 域可查状态
-- [ ] 登录限速跨域名合并计数：admin 域名连败 5 次后，主域名同 IP 登录也被窗口限制（PG 表生效）
-- [ ] app 容器重启后，登录限速计数不丢（PG 持久化生效）
-- [ ] VPS 内存 `free -m` available ≥ 400MB；两容器内存合计增量 ≤ 120MB
-- [ ] 回滚演练：BV_VERSION 回上一 tag，双容器形态恢复单容器（compose 配置随 tag 回退）
+- [ ] 主域名 dist 产物无任何 admin chunk 与 AiSettingsModal（构建产物清单核查）
+- [ ] user-api 进程 `GET /api/admin/users` 返回 404（路由物理不存在，非门禁拦截）
+- [ ] user-api 进程源码 grep 无 registerAdminRoutes/registerKnowledgeListeners 引用
+- [ ] admin 域名（Basic Auth → 仅超管登录 → 六页 + AI 设置）全功能冒烟，含知识库上传→解析→发布
+- [ ] worker 队列跨端正常：admin 域名上传文档 → worker 消费 → 状态回读
+- [ ] 主站超管账号登录被拒（提示走管理域名）；管理域名普通账号登录被拒
+- [ ] 登录限速跨域名合并计数（admin 域连败 5 次后主站同 IP 也受限）且重启不丢（PG 持久化）
+- [ ] user-api 数据库账号无管理表写权限（直连尝试写 users 表被拒）
+- [ ] 回滚演练：BV_VERSION 回上一 tag 恢复单容器形态
 
 ---
 

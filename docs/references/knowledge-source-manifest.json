@@ -7,7 +7,11 @@
       "url": "https://www.brookstradingcourse.com/price-action-trading-terms-glossary/",
       "type": "official_glossary",
       "title": "Brooks 价格行为术语表",
-      "topics": ["术语", "定义", "H/L计数"],
+      "topics": [
+        "术语",
+        "定义",
+        "H/L计数"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -19,7 +23,11 @@
       "url": "https://www.brookstradingcourse.com/brooks-price-action-abbreviations/",
       "type": "official_glossary",
       "title": "Brooks 价格行为缩写表",
-      "topics": ["术语", "缩写", "H/L计数"],
+      "topics": [
+        "术语",
+        "缩写",
+        "H/L计数"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -31,7 +39,11 @@
       "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
       "type": "official_doc",
       "title": "Brooks 书籍与图表下载页",
-      "topics": ["书籍", "图表", "样章"],
+      "topics": [
+        "书籍",
+        "图表",
+        "样章"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -43,7 +55,11 @@
       "url": "https://www.brookstradingcourse.com/trade-price-action/",
       "type": "course",
       "title": "Brooks 价格行为课程目录",
-      "topics": ["课程", "教学", "目录"],
+      "topics": [
+        "课程",
+        "教学",
+        "目录"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -55,7 +71,11 @@
       "url": "https://www.brookstradingcourse.com/how-to-trade-price-action-manual/",
       "type": "official_doc",
       "title": "How to Trade Price Action 手册及公开章节",
-      "topics": ["交易手册", "规则", "公开章节"],
+      "topics": [
+        "交易手册",
+        "规则",
+        "公开章节"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -67,7 +87,11 @@
       "url": "https://www.brookstradingcourse.com/blog/ask-al/",
       "type": "faq",
       "title": "Ask Al 问答专栏",
-      "topics": ["问答", "答疑", "实战"],
+      "topics": [
+        "问答",
+        "答疑",
+        "实战"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -79,7 +103,11 @@
       "url": "https://www.brookstradingcourse.com/price-action/brooks-encyclopedia-chart-patterns-sampler/",
       "type": "sample",
       "title": "Brooks 图形百科样例",
-      "topics": ["图形百科", "形态", "样例"],
+      "topics": [
+        "图形百科",
+        "形态",
+        "样例"
+      ],
       "access": "public",
       "sourceTier": "official",
       "importMethod": "url_fetch",
@@ -91,7 +119,11 @@
       "url": "https://onlinelibrary.wiley.com/doi/pdf/10.1002/9781119203117.gloss",
       "type": "official_glossary",
       "title": "Wiley 书内词汇表 PDF",
-      "topics": ["术语", "定义", "书籍词汇表"],
+      "topics": [
+        "术语",
+        "定义",
+        "书籍词汇表"
+      ],
       "access": "public",
       "sourceTier": "official_derivative",
       "importMethod": "url_fetch",
@@ -103,7 +135,11 @@
       "url": "https://www.brookspriceaction.com",
       "type": "community_forum",
       "title": "Brooks 社区论坛",
-      "topics": ["社区讨论", "经验统计", "溯源参考"],
+      "topics": [
+        "社区讨论",
+        "经验统计",
+        "溯源参考"
+      ],
       "access": "public",
       "sourceTier": "community",
       "importMethod": "url_fetch",
@@ -115,7 +151,11 @@
       "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
       "type": "book",
       "title": "Trading Price Action: Trends",
-      "topics": ["价格行为", "趋势", "三部曲"],
+      "topics": [
+        "价格行为",
+        "趋势",
+        "三部曲"
+      ],
       "access": "purchase",
       "sourceTier": "official",
       "importMethod": "user_upload",
@@ -127,7 +167,11 @@
       "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
       "type": "book",
       "title": "Trading Price Action: Trading Ranges",
-      "topics": ["价格行为", "交易区间", "三部曲"],
+      "topics": [
+        "价格行为",
+        "交易区间",
+        "三部曲"
+      ],
       "access": "purchase",
       "sourceTier": "official",
       "importMethod": "user_upload",
@@ -139,7 +183,11 @@
       "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
       "type": "book",
       "title": "Trading Price Action: Reversals",
-      "topics": ["价格行为", "反转", "三部曲"],
+      "topics": [
+        "价格行为",
+        "反转",
+        "三部曲"
+      ],
       "access": "purchase",
       "sourceTier": "official",
       "importMethod": "user_upload",
@@ -151,12 +199,17 @@
       "url": "https://www.brookstradingcourse.com/price-action-trading-books/",
       "type": "book",
       "title": "Reading Price Charts Bar by Bar",
-      "topics": ["价格行为", "逐根K线", "独立著作"],
+      "topics": [
+        "价格行为",
+        "逐根K线",
+        "独立著作"
+      ],
       "access": "purchase",
       "sourceTier": "official",
       "importMethod": "user_upload",
       "enabled": false,
       "notes": "三部曲之前的独立著作，单独归档；商业书籍：仅用户上传有使用权的文件导入，启用前确认使用权，入库保留页码/图号。"
     }
-  ]
+  ],
+  "_syncNote": "本文件是 docs/references/knowledge-source-manifest.json 的前端构建副本（页面「从默认清单导入」的数据源）。修改任一份必须同步另一份。"
 }

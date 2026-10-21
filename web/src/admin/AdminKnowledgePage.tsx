@@ -33,12 +33,14 @@ export default function AdminKnowledgePage(): JSX.Element {
     void refresh()
   }, [refresh])
 
-  const parsing = docs.some((d) => d.status === 'parsing')
+  // 排队中的文档（uploaded=已入队未被 worker 领取 / parsing=解析中）都要轮询：
+  // 只盯 parsing 会让上传后读到的 uploaded 停在原状态，任务开始与完成都不再刷新
+  const pending = docs.some((d) => d.status === 'uploaded' || d.status === 'parsing')
   useEffect(() => {
-    if (!parsing) return
+    if (!pending) return
     const t = setInterval(() => void refresh(), 3000)
     return () => clearInterval(t)
-  }, [parsing, refresh])
+  }, [pending, refresh])
 
   const stats = useMemo(() => {
     const by = (s: string): number => docs.filter((d) => d.status === s).length

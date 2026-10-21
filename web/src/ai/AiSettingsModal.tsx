@@ -68,7 +68,7 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
   const [allUsers, setAllUsers] = useState<string[]>([])
 
   useEffect(() => {
-    api<{ profiles: Record<string, Parameters<typeof toForm>[0]> }>('/ai/config')
+    api<{ profiles: Record<string, Parameters<typeof toForm>[0]> }>('/admin/ai/config')
       .then((r) => {
         const entries = Object.entries(r.profiles ?? {})
         if (entries.length > 0) {
@@ -90,7 +90,7 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
     setPromptView(null)
     setModelOptions([])
     if (loading) return
-    api<{ models: string[] }>(`/ai/models?name=${encodeURIComponent(current)}`)
+    api<{ models: string[] }>(`/admin/ai/models?name=${encodeURIComponent(current)}`)
       .then((r) => setModelOptions(r.models))
       .catch(() => {
         /* noop */
@@ -144,7 +144,7 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
       return
     }
     try {
-      const r = await api<{ prompt: string }>(`/ai/prompt?name=${encodeURIComponent(current)}`)
+      const r = await api<{ prompt: string }>(`/admin/ai/prompt?name=${encodeURIComponent(current)}`)
       setPromptView(r.prompt)
     } catch (e) {
       setResult({ ok: false, message: (e as Error).message })
@@ -155,7 +155,7 @@ export default function AiSettingsModal({ onClose }: Props): JSX.Element {
     setTesting(true)
     setResult(null)
     try {
-      const r = await api<{ ok: boolean; message: string }>(`/ai/test?name=${encodeURIComponent(current)}`, {
+      const r = await api<{ ok: boolean; message: string }>(`/admin/ai/test?name=${encodeURIComponent(current)}`, {
         method: 'POST',
         body: form,
       })
