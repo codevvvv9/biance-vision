@@ -4,8 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
 import { useAi } from '../ai/AiContext'
-import AiSettingsModal from '../ai/AiSettingsModal'
-import { ADMIN_MENU } from '../admin/menu'
 import { fmtPct, fmtPrice } from '../utils'
 import { currentLocale } from '../i18n'
 import { notificationState, requestNotifications } from '../notify'
@@ -84,15 +82,6 @@ function PaletteIcon(): JSX.Element {
   )
 }
 
-function GearIcon(): JSX.Element {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  )
-}
-
 function RobotIcon(): JSX.Element {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -144,7 +133,6 @@ export default function Header(): JSX.Element {
   const [perm, setPerm] = useState<NotificationPermissionState>(notificationState())
   const [now, setNow] = useState<Date>(() => new Date())
   const [menuOpen, setMenuOpen] = useState(false)
-  const [aiOpen, setAiOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -247,37 +235,7 @@ export default function Header(): JSX.Element {
             </button>
             {menuOpen && (
               <div className="user-menu-panel" role="menu">
-                {user.role === 'superadmin' && (
-                  <>
-                    {ADMIN_MENU.map((item) => (
-                      <button
-                        key={item.path}
-                        className="menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setMenuOpen(false)
-                          navigate(item.path)
-                        }}
-                      >
-                        {item.icon}
-                        <span>{t(item.labelKey)}</span>
-                        <em className="menu-hint">{t(item.hintKey)}</em>
-                      </button>
-                    ))}
-                    <button
-                      className="menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        setAiOpen(true)
-                      }}
-                    >
-                      <GearIcon />
-                      <span>{t('header.aiSettings')}</span>
-                      <em className="menu-hint">{ai.status.configured ? ai.status.model || t('header.aiConfigured') : t('header.aiNotConfigured')}</em>
-                    </button>
-                  </>
-                )}
+                {/* 管理入口已随 admin 域名隔离全部移入 btcpilot-admin 独立域名（主域名 /admin 双层 404） */}
                 {ai.status.configured && (
                   <button
                     className="menu-item"
@@ -315,7 +273,6 @@ export default function Header(): JSX.Element {
           </div>
         )}
         <span className="clock mono">{now.toLocaleTimeString(currentLocale(), { hour12: false })}</span>
-        {aiOpen && <AiSettingsModal onClose={() => setAiOpen(false)} />}
       </div>
     </header>
   )

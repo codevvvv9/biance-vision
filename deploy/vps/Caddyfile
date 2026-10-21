@@ -26,6 +26,9 @@ bv.example.com {
 
 admin.example.com {
 	encode zstd gzip
+	# 打开管理域名直达后台（Caddy 指令排序 redir 先于 basic_auth：根路径 302 后在 /admin 弹 401，
+	# 未认证最终仍被拦，浏览器体验=打开即弹账密框）
+	redir / /admin 302
 	basic_auth {
 		bvadmin <bcrypt哈希，caddy hash-password 生成后替换>
 	}

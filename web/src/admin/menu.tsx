@@ -1,4 +1,5 @@
-/** 管理后台菜单配置：Header 用户下拉与 AdminLayout 内部导航共用同一份数据源（含图标，单一来源） */
+/** 管理后台菜单配置：AdminLayout 内部导航数据源（含图标）。
+ * 主站 Header 的超管菜单入口已随 admin 域名隔离整体移除（主域名 /admin 双层 404），本表只服务管理域名。 */
 export interface AdminMenuItem {
   path: string
   /** admin:* 词典 key（消费方用 t() 取当前语言；单一数据源不变） */
