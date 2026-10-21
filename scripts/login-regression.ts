@@ -271,30 +271,36 @@ try {
   // ---- C 组：限速 env 非法值拒绝启动 ----
   // ❗必须同样传全套隔离 env：校验虽已上移到一切初始化之前，但不传隔离意味着
   // 回归一旦失效（校验被挪后）就会连业务库、写业务 data——测试不能依赖被测行为
+  // ❗C3 必须用独立全新空目录：复用主流程目录时「清单前后一致」拦不住已存在文件
+  // 的时序写盘（alerts.ts 只在 rules.json 缺失时创建，目录里已有就不会再写——
+  // 恢复旧行为的对照实验中 16 项曾照样全过）；全新空目录断言「仍为空」才能钉住
   {
-    const before = await readdir(dataDir).then((l) => l.sort().join(','))
-    const { child, log } = startServer({
-      PORT: String(PORT),
-      LOGIN_LOCK_FAILS: 'abc',
-      BV_DATA_DIR: dataDir,
-      DATABASE_URL: testUrl.toString(),
-    })
-    const code = await new Promise<number | null>((resolve) => {
-      const t = setTimeout(() => {
-        child.kill('SIGKILL')
-        resolve(null)
-      }, 20_000)
-      child.once('exit', (c) => {
-        clearTimeout(t)
-        resolve(c)
+    const cDataDir = await mkdtemp(path.join(tmpdir(), 'bv-login-reg-c-'))
+    try {
+      const { child, log } = startServer({
+        PORT: String(PORT),
+        LOGIN_LOCK_FAILS: 'abc',
+        BV_DATA_DIR: cDataDir,
+        DATABASE_URL: testUrl.toString(),
       })
-    })
-    check('C1 非法 LOGIN_LOCK_FAILS → 拒绝启动（非零退出，且未依赖业务数据）', code !== null && code !== 0, true)
-    check('C2 错误信息指明变量名', log.join('\n').includes('LOGIN_LOCK_FAILS'), true)
-    // C3 严格零写入：校验位于 env.ts（入口 import 首位），崩溃先于 alerts.ts 等任何
-    // 顶层写盘——数据目录在崩溃前后文件清单必须完全一致（此前 alerts.ts 会留 rules.json）
-    const after = await readdir(dataDir).then((l) => l.sort().join(','))
-    check('C3 崩溃子进程零文件写入（校验先于一切模块副作用）', after, before)
+      const code = await new Promise<number | null>((resolve) => {
+        const t = setTimeout(() => {
+          child.kill('SIGKILL')
+          resolve(null)
+        }, 20_000)
+        child.once('exit', (c) => {
+          clearTimeout(t)
+          resolve(c)
+        })
+      })
+      check('C1 非法 LOGIN_LOCK_FAILS → 拒绝启动（非零退出，且未依赖业务数据）', code !== null && code !== 0, true)
+      check('C2 错误信息指明变量名', log.join('\n').includes('LOGIN_LOCK_FAILS'), true)
+      // C3 严格零写入：校验位于 env.ts（入口 import 首位），崩溃先于 alerts.ts 等
+      // 任何顶层写盘——全新空目录在崩溃后必须仍为空
+      check('C3 崩溃子进程零文件写入（全新空目录仍为空，校验先于一切模块副作用）', (await readdir(cDataDir)).length, 0)
+    } finally {
+      await rm(cDataDir, { recursive: true, force: true }).catch(() => {})
+    }
   }
 } catch (err) {
   console.error(`✖ ${(err as Error).message}`)
