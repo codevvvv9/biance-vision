@@ -1,19 +1,23 @@
 """Build-time Docling model warmup (W1-B 模型预置).
 
-Run inside the Docker build (WITH_DOCLING=1) with DOCLING_ARTIFACTS_PATH set:
-converts a minimal VALID PDF to trigger layout/tableformer model download into
-the image so runtime parsing never hits the HF Hub. Exit non-zero on failure so
-the build fails loudly rather than shipping a model-less image.
+Run inside the Docker build (WITH_DOCLING=1): converts a minimal VALID PDF to
+trigger layout/tableformer model download into the image's default cache
+(~/.cache/docling) so runtime parsing never hits the HF Hub. The Dockerfile
+then points DOCLING_ARTIFACTS_PATH at that cache for runtime.
 
-The warmup payload is a hand-crafted minimal one-page PDF (371 bytes, text
-"Warmup") — empty bytes are rejected by docling-parse (v0.9.9 build failure).
+Note: DOCLING_ARTIFACTS_PATH must NOT be set during warmup — docling validates
+that the folder already contains all required models and fails on an empty
+directory (v0.10.0 build failure). Exit non-zero on any failure.
 """
 import base64
 import io
+import os
 import sys
 
-from docling.datamodel.base_models import DocumentStream
-from docling.document_converter import DocumentConverter
+os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
+
+from docling.datamodel.base_models import DocumentStream  # noqa: E402
+from docling.document_converter import DocumentConverter  # noqa: E402
 
 MINIMAL_PDF = base64.b64decode(
     "JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDIgMCBSPj4KZW5k"
@@ -31,7 +35,8 @@ MINIMAL_PDF = base64.b64decode(
 
 try:
     DocumentConverter().convert(DocumentStream(name="warm.pdf", stream=io.BytesIO(MINIMAL_PDF)))
-    print("docling warmup ok (models cached to DOCLING_ARTIFACTS_PATH)")
+    cache = os.path.expanduser("~/.cache/docling")
+    print(f"docling warmup ok (models cached to {cache})")
 except Exception as e:  # noqa: BLE001 — build guard must catch everything
     print(f"docling warmup failed: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(1)
