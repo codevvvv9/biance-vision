@@ -18,7 +18,7 @@
 | 阶段 | 范围 | 详设依据 | 状态 |
 |---|---|---|---|
 | W0 | 已知缺陷修复 + 环境核验 + 文档修订 | 本文档 §2 | implemented（验收见 §4） |
-| W1-A | 知识库权限底座（access 甲，六路径统一上下文） | 本文档 §3；UI 方案 §4.6 v2 | planned |
+| W1-A | 知识库权限底座（access 甲，六路径统一上下文） | 本文档 §3；UI 方案 §4.6 v2 | **verified**（v0.9.7，PR#14：22 项双侧用例+线上验收） |
 | W1-B | 解析管线 R1（九步/异步任务 attemptId/三类指纹） | rag-pipeline §4-§7 v2 | planned |
 | W2 | 知识库交互（两段式删除/队列上传/差异轮询/日志下钻/批量/版本回滚/用户侧原文） | UI 方案 §3-§5 v2 | planned |
 | W3 | 双系统拆分：S1 双构建 → S2 存储配置收敛 → S3 切流 → S4 分权 | admin-isolation §3 v2 | planned |
@@ -71,3 +71,4 @@ W1-A 先于 W1-B 的发布节点：**首次发布受限资料（purchase/member�
 | VPS 升配 2C4G/70G | verified | MemTotal 3723MB / 70G 盘 |
 | compose 构建参数 WITH_DOCLING 实配 | implemented（本 PR） | `docker compose build research-py` 即生效 |
 | 登录回归测试隔离 | verified | b855035 + 本 PR R4b（共 15 项） |
+| W1-A 权限底座 | verified（v0.9.7） | access.ts + 检索层一处双路过滤 + 规则卡 citations 派生联动 + fetchCitation 判权 + 六路径接线；knowledge:access-check 22 项入 gate（真实 LLM 草拟 citations 联动验证） |
