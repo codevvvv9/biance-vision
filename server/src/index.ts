@@ -98,6 +98,23 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 const PORT = Number(process.env.PORT || 3200)
 // 监听地址：默认只绑本机；Docker / 容器部署时用 HOST=0.0.0.0 覆盖
 const HOST = process.env.HOST || '127.0.0.1'
+
+// 登录限速阈值（env 可覆盖，默认=线上语义不变；scripts/login-regression.ts 注入小值）。
+// ❗必须为正整数：Number('abc')=NaN 会让阈值比较恒为假，限速/锁定被静默关闭；
+// ❗校验必须先于一切初始化（initStorage/initUsers 连库写文件都在其后）——非法配置
+// 应在触碰任何数据前就拒绝启动
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw === undefined || raw.trim() === '') return fallback
+  const v = Number(raw)
+  if (!Number.isInteger(v) || v <= 0) {
+    throw new Error(`环境变量 ${name} 非法（"${raw}"）：必须为正整数——安全阈值不允许静默失效，拒绝启动`)
+  }
+  return v
+}
+const LOGIN_MAX_PER_WINDOW = positiveIntEnv('LOGIN_MAX_PER_WINDOW', 5)
+const LOGIN_LOCK_FAILS = positiveIntEnv('LOGIN_LOCK_FAILS', 10)
+
 // 前端构建产物目录：生产模式下由本服务直接托管（前后端同源）
 const WEB_DIST = process.env.BV_WEB_DIST || fileURLToPath(new URL('../../web/dist', import.meta.url))
 const MARKET_LIMIT = 150 // 推送给前端的交易对数量（按成交额）
@@ -367,10 +384,8 @@ registerAdminGate(app)
 // 每 IP 每分钟最多 5 次尝试；累计失败 10 次锁定 15 分钟（成功登录即清零）
 // ---------------------------------------------------------------------------
 const LOGIN_WINDOW_MS = 60_000
-// 每分钟失败上限与锁定阈值可经 env 覆盖（默认=线上语义不变）：
-// scripts/login-regression.ts 注入小值以便数秒内验证失败计数与锁定行为
-const LOGIN_MAX_PER_WINDOW = Number(process.env.LOGIN_MAX_PER_WINDOW || 5)
-const LOGIN_LOCK_FAILS = Number(process.env.LOGIN_LOCK_FAILS || 10)
+// LOGIN_MAX_PER_WINDOW / LOGIN_LOCK_FAILS 的定义与 positiveIntEnv 校验已上移至文件
+// 顶部（先于 initStorage/initUsers——非法配置必须在触碰任何数据前拒绝启动）
 const LOGIN_LOCK_MS = 15 * 60_000
 const LOGIN_GUARD_MAX_KEYS = 20_000
 
