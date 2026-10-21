@@ -8,12 +8,16 @@ ARG WITH_DOCLING=0
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    MODEL_DIR=/data/models \
-    DOCLING_ARTIFACTS_PATH=/opt/docling-models
+    MODEL_DIR=/data/models
 
 COPY requirements.txt requirements-docling.txt warmup.py ./
+# W1-B 模型预置：warmup 期间不设 DOCLING_ARTIFACTS_PATH（docling 对空目录直接校验
+# 失败——v0.10.0 教训），模型落默认缓存 /root/.cache/docling；warmup 成功后再把
+# 运行期变量指向该缓存（运行期零 HF 下载）
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$WITH_DOCLING" = "1" ]; then pip install --no-cache-dir -r requirements-docling.txt && python warmup.py; fi
+RUN if [ "$WITH_DOCLING" = "1" ]; then export DOCLING_ARTIFACTS_PATH=/root/.cache/docling; fi
+ENV DOCLING_ARTIFACTS_PATH=/root/.cache/docling
 
 COPY app ./app
 
