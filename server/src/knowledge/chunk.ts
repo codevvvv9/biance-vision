@@ -64,10 +64,35 @@ function splitSentences(text: string, maxChars: number): string[] {
 }
 
 /**
+ * 表格二切（W1-B 缺口 B）：markdown 表 >maxRows 数据行时按行组二切，
+ * 每块重挂表头行（脱离表头的表格块不可读）；返回 [子表文本, 行范围] 或 null（无需切）。
+ */
+function splitTable(md: string, maxRows = 20): { text: string; rows: [number, number] }[] | null {
+  const lines = md.split('\n').filter((l) => l.trim() !== '')
+  if (lines.length < 3) return null
+  // markdown 表结构：表头行 + 分隔行 + 数据行
+  const sepIdx = lines.findIndex((l) => /^\|?[\s:-]+\|/.test(l) && l.includes('-'))
+  if (sepIdx !== 1) return null
+  const header = lines[0]
+  const dataRows = lines.slice(2)
+  if (dataRows.length <= maxRows) return null
+  const out: { text: string; rows: [number, number] }[] = []
+  for (let i = 0; i < dataRows.length; i += maxRows) {
+    const slice = dataRows.slice(i, i + maxRows)
+    out.push({
+      text: [header, lines[1], ...slice].join('\n'),
+      rows: [i + 1, i + slice.length],
+    })
+  }
+  return out
+}
+
+/**
  * 切分 blocks 为 chunks：
  * - heading 维护标题路径（不入正文 chunk）；
- * - figure/table 独立成 chunk（text 为图注/表注，关联最近页码与标题路径）；
- * - 连续 text 合并到 maxChars，按句界切分，尾部重叠 overlapChars 带入下一 chunk；
+ * - figure 独立成 chunk；table markdown >20 行二切+表头重挂（W1-B 缺口 B）；
+ * - 连续 text 合并到 maxChars（CJK×1/ASCII×0.5 加权——纯中文块上限即 maxChars 汉字，
+ *   纯 ASCII 约 2×maxChars），按句界切分，尾部重叠 overlapChars 带入下一 chunk；
  * - 每个 chunk 记录首个 block 的 pageNo。
  */
 export function chunkBlocks(blocks: ParsedBlock[], options: ChunkOptions = {}): KnowledgeChunk[] {
@@ -77,6 +102,13 @@ export function chunkBlocks(blocks: ParsedBlock[], options: ChunkOptions = {}): 
   const headingStack: string[] = []
   let buffer = ''
   let bufferPage: number | null = null
+
+  /** 加权长度（W1-B §5.1）：CJK 记 1，其余记 0.5 */
+  const weightedLen = (s: string): number => {
+    let w = 0
+    for (const ch of s) w += /[\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF]/.test(ch) ? 1 : 0.5
+    return w
+  }
 
   const headingPath = (): string[] => [...headingStack]
   const pushText = (text: string): void => {
@@ -112,6 +144,24 @@ export function chunkBlocks(blocks: ParsedBlock[], options: ChunkOptions = {}): 
     if (b.kind === 'figure' || b.kind === 'table') {
       flush()
       const caption = (b.text ?? '').trim()
+      if (b.kind === 'table') {
+        // W1-B 缺口 B：超长表格二切+表头重挂（脱离表头的表块不可读）
+        const split = splitTable(caption)
+        if (split !== null) {
+          for (const part of split) {
+            chunks.push({
+              chunkIndex: chunks.length,
+              kind: 'table',
+              text: part.text,
+              pageNo: b.pageNo ?? null,
+              figureId: null,
+              headingPath: headingPath(),
+              contentHash: hash(`table:${part.rows[0]}-${part.rows[1]}:${part.text.slice(0, 80)}`),
+            })
+          }
+          continue
+        }
+      }
       chunks.push({
         chunkIndex: chunks.length,
         kind: b.kind,
@@ -126,7 +176,7 @@ export function chunkBlocks(blocks: ParsedBlock[], options: ChunkOptions = {}): 
     if (!b.text || b.text.trim() === '') continue
     if (buffer === '') bufferPage = b.pageNo ?? null
     buffer += (buffer === '' ? '' : '\n') + b.text
-    if (buffer.length >= maxChars) {
+    if (weightedLen(buffer) >= maxChars) {
       const pieces = splitSentences(buffer, maxChars)
       // 最后一段可能很短，留在 buffer 与下一段合并；其余产出
       const tail = pieces.pop() ?? ''

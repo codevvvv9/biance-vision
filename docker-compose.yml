@@ -109,6 +109,8 @@ services:
     image: biance-vision-research-py:latest
     container_name: biance-vision-research-py
     restart: unless-stopped
+    # W1-B：research-py 内存硬顶（解析峰值实测 1.15GiB；超限=任务 failed=oom 可重试）
+    mem_limit: 1500m
     ports:
       - "127.0.0.1:8100:8100" # 仅本机调试用；容器间走内网名
     environment:

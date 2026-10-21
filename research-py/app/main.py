@@ -3,12 +3,14 @@
 import sklearn
 from fastapi import FastAPI, HTTPException
 
-from . import modeling, parsing, translation
+from . import modeling, parsing, parsing_async, translation
 from .schemas import (
     CalibrationReportRequest,
     CalibrationReportResponse,
+    ParseAsyncRequest,
     ParseDocumentRequest,
     ParseDocumentResponse,
+    ParseTaskSnapshot,
     PredictRequest,
     PredictResponse,
     TrainRequest,
@@ -36,6 +38,31 @@ async def parse_document(req: ParseDocumentRequest) -> ParseDocumentResponse:
     # parsing.parse_document never raises for parse-level failures; it returns
     # status="failed" + error instead.
     return await parsing.parse_document(req)
+
+
+# ---- W1-B async parse tasks（docs/rag-pipeline-design.md §4.3；固定端点纪律不变）----
+
+@app.post("/tasks/parse-document-async", response_model=ParseTaskSnapshot)
+async def parse_document_async(req: ParseAsyncRequest) -> ParseTaskSnapshot:
+    if not parsing.docling_available():
+        raise HTTPException(status_code=503, detail="docling is not installed in this environment")
+    return parsing_async.submit_parse(req)
+
+
+@app.get("/tasks/parse-status/{task_id}", response_model=ParseTaskSnapshot)
+def parse_status(task_id: str, includeBlocks: bool = False):
+    snap = parsing_async.parse_status(task_id, include_blocks=includeBlocks)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    return snap
+
+
+@app.post("/tasks/parse-cancel/{task_id}", response_model=ParseTaskSnapshot)
+def parse_cancel(task_id: str):
+    snap = parsing_async.cancel_parse(task_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    return snap
 
 
 @app.post("/tasks/train", response_model=TrainResponse)
