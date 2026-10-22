@@ -110,18 +110,19 @@ def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress
 
     total_page_count: Optional[int] = None
     if page_range is not None and file_name.lower().endswith(".pdf"):
-        import pypdfium2 as pdfium
+        from pypdf import PdfReader, PdfWriter
 
-        src = pdfium.PdfDocument(data)
-        total_page_count = len(src)
-        dst = pdfium.PdfDocument.new()
+        reader = PdfReader(io.BytesIO(data))
+        total_page_count = len(reader.pages)
+        writer = PdfWriter()
         page_from_0 = max(0, page_range[0] - 1)
         page_to_0 = min(total_page_count, page_range[1])
-        dst.import_pages(src, list(range(page_from_0, page_to_0)))
-        buf = io.BytesIO()
-        dst.save(buf)
-        buf.seek(0)
-        data = buf.getvalue()
+        for idx in range(page_from_0, page_to_0):
+            writer.add_page(reader.pages[idx])
+        sliced = io.BytesIO()
+        writer.write(sliced)
+        sliced.seek(0)
+        data = sliced.getvalue()
 
     converter = DocumentConverter()
     result = converter.convert(DocumentStream(name=file_name, stream=io.BytesIO(data)))
