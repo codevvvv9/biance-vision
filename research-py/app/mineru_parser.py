@@ -25,14 +25,27 @@ from .schemas import ParseBlock
 
 
 def mineru_available() -> bool:
-    """Check if the mineru CLI is installed."""
-    try:
-        result = subprocess.run(
-            ["which", "mineru"], capture_output=True, text=True, timeout=5
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+    """Check if the magic-pdf CLI is installed (the 'mineru' name is v2+; v1.x uses magic-pdf)."""
+    for cmd in ("mineru", "magic-pdf"):
+        try:
+            result = subprocess.run(["which", cmd], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _mineru_command() -> str:
+    """Return the available CLI command name."""
+    for cmd in ("mineru", "magic-pdf"):
+        try:
+            result = subprocess.run(["which", cmd], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                return cmd
+        except Exception:
+            pass
+    raise RuntimeError("neither 'mineru' nor 'magic-pdf' CLI found")
 
 
 def parse_with_mineru(
@@ -43,7 +56,9 @@ def parse_with_mineru(
     Returns (blocks, total_page_count). Raises RuntimeError on failure.
     """
     if not mineru_available():
-        raise RuntimeError("mineru CLI not installed (requires magic-pdf package)")
+        raise RuntimeError("magic-pdf CLI not installed (requires magic-pdf package)")
+
+    cli_cmd = _mineru_command()
 
     with tempfile.TemporaryDirectory(prefix="mineru_") as workdir:
         pdf_path = os.path.join(workdir, "input.pdf")
@@ -54,10 +69,9 @@ def parse_with_mineru(
             f.write(data)
 
         cmd = [
-            "mineru",
+            cli_cmd,
             "-p", pdf_path,
             "-o", output_dir,
-            "-m", "pipeline",  # pipeline mode (CPU-friendly, no GPU needed)
         ]
 
         result = subprocess.run(
