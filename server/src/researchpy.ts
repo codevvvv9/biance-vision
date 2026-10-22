@@ -139,6 +139,35 @@ export function inspectPdf(contentBase64: string, timeoutMs = 15_000): Promise<P
   return call('/tasks/inspect', { contentBase64 }, timeoutMs)
 }
 
+// ---- /tasks/parse-mineru（R2 双引擎备选：扫描版/复杂版面）----
+
+export interface MineruParseResponse {
+  docId: string
+  status: 'ok' | 'failed'
+  error?: string | null
+  blocks: PyParseBlock[]
+  pageCount?: number | null
+}
+
+/** MinerU 解析（内置 OCR；比 docling+RapidOCR 对扫描版更强） */
+export function parseMineru(
+  input: { docId: string; fileName: string; contentBase64: string },
+  timeoutMs = 600_000,
+): Promise<MineruParseResponse> {
+  return call('/tasks/parse-mineru', input, timeoutMs)
+}
+
+/** research-py health 中的引擎可用性 */
+export async function engineAvailability(): Promise<{ docling: boolean; mineru: boolean }> {
+  try {
+    const res = await fetch(`${RESEARCH_PY_URL}/health`, { signal: AbortSignal.timeout(5000) })
+    const data = (await res.json()) as { docling?: boolean; mineru?: boolean }
+    return { docling: data.docling === true, mineru: data.mineru === true }
+  } catch {
+    return { docling: false, mineru: false }
+  }
+}
+
 // ---- /tasks/predict（分位 GBM 推理）与 /tasks/train（训练） ----
 
 export interface PyPredictOut {

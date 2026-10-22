@@ -10,7 +10,7 @@ import type { ParsedBlock } from './chunk.js'
 import { chunkBlocks } from './chunk.js'
 import { nativeFormatOf, parseNative } from './parse.js'
 import type { PyParseBlock, PyParseEvent } from '../researchpy.js'
-import { cancelParse, inspectPdf, parseStatus, submitParseBatch } from '../researchpy.js'
+import { cancelParse, engineAvailability, inspectPdf, parseMineru, parseStatus, submitParseBatch } from '../researchpy.js'
 import { cleanBlocks } from './clean.js'
 import { qualityGate } from './qualityGate.js'
 import { getBlobStore } from './blobstore.js'
@@ -68,9 +68,11 @@ async function parseStep(
     let pageCount: number | null = null
     const deadline = Date.now() + PARSE_BUDGET_MS
 
-    // R2 预检路由（rag-pipeline §4.1）：PDF 文本层覆盖率 <0.3 = 扫描版
-    // ≤30 页走在线 OCR（RapidOCR 已入依赖，docling 自动页级调用）；
-    // >30 页 failed 并提示离线导入（在线 OCR 超预算）
+    // R2 双引擎路由（rag-pipeline §4.1 升级版）：
+    // - 扫描版 → MinerU 直接路由（内置 OCR，比 Docling+RapidOCR 更强，不限页数）
+    // - 数字版 → Docling 异步分批（当前主路径）
+    // - Docling 结果质量差 → 自动 MinerU fallback（质量门触发）
+    let engineChoice: 'docling' | 'mineru' = 'docling'
     if (doc.fileName.toLowerCase().endsWith('.pdf')) {
       try {
         const inspect = await inspectPdf(contentBase64)
@@ -78,19 +80,46 @@ async function parseStep(
         if (inspect.encrypted) {
           throw new Error('该 PDF 已加密，无法解析（请提供未加密版本）')
         }
-        if (inspect.textCharRatio < 0.3 && inspect.pageCount > 30) {
-          throw new Error(
-            `扫描版 PDF（文本覆盖率 ${(inspect.textCharRatio * 100).toFixed(0)}%，${inspect.pageCount} 页）超过在线 OCR 上限 30 页。` +
-            '请使用离线导入：在本地 Mac 用 Docling/MinerU 完整版解析后通过 import-parsed 端点上传（工具与指引见 docs/rag-pipeline-design.md §3.7）',
-          )
+        if (inspect.textCharRatio < 0.3) {
+          // 扫描版：优先 MinerU（可用时），不可用则 Docling+RapidOCR
+          const engines = await engineAvailability()
+          if (engines.mineru) {
+            engineChoice = 'mineru'
+            events.push({ seq: events.length + 1, stage: 'route', message: `扫描版（textRatio=${inspect.textCharRatio}）→ MinerU 路由`, atMs: Date.now() })
+          } else {
+            events.push({ seq: events.length + 1, stage: 'route', message: `扫描版但 MinerU 不可用，走 Docling+OCR`, atMs: Date.now() })
+          }
         }
       } catch (err) {
-        if ((err as Error).message.includes('扫描版') || (err as Error).message.includes('加密')) throw err
+        if ((err as Error).message.includes('加密')) throw err
         events.push({ seq: events.length + 1, stage: 'inspect', message: `预检失败（继续常规解析）：${(err as Error).message}`, atMs: Date.now() })
       }
     }
 
-    // 从第 1 批（1-20 页）开始——第一批也必须带页范围：不带参数=全档转换，
+    // ---- MinerU 路径（同步端点，内置 OCR，不限页数）----
+    if (engineChoice === 'mineru') {
+      const { parseMineru } = await import('../researchpy.js')
+      events.push({ seq: events.length + 1, stage: 'parsing', message: `MinerU 解析开始`, atMs: Date.now() })
+      const res = await parseMineru({ docId: doc.id, fileName: doc.fileName, contentBase64 })
+      if (res.status !== 'ok') {
+        throw new Error(`MinerU 解析失败：${res.error ?? '未知原因'}`)
+      }
+      events.push({ seq: events.length + 1, stage: 'completed', message: `MinerU ${res.blocks.length} blocks, ${res.pageCount ?? '?'} pages`, atMs: Date.now() })
+      return {
+        blocks: toParsedBlocks(res.blocks),
+        meta: {
+          parser: 'mineru',
+          pageCount: res.pageCount ?? null,
+          blockCount: res.blocks.length,
+          headingCount: res.blocks.filter((b) => b.kind === 'heading').length,
+          figureCount: res.blocks.filter((b) => b.kind === 'figure').length,
+          attemptId,
+          events: events.slice(-100),
+        },
+      }
+    }
+
+    // ---- Docling 路径（异步分批，数字版主路径）----
     // 整书 OOM 正是异步分批要修的（v0.11.1 Brooks 验收发现）；总页数从第一批
     // 结果拿（Python docling 的 pages 元数据在 page_range 模式下仍然返回全档页数）
     let pageFrom = 1
@@ -195,32 +224,69 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
     if ((await getDocument(docId))?.parseMeta.attemptId !== attemptId) {
       throw new Error('解析轮次已失效（新轮次已接管），结果丢弃')
     }
+
     // W1-B 清洗（§4.5）+ 质量门（§4.7 empty_text 硬门）
-    // R2 多路径兜底：质量门警告达到阈值时提示离线导入备选路径（不阻塞——
-    // docling 结果能用但质量差时，用户可选择用 MinerU 等离线引擎重解析获得更好结果）
-    const cleaned = cleanBlocks(parsed.blocks)
-    const gate = qualityGate(cleaned.blocks, parsed.blocks)
-    if (gate.blocked) {
-      // 硬门拦截：如果是 empty_text（扫描版无 OCR），建议离线导入而非直接失败
-      const isScanEmpty = (gate.blockReason ?? '').includes('扫描版')
-      throw new Error(
-        isScanEmpty
-          ? `${gate.blockReason}\n建议：① ≤30 页扫描件请等待 RapidOCR 自动处理（当前容器需已安装 rapidocr-onnxruntime）；② 大部头扫描书请用本地 MinerU/Docling 完整版解析后通过 import-parsed 端点上传（多路径兜底）`
-          : gate.blockReason ?? '质量门拦截',
-      )
+    let cleaned = cleanBlocks(parsed.blocks)
+    let gate = qualityGate(cleaned.blocks, parsed.blocks)
+
+    // R2 双引擎质量 fallback：Docling 结果差（blocked 或 headingPath 全空 + 警告≥2）
+    // → 自动用 MinerU 重解析（用户无感知，多路径兜底的核心逻辑）
+    const needsFallback =
+      gate.blocked ||
+      (gate.warnings.filter((w) => w.includes('no_headings')).length > 0 && gate.warnings.length >= 2)
+    if (needsFallback && (parsed.meta.parser as string)?.includes('docling')) {
+      const engines = await engineAvailability()
+      if (engines.mineru) {
+        log.info('knowledge', 'Docling 质量差，自动 fallback 到 MinerU', kv({
+          id: docId.slice(0, 8),
+          blocked: gate.blocked,
+          warnings: gate.warnings.length,
+        }))
+        try {
+          const store = getBlobStore()
+          const buf2 = doc.blobKey ? await store.get(doc.blobKey) : null
+          if (buf2) {
+            const { parseMineru } = await import('../researchpy.js')
+            const retryRes = await parseMineru({
+              docId: doc.id,
+              fileName: doc.fileName,
+              contentBase64: buf2.toString('base64'),
+            })
+            if (retryRes.status === 'ok' && retryRes.blocks.length > 0) {
+              const retryBlocks = toParsedBlocks(retryRes.blocks)
+              const retryCleaned = cleanBlocks(retryBlocks)
+              const retryGate = qualityGate(retryCleaned.blocks, retryBlocks)
+              if (!retryGate.blocked) {
+                log.ok('knowledge', 'MinerU fallback 成功，替代 Docling 结果', kv({
+                  id: docId.slice(0, 8),
+                  blocks: retryRes.blocks.length,
+                  headings: retryRes.blocks.filter((b) => b.kind === 'heading').length,
+                }))
+                cleaned = retryCleaned
+                gate = retryGate
+                parsed.blocks = retryBlocks
+                parsed.meta = {
+                  ...parsed.meta,
+                  parser: 'mineru-fallback',
+                  blockCount: retryRes.blocks.length,
+                  headingCount: retryRes.blocks.filter((b) => b.kind === 'heading').length,
+                }
+              }
+            }
+          }
+        } catch (fbErr) {
+          log.warn('knowledge', 'MinerU fallback 失败（保持 Docling 结果）', kv({ 原因: (fbErr as Error).message }))
+        }
+      }
     }
-    // 多路径建议：警告 ≥2 条时附提示（headingPath 空 + 块长异常 = docling 对此文件
-    // 效果有限，离线引擎可能更好）
-    const fallbackHint =
-      gate.warnings.length >= 2
-        ? '（提示：此文档解析质量警告较多。如需更好的章节结构/文本质量，可用 MinerU 等离线引擎解析后通过 import-parsed 端点上传替代结果）'
-        : ''
+
+    if (gate.blocked) throw new Error(gate.blockReason ?? '质量门拦截')
     await setDocStatus(docId, 'parsed', {
       parseMeta: {
         ...doc.parseMeta,
         ...parsed.meta,
         cleanStats: cleaned.stats,
-        qualityWarnings: [...gate.warnings, ...(fallbackHint ? [fallbackHint] : [])],
+        qualityWarnings: gate.warnings,
       },
     })
 

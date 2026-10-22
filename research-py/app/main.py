@@ -4,6 +4,7 @@ import sklearn
 from fastapi import FastAPI, HTTPException
 
 from . import modeling, parsing, parsing_async, translation
+from . import mineru_parser
 from .inspect_pdf import inspect_pdf
 from .schemas import (
     CalibrationReportRequest,
@@ -28,9 +29,56 @@ def health():
     return {
         "status": "ok",
         "docling": parsing.docling_available(),
+        "mineru": mineru_parser.mineru_available(),
         "argos": translation._argos_available(),
         "argosPairs": sorted(["->".join(p) for p in translation._installed_pairs()]),
         "sklearnVersion": sklearn.__version__,
+    }
+
+
+# ---- R2 双引擎：MinerU 解析端点（扫描版/复杂版面的备选引擎）----
+
+@app.post("/tasks/parse-mineru")
+async def parse_mineru(req: dict):
+    """Parse PDF using MinerU (better for scans/complex layouts than docling).
+
+    Input: {docId, fileName, contentBase64}. Output: same format as parse-document.
+    MinerU handles OCR internally — no separate RapidOCR needed.
+    """
+    import base64
+    import binascii
+    import asyncio
+
+    doc_id = req.get("docId", "unknown")
+    file_name = req.get("fileName", "")
+    b64 = req.get("contentBase64", "")
+
+    if not b64 or not file_name:
+        raise HTTPException(status_code=422, detail="docId/fileName/contentBase64 required")
+    if not file_name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=422, detail="mineru only supports PDF files")
+    if not mineru_parser.mineru_available():
+        raise HTTPException(status_code=503, detail="mineru CLI not installed")
+
+    try:
+        data = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(status_code=422, detail=f"invalid base64: {e}")
+
+    try:
+        blocks, page_count = await asyncio.to_thread(
+            mineru_parser.parse_with_mineru, file_name, data
+        )
+    except RuntimeError as e:
+        return {"docId": doc_id, "status": "failed", "error": str(e), "blocks": []}
+    except Exception as e:
+        return {"docId": doc_id, "status": "failed", "error": f"mineru unexpected: {type(e).__name__}: {e}", "blocks": []}
+
+    return {
+        "docId": doc_id,
+        "status": "ok",
+        "blocks": [b.model_dump() for b in blocks],
+        "pageCount": page_count,
     }
 
 

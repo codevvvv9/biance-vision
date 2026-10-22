@@ -2,28 +2,35 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# WITH_DOCLING=1 时构建含 PDF/DOCX 解析的全量镜像（docling+torch，构建数分钟）；
+# WITH_DOCLING=1：构建含 Docling+MinerU 双引擎的全量镜像（数分钟）；
 # 默认 0：轻量镜像，解析层懒加载，PDF 显式 failed 状态（TXT/MD/HTML 不受影响）
+# WITH_MINERU=1：追加 MinerU（magic-pdf）——与 Docling 共存，双引擎按需路由
 ARG WITH_DOCLING=0
+ARG WITH_MINERU=0
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     MODEL_DIR=/data/models
 
 COPY requirements.txt requirements-docling.txt warmup.py ./
-# R2：rapidocr-onnxruntime（OpenCV）需要 X11/GLib 系统库（python:slim 不含）；
-# 仅 WITH_DOCLING=1 时安装（轻量镜像不需要）
-RUN if [ "$WITH_DOCLING" = "1" ]; then \
+
+# 系统依赖：docling+rapidocr（OpenCV）和 MinerU（PyMuPDF）都需要的基础库
+# libxcb1/libgl1 = OpenCV X11；libglib2.0 = GLib；libgomp1 = OpenMP
+# libmagic1 = python-magic（MinerU 依赖）；git = MinerU 模型下载
+RUN if [ "$WITH_DOCLING" = "1" ] || [ "$WITH_MINERU" = "1" ]; then \
       apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-        libxcb1 libgl1 libglib2.0-0 libgomp1 \
+        libxcb1 libgl1 libglib2.0-0 libgomp1 libmagic1 git \
       && rm -rf /var/lib/apt/lists/*; fi
-# W1-B 模型预置：warmup 转换最小 PDF 触发 layout/tableformer 模型下载进镜像的
-# 默认 HF cache（~/.cache/huggingface/hub）。运行期不设 DOCLING_ARTIFACTS_PATH
-# ——该变量期望 docling 特有的扁平 artifacts 目录结构，HF cache 不匹配会导致
-# 运行时校验失败（v0.10.2 教训）；不设时 docling 自动从 HF cache 找到 warmup
-# 已下载的模型，运行期零网络下载
+
+# Python 依赖：docling+rapidocr（主引擎）→ MinerU（备选引擎，扫描版/复杂版面）
 RUN pip install --no-cache-dir -r requirements.txt \
-    && if [ "$WITH_DOCLING" = "1" ]; then pip install --no-cache-dir -r requirements-docling.txt && python warmup.py; fi
+    && if [ "$WITH_DOCLING" = "1" ]; then \
+         pip install --no-cache-dir -r requirements-docling.txt && python warmup.py; \
+       fi \
+    && if [ "$WITH_MINERU" = "1" ]; then \
+         pip install --no-cache-dir "magic-pdf[full]" 2>/dev/null || \
+         pip install --no-cache-dir magic-pdf; \
+       fi
 
 COPY app ./app
 
