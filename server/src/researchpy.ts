@@ -91,10 +91,12 @@ export interface PyParseTaskSnapshot {
   pageCount?: number | null
 }
 
-/** 提交一批异步解析（20 页/批；立即返回，进度经 parseStatus 轮询） */
+/** 提交一批异步解析（20 页/批；立即返回，进度经 parseStatus 轮询）。
+ * 超时 90s：每批都携带完整 base64 文档内容（2-3MB JSON），Python 高内存时
+ * GC/接收缓冲使 30s 不够（v0.11.0 Brooks 验收实测超时根因） */
 export function submitParseBatch(
   input: { taskId: string; docId: string; fileName: string; contentBase64: string; pageFrom?: number; pageTo?: number },
-  timeoutMs = 30_000,
+  timeoutMs = 90_000,
 ): Promise<PyParseTaskSnapshot> {
   return call('/tasks/parse-document-async', input, timeoutMs)
 }
