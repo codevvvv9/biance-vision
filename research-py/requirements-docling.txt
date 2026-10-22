@@ -1,4 +1,7 @@
 # 全量镜像可选依赖：--build-arg WITH_DOCLING=1 时追加安装
-# docling requires Python >= 3.10 and is heavy (pulls torch et al., 数分钟)。
+# docling requires Python >= 3.10 and is heavy (pulls torch et al., 数分钟).
 docling==2.131.0
 pypdf==5.1.0
+# W1-B R2：RapidOCR（onnxruntime 后端，纯 CPU 无 GPU 依赖）——扫描版 PDF 的
+# 页级懒加载 OCR 引擎（docling ocr_options 消费；不解析扫描件时不占内存）
+rapidocr-onnxruntime==1.4.4

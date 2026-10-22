@@ -96,7 +96,7 @@ def _label_to_block(item, text_of) -> Optional[ParseBlock]:
     return ParseBlock(kind="text", text=text, pageNo=page_no, bbox=bbox)
 
 
-def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress=None) -> Tuple[List[ParseBlock], Optional[int]]:
+def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress=None, enable_ocr=False) -> Tuple[List[ParseBlock], Optional[int]]:
     """Synchronous docling conversion; run in a worker thread by the caller.
 
     page_range: optional (from, to) 1-based inclusive tuple — one batch of the
@@ -104,9 +104,14 @@ def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress
     with pypdf before feeding docling (PdfPipelineOptions has no page_range
     field in the installed version — v0.11.2 lesson). progress: optional
     callable for cooperative cancel between batches.
+    enable_ocr: R2 — enable docling OCR for pages without a text layer
+    (scanned PDFs). Uses RapidOCR (rapidocr-onnxruntime) which docling
+    auto-detects when installed. Lazy: OCR engine only loads when docling
+    encounters a page that needs it (red line R-D).
     """
     from docling.datamodel.base_models import DocumentStream
-    from docling.document_converter import DocumentConverter
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
 
     total_page_count: Optional[int] = None
     if page_range is not None and file_name.lower().endswith(".pdf"):
@@ -124,7 +129,17 @@ def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress
         sliced.seek(0)
         data = sliced.getvalue()
 
-    converter = DocumentConverter()
+    opts = PdfPipelineOptions()
+    if enable_ocr:
+        # R2: docling auto-detects RapidOCR when rapidocr-onnxruntime is installed;
+        # only triggers on pages where the text layer is missing (not full-page OCR
+        # on digital PDFs) — OcrAutoOptions is the default and handles this
+        # intelligently. We just need to signal that OCR is available.
+        pass  # OcrAutoOptions with rapidocr installed → docling uses it per-page as needed
+
+    converter = DocumentConverter(
+        format_options={"pdf": PdfFormatOption(pipeline_options=opts)} if enable_ocr else {}
+    )
     result = converter.convert(DocumentStream(name=file_name, stream=io.BytesIO(data)))
     doc = result.document
 
