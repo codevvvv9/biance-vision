@@ -70,15 +70,15 @@ async function parseStep(
     const events: PyParseEvent[] = []
     let pageCount: number | null = null
     const deadline = Date.now() + PARSE_BUDGET_MS
-    // 先提交第 1 批拿 totalPages（Python 侧 docling pages 元数据），随后按 20 页推进
+    // 从第 1 批（1-20 页）开始——第一批也必须带页范围：不带参数=全档转换，
+    // 整书 OOM 正是异步分批要修的（v0.11.1 Brooks 验收发现）；总页数从第一批
+    // 结果拿（Python docling 的 pages 元数据在 page_range 模式下仍然返回全档页数）
     let pageFrom = 1
-    let pageTo: number | null = null
+    let pageTo = BATCH_PAGES
     for (;;) {
       const taskId = `${attemptId}:${pageFrom}`
-      await submitParseBatch(
-        { taskId, docId: doc.id, fileName: doc.fileName, contentBase64, ...(pageTo !== null ? { pageFrom, pageTo } : {}) },
-      )
-      events.push({ seq: events.length + 1, stage: 'parsing', message: `batch ${taskId} submitted`, atMs: Date.now() })
+      await submitParseBatch({ taskId, docId: doc.id, fileName: doc.fileName, contentBase64, pageFrom, pageTo })
+      events.push({ seq: events.length + 1, stage: 'parsing', message: `batch ${taskId} submitted (pages ${pageFrom}-${pageTo})`, atMs: Date.now() })
       let snap = await parseStatus(taskId)
       while (snap.status === 'pending' || snap.status === 'running') {
         if (Date.now() > deadline) {
@@ -96,20 +96,14 @@ async function parseStep(
       }
       events.push(...snap.events.slice(-20))
       if (snap.status !== 'completed' || !snap.blocks) {
-        throw new Error(`Docling 批解析失败（pages ${pageFrom}-${pageTo ?? 'end'}）：${snap.error ?? '未知原因'}`)
+        throw new Error(`Docling 批解析失败（pages ${pageFrom}-${pageTo}）：${snap.error ?? '未知原因'}`)
       }
       allBlocks.push(...toParsedBlocks(snap.blocks))
       pageCount = snap.pageCount ?? pageCount
-      if (pageTo === null) {
-        // 第一批返回后确定总页数；不足一批则整书已完成
-        pageCount = snap.pageCount ?? null
-        if (pageCount === null || pageCount <= BATCH_PAGES) break
-        pageTo = BATCH_PAGES
-        continue
-      }
-      if (pageTo >= (pageCount ?? pageTo)) break
+      // 第一批结果确定总页数；本批已到尾页 → 全书完成
+      if (pageCount === null || pageTo >= pageCount) break
       pageFrom = pageTo + 1
-      pageTo = Math.min(pageFrom + BATCH_PAGES - 1, pageCount!)
+      pageTo = Math.min(pageFrom + BATCH_PAGES - 1, pageCount)
     }
     if (allBlocks.every((b) => (b.text ?? '').trim() === '')) {
       throw new Error('解析结果文本为空（疑似扫描版无文本层，暂不支持 OCR，请更换数字版文件）')
