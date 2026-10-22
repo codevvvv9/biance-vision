@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     MODEL_DIR=/data/models
 
-COPY requirements.txt requirements-docling.txt warmup.py ./
+COPY requirements.txt requirements-docling.txt warmup.py warmup_mineru.py ./
 
 # 系统依赖：docling+rapidocr（OpenCV）和 MinerU（PyMuPDF）都需要的基础库
 # libxcb1/libgl1 = OpenCV X11；libglib2.0 = GLib；libgomp1 = OpenMP
@@ -22,7 +22,9 @@ RUN if [ "$WITH_DOCLING" = "1" ] || [ "$WITH_MINERU" = "1" ]; then \
         libxcb1 libgl1 libglib2.0-0 libgomp1 libmagic1 git \
       && rm -rf /var/lib/apt/lists/*; fi
 
-# Python 依赖：docling+rapidocr（主引擎）→ MinerU（备选引擎，扫描版/复杂版面）
+# Python 依赖 + 双引擎模型预置（构建期触发模型下载进镜像，运行期零网络下载）
+# Docling warmup：转换最小 PDF → layout/tableformer 模型进 HF cache
+# MinerU warmup：magic-pdf CLI 解析最小 PDF → 布局/OCR/表格模型进本地 cache
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$WITH_DOCLING" = "1" ]; then \
          pip install --no-cache-dir -r requirements-docling.txt && python warmup.py; \
@@ -30,6 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$WITH_MINERU" = "1" ]; then \
          pip install --no-cache-dir "magic-pdf[full]" 2>/dev/null || \
          pip install --no-cache-dir magic-pdf; \
+         python warmup_mineru.py; \
        fi
 
 COPY app ./app
