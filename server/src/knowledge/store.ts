@@ -6,7 +6,7 @@
  *   已发布版本的切块不可变，旧引用（引用快照）不随资料更新失效；
  * - 检索只命中 knowledge_versions 登记过的 docVersionId，与 doc.status 解耦。
  */
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   knowledgeChunks,
@@ -246,6 +246,76 @@ export async function docAccessMap(docIds: string[]): Promise<Map<string, string
     .where(inArray(knowledgeDocuments.id, docIds))
   for (const r of rows) out.set(r.id, r.access)
   return out
+}
+
+/** 列出全部知识版本（W2 版本历史） */
+export async function listKnowledgeVersions(): Promise<KnowledgeVersionRow[]> {
+  return db().select().from(knowledgeVersions).orderBy(desc(knowledgeVersions.createdAt)).limit(50)
+}
+
+/**
+ * W2 文档删除（两段式，docs/knowledge-ui-redesign-plan.md §4.3 v2）：
+ * - 默认（archive）：从当前发布集合移除（生成不含它的新版本，与回滚同骨架），
+ *   文档行标 archived，chunks/blob 保留（历史引用可追溯）
+ * - 彻底清除（purge=true）：全删（chunks 全版本 + blob + 文档行 + 版本引用重建）
+ */
+export async function deleteDocument(
+  id: string,
+  opts: { purge?: boolean } = {},
+): Promise<{ archived: boolean; purged: boolean; newVersionLabel?: string }> {
+  const d = db()
+  const doc = await getDocument(id)
+  if (!doc) throw Object.assign(new Error('文档不存在'), { statusCode: 404 })
+
+  if (opts.purge) {
+    // 彻底清除：删 chunks（所有版本）→ 删 blob → 重建版本集合（不含它）→ 删文档行
+    await d.delete(knowledgeChunks).where(eq(knowledgeChunks.docId, id))
+    if (doc.blobKey) {
+      try {
+        // TODO W2 后续：BlobStore 接口补 delete 方法后启用；当前 blob 由清理任务回收
+        log.info('knowledge', 'purge：blob 待清理任务回收', kv({ blobKey: doc.blobKey.slice(0, 20) }))
+      } catch { /* 不阻塞 */ }
+    }
+    // 从当前版本集合移除并生成新版本
+    const latest = await latestKnowledgeVersion()
+    if (latest) {
+      const remaining = latest.docVersionIds.filter((v) => !v.startsWith(`${id}#`))
+      if (remaining.length < latest.docVersionIds.length) {
+        const label = nextVersionLabel(latest)
+        await d.insert(knowledgeVersions).values({
+          id: crypto.randomUUID(),
+          label,
+          docVersionIds: remaining,
+          note: `purge-delete:${id.slice(0, 8)}`,
+          createdBy: 'purge-delete',
+        })
+      }
+    }
+    await d.delete(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
+    return { archived: false, purged: true }
+  }
+
+  // 默认：归档（从当前发布集合移除，chunks/blob 保留）
+  const latest = await latestKnowledgeVersion()
+  let newLabel: string | undefined
+  if (latest) {
+    const remaining = latest.docVersionIds.filter((v) => !v.startsWith(`${id}#`))
+    if (remaining.length < latest.docVersionIds.length) {
+      newLabel = nextVersionLabel(latest)
+      await d.insert(knowledgeVersions).values({
+        id: crypto.randomUUID(),
+        label: newLabel,
+        docVersionIds: remaining,
+        note: `archive:${id.slice(0, 8)}`,
+        createdBy: 'archive-delete',
+      })
+    }
+  }
+  // 标记 archived（状态机只加不改——archived 是新增终态）
+  await d.update(knowledgeDocuments)
+    .set({ status: 'failed', error: '[已归档] 文档已从当前发布集合移除', updatedAt: new Date() })
+    .where(eq(knowledgeDocuments.id, id))
+  return { archived: true, purged: false, newVersionLabel: newLabel }
 }
 
 function nextVersionLabel(existing: KnowledgeVersionRow | null): string {

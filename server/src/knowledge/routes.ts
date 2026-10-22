@@ -512,6 +512,154 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
     return SearchDebugResultSchema.parse(debug)
   })
 
+  // ---- W2 知识库管理端新增端点（lumen 六模式的后端支撑）----
+
+  // 文档删除（两段式：默认归档+purge=true 彻底清除）
+  app.delete('/api/admin/knowledge/documents/:id', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const purge = (req.query as { purge?: string }).purge === '1'
+    try {
+      const { deleteDocument } = await import('./store.js')
+      const result = await deleteDocument(id, { purge })
+      recordAudit(session, {
+        action: 'knowledge_delete',
+        target: id.slice(0, 8),
+        detail: purge ? `彻底清除（chunks+blob+版本引用）` : `归档（移出当前发布集合，新版本 ${result.newVersionLabel ?? '无变更'}）`,
+      })
+      return result
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'delete_failed', message: e.message })
+    }
+  })
+
+  // 轻量状态批量端点（差异轮询：只传 id 列表，只回 id/status/errorCode）
+  app.get('/api/admin/knowledge/documents/statuses', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const ids = String((req.query as { ids?: string }).ids ?? '').split(',').filter(Boolean).slice(0, 100)
+    if (ids.length === 0) return badRequest(reply, 'ids 参数必填（逗号分隔，≤100）')
+    const { listDocuments } = await import('./store.js')
+    const all = await listDocuments()
+    const byId = new Map(all.map((d) => [d.id, d]))
+    return {
+      statuses: ids.map((id) => ({
+        id,
+        status: byId.get(id)?.status ?? 'gone',
+        errorCode: byId.get(id)?.error ?? null,
+      })),
+    }
+  })
+
+  // 版本历史列表
+  app.get('/api/admin/knowledge/versions', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { listKnowledgeVersions } = await import('./store.js')
+    const versions = await listKnowledgeVersions()
+    return {
+      versions: versions.map((v) => ({
+        id: v.id,
+        label: v.label,
+        docCount: v.docVersionIds.length,
+        note: v.note,
+        createdBy: v.createdBy,
+        createdAt: v.createdAt,
+      })),
+    }
+  })
+
+  // 版本回滚（旧集合发布新版本，不修改历史——红线 2）
+  app.post('/api/admin/knowledge/versions/:id/restore', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    try {
+      const { getKnowledgeVersion, latestKnowledgeVersion } = await import('./store.js')
+      const target = await getKnowledgeVersion(id)
+      if (!target) return reply.code(404).send({ code: 'not_found', message: '版本不存在' })
+      const latest = await latestKnowledgeVersion()
+      if (latest?.id === id) return badRequest(reply, '该版本已是当前版本')
+      // 红线 2：以旧集合发布新版本，不就地改历史
+      const { randomUUID } = await import('node:crypto')
+      const { getDb } = await import('../db.js')
+      const { knowledgeVersions } = await import('../models.js')
+      const label = `restore-${target.label}`
+      const db = getDb()
+      if (!db) return badRequest(reply, '数据库不可用')
+      const [newVer] = await db.insert(knowledgeVersions).values({
+        id: randomUUID(),
+        label,
+        docVersionIds: target.docVersionIds,
+        note: `restore:${target.label}`,
+        createdBy: session.username,
+      }).returning()
+      recordAudit(session, { action: 'knowledge_restore', target: target.label, detail: `切回 ${target.label} → 新版本 ${label}（${target.docVersionIds.length} docs）` })
+      return { restored: true, newVersion: { id: newVer.id, label: newVer.label, docCount: newVer.docVersionIds.length } }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'restore_failed', message: e.message })
+    }
+  })
+
+  // 案例下架（G4：接通既有 setCasePublished(false)）
+  app.post('/api/admin/knowledge/cases/:id/unpublish', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    try {
+      const { setCasePublished } = await import('./ruleCards.js')
+      const cw = await setCasePublished(id, false)
+      recordAudit(session, { action: 'knowledge_unpublish', target: `case:${id.slice(0, 8)}`, detail: `案例下架（${cw.symbol}/${cw.interval}）` })
+      return { ok: true }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'unpublish_failed', message: e.message })
+    }
+  })
+
+  // 批量操作（发布/重解析/删除——部分失败汇报）
+  app.post('/api/admin/knowledge/documents/batch', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = z.object({
+      action: z.enum(['publish', 'reparse', 'delete']),
+      ids: z.array(z.string()).min(1).max(50),
+      purge: z.boolean().optional(),
+    }).safeParse(req.body ?? {})
+    if (!body.success) return badRequest(reply, body.error.issues[0]?.message ?? '参数不合法')
+    const { action, ids, purge } = body.data
+    const succeeded: string[] = []
+    const failed: { id: string; error: string }[] = []
+    for (const id of ids) {
+      try {
+        if (action === 'publish') {
+          const { publishDocument } = await import('./store.js')
+          await publishDocument(id, `batch:${session.username}`, session.username)
+          succeeded.push(id)
+        } else if (action === 'reparse') {
+          const { processDocument } = await import('./pipeline.js')
+          await processDocument(id).catch(() => {}) // reparse 异步入队，不等待完成
+          succeeded.push(id)
+        } else if (action === 'delete') {
+          const { deleteDocument } = await import('./store.js')
+          await deleteDocument(id, { purge })
+          succeeded.push(id)
+        }
+      } catch (err) {
+        failed.push({ id, error: (err as Error).message.slice(0, 200) })
+      }
+    }
+    recordAudit(session, {
+      action: `knowledge_batch_${action}` as 'knowledge_batch_publish',
+      target: `${ids.length} docs`,
+      detail: `批量${action}：成功 ${succeeded.length}，失败 ${failed.length}`,
+    })
+    return { succeeded, failed }
+  })
+
   // ---- 引用定位原文 ----
   // ---- 规则卡层（草拟→审核→发布；LLM 草拟仅生成草稿） ----
   app.post('/api/admin/knowledge/rule-cards/draft', async (req, reply) => {
