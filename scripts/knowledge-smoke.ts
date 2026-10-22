@@ -290,6 +290,52 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
   check('发布案例进入检索（只见可见字段）', caseHit !== undefined && !JSON.stringify(caseHit.chunk).includes('returnPct'), caseHit?.docTitle ?? '未命中')
 }
 
+// ---- 10) W2 第二批：解析事件时间线 / runNo 轮次 / 失败事件 / worker 心跳 ----
+{
+  const mdW2 = Buffer.from('# W2 Log Probe\n\nThe wedge is a tight trading range. H2 entry above the prior bar high works.\n', 'utf8')
+  const ing = await ingestBuffer({ buffer: mdW2, fileName: 'smoke-w2-log.md', title: 'smoke-w2-log', sourceType: 'file' })
+
+  await processDocument(ing.docId)
+  let doc = await getDocument(ing.docId)
+  const events1 = (doc?.parseMeta.events ?? []) as { seq: number; stage: string; atMs: number }[]
+  const stages1 = events1.map((e) => e.stage)
+  check(
+    'W2 事件时间线：enqueued 起始 + Node 侧 stage 齐（chunking/embedding/completed）',
+    stages1[0] === 'enqueued' && ['chunking', 'embedding', 'completed'].every((s) => stages1.includes(s)),
+    stages1.join('→'),
+  )
+  check('W2 runNo 首次=1', Number(doc?.parseMeta.runNo) === 1, `runNo=${String(doc?.parseMeta.runNo)}`)
+  check('W2 事件 seq 连续递增', events1.every((e, i) => e.seq === i + 1), `n=${events1.length}`)
+
+  // 重解析 → runNo 递增且时间线重建（单轮覆盖语义）
+  await processDocument(ing.docId)
+  doc = await getDocument(ing.docId)
+  const events2 = (doc?.parseMeta.events ?? []) as { seq: number; stage: string }[]
+  check('W2 重解析 runNo=2', Number(doc?.parseMeta.runNo) === 2, `runNo=${String(doc?.parseMeta.runNo)}`)
+  check('W2 重解析后事件只保留本轮（仍以 enqueued 起始）', events2[0]?.stage === 'enqueued', events2.map((e) => e.stage).join('→'))
+
+  // 失败路径：空内容 → parseNative 抛错 → failed 事件落库
+  const ingEmpty = await ingestBuffer({ buffer: Buffer.from('   \n', 'utf8'), fileName: 'smoke-w2-empty.md', title: 'smoke-w2-empty', sourceType: 'file' })
+  await processDocument(ingEmpty.docId).catch(() => {})
+  const docFail = await getDocument(ingEmpty.docId)
+  const eventsFail = (docFail?.parseMeta.events ?? []) as { stage: string }[]
+  check(
+    'W2 失败路径：failed 事件落库且状态机 failed',
+    docFail?.status === 'failed' && eventsFail[eventsFail.length - 1]?.stage === 'failed',
+    `status=${docFail?.status} stages=${eventsFail.map((e) => e.stage).join('→')}`,
+  )
+
+  // worker 心跳：touch 后 alive=true（statuses 端点聚合的数据源）
+  const { touchWorkerHeartbeat, workerHeartbeat, listKnowledgeVersions } = await import('../server/src/knowledge/store.js')
+  await touchWorkerHeartbeat()
+  const hb = await workerHeartbeat()
+  check('W2 worker 心跳 touch 后 alive', hb.alive && (hb.heartbeatAgeMs ?? 0) < 90_000, JSON.stringify(hb))
+
+  // 版本历史投影：listKnowledgeVersions 返回 createdAt 为 Date（端点侧转 getTime）
+  const versions = await listKnowledgeVersions()
+  check('W2 版本历史可列出（createdAt 为 Date）', versions.every((v) => v.createdAt instanceof Date), `n=${versions.length}`)
+}
+
 // ---- 清理 ----
 await db.execute(sql`delete from knowledge_chunks where doc_id in (select id from knowledge_documents where title like 'smoke-%')`)
 await db.execute(sql`delete from knowledge_documents where title like 'smoke-%'`)

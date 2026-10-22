@@ -1,8 +1,9 @@
 /**
  * /admin/knowledge 知识库管理（超管）：
  * 导入（拖拽多文件 / URL / manifest）→ 文档卡片栅格（状态机流转）→ 预览抽屉（分块 md / 原文原生渲染）
- * → 检索调试（流水线打点 + 命中卡片）→ 规则卡 / 案例窗。
- * 有文档处于解析中时每 3s 轮询刷新，解析完成后自动停止。
+ * → 解析日志抽屉（W2：stage 时间线失败下钻）→ 检索调试 → 规则卡 / 案例窗。
+ * W2 第二批：3s 全量轮询替换为差异轮询（useDocPolling——2s 轻量 statuses，
+ * 状态翻转才全量刷新，全终态自动停；worker 心跳缺失时顶部黄条）。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
@@ -10,15 +11,20 @@ import type { KnowledgeDocument } from 'biance-vision-brooks'
 import CasesPanel from './knowledge/CasesPanel'
 import DocGrid from './knowledge/DocGrid'
 import ImportZone from './knowledge/ImportZone'
+import ParseLogDrawer from './knowledge/ParseLogDrawer'
 import PreviewDrawer from './knowledge/PreviewDrawer'
 import RuleCardsPanel from './knowledge/RuleCardsPanel'
 import SearchDebugPanel from './knowledge/SearchDebugPanel'
+import VersionHistoryDialog from './knowledge/VersionHistoryDialog'
+import { useDocPolling } from './knowledge/hooks/useDocPolling'
 
 export default function AdminKnowledgePage(): JSX.Element {
   const [docs, setDocs] = useState<KnowledgeDocument[]>([])
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [logsId, setLogsId] = useState<string | null>(null)
+  const [showVersions, setShowVersions] = useState(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -33,18 +39,13 @@ export default function AdminKnowledgePage(): JSX.Element {
     void refresh()
   }, [refresh])
 
-  // 排队中的文档（uploaded=已入队未被 worker 领取 / parsing=解析中）以及解析完成
-  // 但尚未索引完成的中间态（parsed=已入库块、chunked=已切分等向量化）都要轮询：
-  // 只盯前两态会在读到 chunked 时停止刷新，indexed 后页面永远不出现发布按钮；
-  // 轮询持续到所有文档到达终态（indexed/published/failed）才停
-  const pending = docs.some((d) =>
-    d.status === 'uploaded' || d.status === 'parsing' || d.status === 'parsed' || d.status === 'chunked',
-  )
-  useEffect(() => {
-    if (!pending) return
-    const t = setInterval(() => void refresh(), 3000)
-    return () => clearInterval(t)
-  }, [pending, refresh])
+  // W2 差异轮询（流程 2）：轻量 statuses 检测翻转；全终态自动停；worker 失联黄条
+  const { workerDead } = useDocPolling(docs, () => void refresh())
+
+  /** 操作后 1.5s 补刷一次（覆盖 pending→parsing 亚秒窗口，流程 2） */
+  const refreshSoon = useCallback((): void => {
+    setTimeout(() => void refresh(), 1500)
+  }, [refresh])
 
   const stats = useMemo(() => {
     const by = (s: string): number => docs.filter((d) => d.status === s).length
@@ -61,6 +62,7 @@ export default function AdminKnowledgePage(): JSX.Element {
     try {
       await api(`/admin/knowledge/documents/${id}/reparse`, { method: 'POST' })
       await refresh()
+      refreshSoon()
     } catch (e) {
       setError((e as Error).message)
     }
@@ -93,6 +95,7 @@ export default function AdminKnowledgePage(): JSX.Element {
       const msg = `成功 ${r.succeeded.length}` + (r.failed.length > 0 ? `，失败 ${r.failed.length}（${r.failed[0]?.error.slice(0, 100)}）` : '')
       setError(msg)
       await refresh()
+      if (action === 'reparse') refreshSoon()
     } catch (e) {
       setError((e as Error).message)
     }
@@ -115,8 +118,13 @@ export default function AdminKnowledgePage(): JSX.Element {
         </div>
       </div>
       {error !== '' && <p className="err-text">{error}</p>}
+      {workerDead && (
+        <div className="kb-warn-bar" role="alert">
+          解析队列不可用：worker 未运行（心跳缺失）。新上传的文档会停留在「待解析」，请启动 worker 后自动恢复。
+        </div>
+      )}
 
-      <ImportZone onDone={() => void refresh()} />
+      <ImportZone onDone={() => { void refresh(); refreshSoon() }} />
 
       <DocGrid
         docs={shown}
@@ -127,6 +135,8 @@ export default function AdminKnowledgePage(): JSX.Element {
         onPublish={(id) => void publish(id)}
         onDelete={(id, purge) => void deleteDoc(id, purge)}
         onBatch={(action, ids) => void batchAction(action, ids)}
+        onLogs={setLogsId}
+        onVersions={() => setShowVersions(true)}
       />
 
       <SearchDebugPanel onError={setError} />
@@ -135,6 +145,16 @@ export default function AdminKnowledgePage(): JSX.Element {
 
       {previewId !== null && (
         <PreviewDrawer docId={previewId} onClose={() => setPreviewId(null)} onChanged={() => void refresh()} />
+      )}
+      {logsId !== null && <ParseLogDrawer docId={logsId} onClose={() => setLogsId(null)} />}
+      {showVersions && (
+        <VersionHistoryDialog
+          onClose={() => setShowVersions(false)}
+          onRestored={() => {
+            setError('已切回旧版本（以旧集合生成了新版本）')
+            void refresh()
+          }}
+        />
       )}
     </div>
   )
