@@ -39,12 +39,12 @@ interface UploadOutcome {
   message?: string
 }
 
-async function uploadOne(file: File): Promise<UploadOutcome> {
+async function uploadOne(file: File, sourceTier: string, access: string): Promise<UploadOutcome> {
   const form = new FormData()
   form.append('file', file)
   form.append('title', file.name)
-  form.append('sourceTier', 'community')
-  form.append('access', 'public')
+  form.append('sourceTier', sourceTier)
+  form.append('access', access)
   const res = await fetch('/api/admin/knowledge/documents', { method: 'POST', body: form })
   const data = (await res.json().catch(() => ({}))) as UploadOutcome
   if (!res.ok) throw new Error(data.message ?? `HTTP ${res.status}`)
@@ -60,6 +60,9 @@ export default function ImportZone({ onDone }: { onDone: () => void }): JSX.Elem
   const [manifestBusy, setManifestBusy] = useState(false)
   const [manifestMsg, setManifestMsg] = useState('')
   const [manifestOpen, setManifestOpen] = useState(false)
+  // W2 G3：上传元数据可选（不再硬编码 community/public）
+  const [sourceTier, setSourceTier] = useState('community')
+  const [access, setAccess] = useState('public')
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const handleFiles = (files: FileList | File[]): void => {
@@ -73,7 +76,7 @@ export default function ImportZone({ onDone }: { onDone: () => void }): JSX.Elem
       for (let i = 0; i < list.length; i += 1) {
         const f = list[i]
         try {
-          const r = await uploadOne(f)
+          const r = await uploadOne(f, sourceTier, access)
           setItems((prev) =>
             prev.map((it) => (it.name === f.name && it.state === 'uploading' ? { ...it, state: r.status === 'duplicate' ? 'duplicate' : 'done' } : it)),
           )
@@ -177,6 +180,25 @@ export default function ImportZone({ onDone }: { onDone: () => void }): JSX.Elem
         </svg>
         <div className="kb-drop-main">拖拽文件到此处，或点击选择</div>
         <div className="kb-drop-sub">支持 PDF / DOCX / TXT / MD / HTML，单文件 ≤50MB，可多选；商业书籍仅上传有使用权的文件</div>
+        <div className="kb-meta-row" onClick={(e) => e.stopPropagation()}>
+          <label>
+            来源
+            <select value={sourceTier} onChange={(e) => setSourceTier(e.target.value)}>
+              <option value="community">社区</option>
+              <option value="official">官方</option>
+              <option value="official_derivative">官方衍生</option>
+            </select>
+          </label>
+          <label>
+            访问
+            <select value={access} onChange={(e) => setAccess(e.target.value)}>
+              <option value="public">公开</option>
+              <option value="purchase">购买</option>
+              <option value="member">会员</option>
+            </select>
+          </label>
+          {access !== 'public' && <span className="kb-access-note">⚠ {access === 'purchase' ? '购买' : '会员'}资料对普通用户不可见（方案甲过滤）</span>}
+        </div>
         {items.length > 0 && (
           <ul className="kb-upload-list" onClick={(e) => e.stopPropagation()}>
             {items.map((it, i) => (
