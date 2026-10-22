@@ -125,6 +125,20 @@ export function cancelParse(taskId: string, timeoutMs = 10_000): Promise<PyParse
   return call(`/tasks/parse-cancel/${encodeURIComponent(taskId)}`, {}, timeoutMs)
 }
 
+// ---- /tasks/inspect（R2 预检：扫描版/数字版路由判定）----
+
+export interface PdfInspectResult {
+  pageCount: number
+  encrypted: boolean
+  textCharRatio: number
+  emptyPageCount: number
+}
+
+/** PDF 预检：文本层覆盖率（<0.3 = 扫描版需走 OCR 路由） */
+export function inspectPdf(contentBase64: string, timeoutMs = 15_000): Promise<PdfInspectResult> {
+  return call('/tasks/inspect', { contentBase64 }, timeoutMs)
+}
+
 // ---- /tasks/predict（分位 GBM 推理）与 /tasks/train（训练） ----
 
 export interface PyPredictOut {

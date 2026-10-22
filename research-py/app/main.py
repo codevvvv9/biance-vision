@@ -4,6 +4,7 @@ import sklearn
 from fastapi import FastAPI, HTTPException
 
 from . import modeling, parsing, parsing_async, translation
+from .inspect_pdf import inspect_pdf
 from .schemas import (
     CalibrationReportRequest,
     CalibrationReportResponse,
@@ -31,6 +32,30 @@ def health():
         "argosPairs": sorted(["->".join(p) for p in translation._installed_pairs()]),
         "sklearnVersion": sklearn.__version__,
     }
+
+
+# ---- R2 预检端点（rag-pipeline §4.1：扫描版/数字版路由判定）----
+
+@app.post("/tasks/inspect")
+def inspect_document(req: dict):
+    """Pre-check a PDF's text layer coverage. Input: {contentBase64}. Output:
+    {pageCount, encrypted, textCharRatio, emptyPageCount}. Node uses this to
+    route: ratio < 0.3 → scanned (OCR if ≤30 pages, offline guidance if more).
+    """
+    import base64
+    import binascii
+
+    b64 = req.get("contentBase64", "")
+    if not b64:
+        raise HTTPException(status_code=422, detail="contentBase64 required")
+    try:
+        data = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(status_code=422, detail=f"invalid base64: {e}")
+    result = inspect_pdf(data)
+    if "error" in result:
+        raise HTTPException(status_code=422, detail=result["error"])
+    return result
 
 
 @app.post("/tasks/parse-document", response_model=ParseDocumentResponse)

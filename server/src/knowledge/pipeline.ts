@@ -10,7 +10,7 @@ import type { ParsedBlock } from './chunk.js'
 import { chunkBlocks } from './chunk.js'
 import { nativeFormatOf, parseNative } from './parse.js'
 import type { PyParseBlock, PyParseEvent } from '../researchpy.js'
-import { cancelParse, parseStatus, submitParseBatch } from '../researchpy.js'
+import { cancelParse, inspectPdf, parseStatus, submitParseBatch } from '../researchpy.js'
 import { cleanBlocks } from './clean.js'
 import { qualityGate } from './qualityGate.js'
 import { getBlobStore } from './blobstore.js'
@@ -62,14 +62,34 @@ async function parseStep(
   const buf = doc.blobKey ? await store.get(doc.blobKey) : null
   if (!buf) throw new Error(`原始内容不可读（blobKey=${doc.blobKey ?? 'null'}），请重新导入`)
   if (isDoclingFile(doc.fileName)) {
-    // W1-B：异步分批解析（整书同步单请求 >280s 必超时的根因修复）。
-    // 20 页/批顺序提交（单进程一次一批，天然全局串行）；轮询含事件；
-    // 每批完成即校验当前 attemptId——迟到的旧轮次结果在此被拒绝落库。
     const contentBase64 = buf.toString('base64')
     const allBlocks: ParsedBlock[] = []
     const events: PyParseEvent[] = []
     let pageCount: number | null = null
     const deadline = Date.now() + PARSE_BUDGET_MS
+
+    // R2 预检路由（rag-pipeline §4.1）：PDF 文本层覆盖率 <0.3 = 扫描版
+    // ≤30 页走在线 OCR（RapidOCR 已入依赖，docling 自动页级调用）；
+    // >30 页 failed 并提示离线导入（在线 OCR 超预算）
+    if (doc.fileName.toLowerCase().endsWith('.pdf')) {
+      try {
+        const inspect = await inspectPdf(contentBase64)
+        events.push({ seq: 1, stage: 'inspect', message: `pageCount=${inspect.pageCount} textRatio=${inspect.textCharRatio} encrypted=${inspect.encrypted}`, atMs: Date.now() })
+        if (inspect.encrypted) {
+          throw new Error('该 PDF 已加密，无法解析（请提供未加密版本）')
+        }
+        if (inspect.textCharRatio < 0.3 && inspect.pageCount > 30) {
+          throw new Error(
+            `扫描版 PDF（文本覆盖率 ${(inspect.textCharRatio * 100).toFixed(0)}%，${inspect.pageCount} 页）超过在线 OCR 上限 30 页。` +
+            '请使用离线导入：在本地 Mac 用 Docling/MinerU 完整版解析后通过 import-parsed 端点上传（工具与指引见 docs/rag-pipeline-design.md §3.7）',
+          )
+        }
+      } catch (err) {
+        if ((err as Error).message.includes('扫描版') || (err as Error).message.includes('加密')) throw err
+        events.push({ seq: events.length + 1, stage: 'inspect', message: `预检失败（继续常规解析）：${(err as Error).message}`, atMs: Date.now() })
+      }
+    }
+
     // 从第 1 批（1-20 页）开始——第一批也必须带页范围：不带参数=全档转换，
     // 整书 OOM 正是异步分批要修的（v0.11.1 Brooks 验收发现）；总页数从第一批
     // 结果拿（Python docling 的 pages 元数据在 page_range 模式下仍然返回全档页数）

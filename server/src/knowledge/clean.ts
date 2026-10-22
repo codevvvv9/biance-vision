@@ -1,13 +1,14 @@
 /**
- * 清洗节点（W1-B，rag-pipeline-design §4.5）：解析产物入库前的确定性规则清洗，
- * 全部纯函数无 LLM。降级留痕原则：剔除/并入/去重的计数进 parseMeta.cleanStats。
+ * 清洗节点（W1-B，rag-pipeline-design §4.5）+ headingPath 启发式 fallback（R2 追加）：
+ * 解析产物入库前的确定性规则清洗，全部纯函数无 LLM。
+ * 降级留痕原则：剔除/并入/去重的计数进 parseMeta.cleanStats。
  */
 import type { ParsedBlock } from './chunk.js'
 
 export interface CleanResult {
   blocks: ParsedBlock[]
   /** 降级留痕：各节点计数（只进日志的降级=不可见的损坏） */
-  stats: { droppedNoise: number; mergedFragments: number; deduped: number }
+  stats: { droppedNoise: number; mergedFragments: number; deduped: number; headingDetected: number }
 }
 
 /** 纯页码行 / 引擎指纹行（docling/mineru/reportlab/UUID 产物） */
@@ -22,18 +23,56 @@ function isNoiseLine(text: string): boolean {
 }
 
 /**
- * 清洗主入口（五节点中的四个——页眉页脚剔除依赖跨页重复检测，对纯文本 MD
- * 收益为零且易误伤，首版仅对 pageNo 存在的 block 启用兜底规则）：
+ * headingPath 启发式 fallback（R2，rag-pipeline-design §4.4 补充）：
+ * Word 生成的 PDF 无语义标题标签（docling label 全为 paragraph），headingPath
+ * 全空。此函数用确定性规则检测标题模式——独立短行 + 标题关键词/编号模式：
+ * - "Chapter N" / "Part N" / "Section N" / "第N章" / "第N节"
+ * - 编号标题："1." "1.1" "2.3.1" 开头且 <80 字符
+ * - 全大写独立短行（英文书籍章节惯例）
+ * 不改变已有 heading 块（docling 布局模型已识别的优先），只升级 text→heading。
+ */
+const HEADING_PATTERN =
+  /^(chapter\s+\d+|part\s+\d+|section\s+\d+|appendix\s+[a-z\d]+|第[一二三四五六七八九十\d]+[章节部分]|introduction|conclusion|summary|preface|foreword)\b/i
+
+const NUMBERED_HEADING = /^\d+(\.\d+)*\s+\S/
+
+function detectHeadingFallback(blocks: ParsedBlock[]): ParsedBlock[] {
+  const hasExistingHeadings = blocks.some((b) => b.kind === 'heading')
+  if (hasExistingHeadings) return blocks // docling 已识别标题，不覆盖
+  return blocks.map((b) => {
+    if (b.kind !== 'text') return b
+    const t = (b.text ?? '').trim()
+    if (t.length === 0 || t.length > 80) return b
+    if (HEADING_PATTERN.test(t)) return { ...b, kind: 'heading' as const, level: 1 }
+    if (NUMBERED_HEADING.test(t) && t.length < 60) {
+      const depth = (t.match(/\./g) ?? []).length
+      return { ...b, kind: 'heading' as const, level: Math.min(4, depth + 1) }
+    }
+    // 全大写独立短行（英文书籍章节惯例，≥4 字符避免误杀缩写）
+    if (t.length >= 8 && t === t.toUpperCase() && /[A-Z]{4,}/.test(t) && !/[.!?]$/.test(t)) {
+      return { ...b, kind: 'heading' as const, level: 1 }
+    }
+    return b
+  })
+}
+
+/**
+ * 清洗主入口 + heading fallback：
+ * 0. headingPath 启发式 fallback（docling 未识别标题时）
  * 1. 噪声行剔除（页码/指纹/空行）
  * 2. 残片并入：<30 有效字符且无句末标点的 text 并入前一块（内容完整性优先）
  * 3. 同页近似去重：归一化后同 pageNo 同内容的重复块只保留首个
  */
 export function cleanBlocks(input: ParsedBlock[]): CleanResult {
-  const stats = { droppedNoise: 0, mergedFragments: 0, deduped: 0 }
+  const stats = { droppedNoise: 0, mergedFragments: 0, deduped: 0, headingDetected: 0 }
+  const withHeadings = detectHeadingFallback(input)
+  stats.headingDetected = withHeadings.filter((b) => b.kind === 'heading').length -
+    input.filter((b) => b.kind === 'heading').length
+
   const out: ParsedBlock[] = []
   const seen = new Set<string>()
 
-  for (const b of input) {
+  for (const b of withHeadings) {
     if (b.kind === 'text' && isNoiseLine(b.text ?? '')) {
       stats.droppedNoise++
       continue
