@@ -75,6 +75,29 @@ export default function AdminKnowledgePage(): JSX.Element {
     }
   }
 
+  const deleteDoc = async (id: string, purge = false): Promise<void> => {
+    try {
+      await api(`/admin/knowledge/documents/${id}${purge ? '?purge=1' : ''}`, { method: 'DELETE' })
+      await refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  const batchAction = async (action: 'publish' | 'reparse' | 'delete', ids: string[]): Promise<void> => {
+    try {
+      const r = await api<{ succeeded: string[]; failed: { id: string; error: string }[] }>('/admin/knowledge/documents/batch', {
+        method: 'POST',
+        body: { action, ids },
+      })
+      const msg = `成功 ${r.succeeded.length}` + (r.failed.length > 0 ? `，失败 ${r.failed.length}（${r.failed[0]?.error.slice(0, 100)}）` : '')
+      setError(msg)
+      await refresh()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   const shown = statusFilter === '' ? docs : docs.filter((d) => d.status === statusFilter)
 
   return (
@@ -102,6 +125,8 @@ export default function AdminKnowledgePage(): JSX.Element {
         onPreview={setPreviewId}
         onReparse={(id) => void reparse(id)}
         onPublish={(id) => void publish(id)}
+        onDelete={(id, purge) => void deleteDoc(id, purge)}
+        onBatch={(action, ids) => void batchAction(action, ids)}
       />
 
       <SearchDebugPanel onError={setError} />

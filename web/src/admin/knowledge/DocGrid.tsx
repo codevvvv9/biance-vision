@@ -3,7 +3,7 @@
  * 点击卡片开预览抽屉。失败卡红边显示原因；解析中徽章脉冲。
  * 栅格容器挂一个聚光监听（useSpotlight），卡片加 .fx-spot 即获得跟随光标微光。
  */
-import { useRef, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import type { KnowledgeDocument } from 'biance-vision-brooks'
 import { useSpotlight } from '../../components/fx/useSpotlight'
 import { FileIcon, StatusBadge, TierBadge } from './ui'
@@ -15,6 +15,8 @@ interface DocGridProps {
   onPreview: (id: string) => void
   onReparse: (id: string) => void
   onPublish: (id: string) => void
+  onDelete: (id: string, purge?: boolean) => void
+  onBatch: (action: 'publish' | 'reparse' | 'delete', ids: string[]) => void
 }
 
 const FILTERS = [
@@ -25,11 +27,21 @@ const FILTERS = [
   { key: 'failed', label: '失败' },
 ]
 
-export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onReparse, onPublish }: DocGridProps): JSX.Element {
+export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onReparse, onPublish, onDelete, onBatch }: DocGridProps): JSX.Element {
   const gridRef = useRef<HTMLDivElement>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   useSpotlight(gridRef)
   const counts = new Map<string, number>()
   for (const d of docs) counts.set(d.status, (counts.get(d.status) ?? 0) + 1)
+  const toggleSelect = (id: string): void => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const selectedIds = [...selected]
   return (
     <div className="panel kb-docs-panel fx-in" style={{ '--fx-i': 2 } as CSSProperties}>
       <div className="kb-docs-head">
@@ -49,6 +61,15 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
           ))}
         </div>
       </div>
+      {selectedIds.length > 0 && (
+        <div className="kb-batch-bar">
+          <span>已选 {selectedIds.length} 项</span>
+          <button onClick={() => { onBatch('publish', selectedIds); setSelected(new Set()) }}>批量发布</button>
+          <button onClick={() => { onBatch('reparse', selectedIds); setSelected(new Set()) }}>批量重解析</button>
+          <button className="danger" onClick={() => { if (window.confirm(`确认删除 ${selectedIds.length} 个文档？（归档，不影响历史引用）`)) { onBatch('delete', selectedIds); setSelected(new Set()) } }}>批量删除</button>
+          <button onClick={() => setSelected(new Set())}>取消选择</button>
+        </div>
+      )}
       {docs.length === 0 ? (
         <p className="muted kb-empty">暂无资料——用上方导入区上传文件或导入 URL</p>
       ) : (
@@ -56,7 +77,7 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
           {docs.map((d) => (
             <div
               key={d.id}
-              className={`kb-doc-card fx-spot st-border-${d.status}`}
+              className={`kb-doc-card fx-spot st-border-${d.status}${selected.has(d.id) ? ' selected' : ''}`}
               role="button"
               tabIndex={0}
               aria-label={`预览 ${d.title}`}
@@ -66,6 +87,13 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
               }}
             >
               <div className="kb-doc-top">
+                <input
+                  type="checkbox"
+                  checked={selected.has(d.id)}
+                  onChange={() => toggleSelect(d.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`选择 ${d.title}`}
+                />
                 <FileIcon doc={d} />
                 <div className="kb-doc-title-wrap">
                   <span className="kb-doc-title" title={d.title}>{d.title}</span>
@@ -88,6 +116,14 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
                 {d.status === 'indexed' && (
                   <button className="btn-primary" onClick={() => onPublish(d.id)}>发布</button>
                 )}
+                <button
+                  className="danger"
+                  onClick={() => {
+                    if (window.confirm(`确认删除「${d.title}」？\n\n默认归档（从当前发布集合移除，历史引用保留）。\n如需彻底清除（含切块与向量），请勾选 purge 后确认。`)) {
+                      onDelete(d.id)
+                    }
+                  }}
+                >删除</button>
               </div>
             </div>
           ))}
