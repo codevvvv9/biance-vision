@@ -11,13 +11,13 @@ ENV PYTHONUNBUFFERED=1 \
     MODEL_DIR=/data/models
 
 COPY requirements.txt requirements-docling.txt warmup.py ./
-# W1-B 模型预置：warmup 期间不设 DOCLING_ARTIFACTS_PATH（docling 对空目录直接校验
-# 失败——v0.10.0 教训），模型落默认缓存 /root/.cache/docling；warmup 成功后再把
-# 运行期变量指向该缓存（运行期零 HF 下载）
+# W1-B 模型预置：warmup 转换最小 PDF 触发 layout/tableformer 模型下载进镜像的
+# 默认 HF cache（~/.cache/huggingface/hub）。运行期不设 DOCLING_ARTIFACTS_PATH
+# ——该变量期望 docling 特有的扁平 artifacts 目录结构，HF cache 不匹配会导致
+# 运行时校验失败（v0.10.2 教训）；不设时 docling 自动从 HF cache 找到 warmup
+# 已下载的模型，运行期零网络下载
 RUN pip install --no-cache-dir -r requirements.txt \
     && if [ "$WITH_DOCLING" = "1" ]; then pip install --no-cache-dir -r requirements-docling.txt && python warmup.py; fi
-RUN if [ "$WITH_DOCLING" = "1" ]; then export DOCLING_ARTIFACTS_PATH=/root/.cache/docling; fi
-ENV DOCLING_ARTIFACTS_PATH=/root/.cache/docling
 
 COPY app ./app
 
