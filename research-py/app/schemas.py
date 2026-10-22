@@ -31,6 +31,12 @@ class ParseDocumentRequest(BaseModel):
     contentBase64: Optional[str] = None
     fetchUrl: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "ParseDocumentRequest":
+        if (self.contentBase64 is None) == (self.fetchUrl is None):
+            raise ValueError("exactly one of contentBase64 / fetchUrl is required")
+        return self
+
 
 # ---------------------------------------------------------------------------
 # parse-document-async / parse-status / parse-cancel（W1-B 异步任务化）
@@ -64,12 +70,6 @@ class ParseTaskSnapshot(BaseModel):
     events: List[ParseEvent] = []
     blocks: Optional[List[ParseBlock]] = None
     pageCount: Optional[int] = None
-
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> "ParseDocumentRequest":
-        if (self.contentBase64 is None) == (self.fetchUrl is None):
-            raise ValueError("exactly one of contentBase64 / fetchUrl is required")
-        return self
 
 
 class ParseDocumentResponse(BaseModel):
