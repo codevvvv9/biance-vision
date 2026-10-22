@@ -100,18 +100,31 @@ def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress
     """Synchronous docling conversion; run in a worker thread by the caller.
 
     page_range: optional (from, to) 1-based inclusive tuple — one batch of the
-    Node-orchestrated 20-page batches (W1-B). progress: optional callable
-    invoked as progress(stage, page_no, total_pages) between batches of the
-    internal loop; raising inside progress aborts (cooperative cancel).
+    Node-orchestrated 20-page batches (W1-B). Implemented by slicing the PDF
+    with pypdf before feeding docling (PdfPipelineOptions has no page_range
+    field in the installed version — v0.11.2 lesson). progress: optional
+    callable for cooperative cancel between batches.
     """
     from docling.datamodel.base_models import DocumentStream
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.document_converter import DocumentConverter
 
-    opts = PdfPipelineOptions()
-    if page_range is not None:
-        opts.page_range = tuple(page_range)
-    converter = DocumentConverter(format_options={"pdf": PdfFormatOption(pipeline_options=opts)})
+    total_page_count: Optional[int] = None
+    if page_range is not None and file_name.lower().endswith(".pdf"):
+        from pypdf import PdfReader, PdfWriter
+
+        reader = PdfReader(io.BytesIO(data))
+        total_page_count = len(reader.pages)
+        writer = PdfWriter()
+        page_from_0 = max(0, page_range[0] - 1)
+        page_to_0 = min(total_page_count, page_range[1])
+        for idx in range(page_from_0, page_to_0):
+            writer.add_page(reader.pages[idx])
+        sliced = io.BytesIO()
+        writer.write(sliced)
+        sliced.seek(0)
+        data = sliced.getvalue()
+
+    converter = DocumentConverter()
     result = converter.convert(DocumentStream(name=file_name, stream=io.BytesIO(data)))
     doc = result.document
 
@@ -154,11 +167,13 @@ def _convert_with_docling(file_name: str, data: bytes, page_range=None, progress
             )
         )
 
-    page_count: Optional[int] = None
-    try:
-        page_count = len(doc.pages) or None
-    except Exception:
-        pass
+    # 分批模式下返回完整 PDF 的总页数（pypdf 切片前的计数），而非本批页数
+    page_count = total_page_count
+    if page_count is None:
+        try:
+            page_count = len(doc.pages) or None
+        except Exception:
+            pass
     if progress is not None and page_count:
         progress("parsed_batch", page_range[1] if page_range else page_count, page_count)
     return blocks, page_count
