@@ -94,6 +94,11 @@ async function parseStep(
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         snap = await parseStatus(taskId)
       }
+      // 任务到达终态：completed 时需要重新拉取结果（轮询默认不含 blocks——
+      // v0.11.5「未知原因」根因：completed 但 blocks=null 误判为解析失败）
+      if (snap.status === 'completed') {
+        snap = await parseStatus(taskId, true)
+      }
       events.push(...snap.events.slice(-20))
       if (snap.status !== 'completed' || !snap.blocks) {
         throw new Error(`Docling 批解析失败（pages ${pageFrom}-${pageTo}）：${snap.error ?? '未知原因'}`)
