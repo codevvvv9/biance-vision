@@ -18,6 +18,7 @@ import { getCapabilities } from '../admin/capabilities.js'
 import { resolveEmbeddingClient } from './embeddings.js'
 import { probeVectorSupport, vectorSupportSync } from './vector.js'
 import {
+  appendParseEvent,
   getDocument,
   listChunksOfVersion,
   replaceChunks,
@@ -29,6 +30,9 @@ import {
 import type { KnowledgeDocumentRow } from '../models.js'
 import { randomUUID } from 'node:crypto'
 import { kv, log } from '../logger.js'
+
+/** 管线事件（parseMeta.events 条目形状，与 shared KnowledgeParseEvent 同构） */
+type PipelineEvent = { seq: number; stage: string; message?: string | null; atMs: number; durationMs?: number | null }
 
 const DOCLING_EXTS = new Set(['pdf', 'docx', 'doc'])
 
@@ -212,12 +216,21 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
   let doc = await getDocument(docId)
   if (!doc) throw new Error(`文档不存在：${docId}`)
   if (doc.status === 'parsing') throw new Error('文档正在解析中')
+  const startedAt = Date.now()
   try {
     // W1-B attemptId：每次处理生成新轮次；旧轮次的迟到结果（轮询校验）被拒绝落库
+    // W2 解析日志：runNo 递增（「第 N 次解析」），enqueued 事件随初始写入（seq 从 1 起）
     const attemptId = randomUUID()
-    await setDocStatus(docId, 'parsing', { parseMeta: { ...doc.parseMeta, attemptId, events: [] } })
+    const runNo = (Number(doc.parseMeta.runNo) || 0) + 1
+    await setDocStatus(docId, 'parsing', {
+      parseMeta: {
+        ...doc.parseMeta,
+        attemptId,
+        runNo,
+        events: [{ seq: 1, stage: 'enqueued', message: `第 ${runNo} 次解析开始`, atMs: startedAt, durationMs: null }],
+      },
+    })
     doc = (await getDocument(docId))!
-    const startedAt = Date.now()
 
     const parsed = await parseStep(doc, attemptId)
     // 迟到防护：解析期间轮次被替换（手动重解析/删除重传）→ 丢弃本结果
@@ -265,11 +278,15 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
                 cleaned = retryCleaned
                 gate = retryGate
                 parsed.blocks = retryBlocks
+                // W2 解析日志：fallback 事实写入事件流（seq 占位，落库时统一重编号）
+                const fbEvents = Array.isArray(parsed.meta.events) ? [...(parsed.meta.events as PipelineEvent[])] : []
+                fbEvents.push({ seq: 0, stage: 'route', message: 'Docling 结果质量差 → 自动 MinerU fallback 成功，已替代', atMs: Date.now(), durationMs: null })
                 parsed.meta = {
                   ...parsed.meta,
                   parser: 'mineru-fallback',
                   blockCount: retryRes.blocks.length,
                   headingCount: retryRes.blocks.filter((b) => b.kind === 'heading').length,
+                  events: fbEvents,
                 }
               }
             }
@@ -281,24 +298,38 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
     }
 
     if (gate.blocked) throw new Error(gate.blockReason ?? '质量门拦截')
+    // W2 解析日志：py 阶段事件（parseStep 内存攒的）与已落库的 enqueued 合并，
+    // seq 统一重编号（parseMeta.events 是单轮真相，覆盖语义=本轮完整时间线）
+    const { events: pyEvents, ...metaRest } = parsed.meta as { events?: PipelineEvent[] } & Record<string, unknown>
+    const baseEvents = Array.isArray(doc.parseMeta.events) ? [...(doc.parseMeta.events as PipelineEvent[])] : []
+    const mergedEvents = [...baseEvents, ...(pyEvents ?? [])].map((e, i) => ({ ...e, seq: i + 1 }))
     await setDocStatus(docId, 'parsed', {
       parseMeta: {
         ...doc.parseMeta,
-        ...parsed.meta,
+        ...metaRest,
+        events: mergedEvents,
         cleanStats: cleaned.stats,
         qualityWarnings: gate.warnings,
       },
     })
 
+    const chunkingAt = Date.now()
     const chunks = chunkBlocks(cleaned.blocks)
     if (chunks.length === 0) throw new Error('切分结果为空')
     await replaceChunks(doc, chunks)
     await setDocStatus(docId, 'chunked')
+    await appendParseEvent(docId, 'chunking', `切分完成：${chunks.length} 块`, Date.now() - chunkingAt).catch(() => {})
 
     doc = (await getDocument(docId))!
+    const embeddingAt = Date.now()
     const indexMeta = await indexStep(doc)
+    const embedMsg = 'embeddingSkipped' in indexMeta
+      ? `向量化跳过（${String(indexMeta.reason ?? indexMeta.vectorSupport ?? '未配置')}）`
+      : `向量化完成：${indexMeta.embedded} 块 × ${indexMeta.dims} 维`
+    await appendParseEvent(docId, 'embedding', embedMsg, Date.now() - embeddingAt).catch(() => {})
     const mergedMeta = { ...(await getDocument(docId))!.parseMeta, ...indexMeta, chunkCount: chunks.length }
     await setDocStatus(docId, 'indexed', { parseMeta: mergedMeta })
+    await appendParseEvent(docId, 'completed', `索引完成（待审核发布），总耗时 ${((Date.now() - startedAt) / 1000).toFixed(1)}s`, Date.now() - startedAt).catch(() => {})
 
     const done = await getDocument(docId)
     log.ok(
@@ -315,6 +346,7 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
     return done!
   } catch (err) {
     const message = (err as Error).message
+    await appendParseEvent(docId, 'failed', message.slice(0, 300), Date.now() - startedAt).catch(() => {})
     await setDocStatus(docId, 'failed', { error: message }).catch(() => {})
     log.warn('knowledge', '文档处理失败', kv({ id: docId.slice(0, 8), 原因: message }))
     throw err

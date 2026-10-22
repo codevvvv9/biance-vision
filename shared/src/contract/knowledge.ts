@@ -109,3 +109,77 @@ export const ManifestEntrySchema = z.object({
   notes: z.string().optional(),
 })
 export type ManifestEntry = z.infer<typeof ManifestEntrySchema>
+
+// ---- W2 第二批：差异轮询 / 解析日志 / 版本历史（契约只增，红线 6/8） ----
+
+/** 解析事件（research-py 阶段事件 + Node 侧 stage 打点共用形状；存于 parseMeta.events） */
+export const KnowledgeParseEventSchema = z.object({
+  seq: z.number().int(),
+  stage: z.string(),
+  message: z.string().nullish(),
+  atMs: z.number().int(),
+  durationMs: z.number().int().nullish(),
+})
+export type KnowledgeParseEvent = z.infer<typeof KnowledgeParseEventSchema>
+
+/** GET /documents/:id/events 响应（ParseLogDrawer 数据源；单轮=最近一轮） */
+export const KnowledgeEventsResponseSchema = z.object({
+  docId: z.string(),
+  title: z.string(),
+  status: KnowledgeDocStatusSchema,
+  /** 第 N 次解析（每次 processDocument 递增；W2 打点启用前的旧文档为 0） */
+  runNo: z.number().int().nonnegative(),
+  attemptId: z.string().nullable(),
+  /** false=事件记录启用前导入的旧文档（前端显示降级文案） */
+  hasEvents: z.boolean(),
+  events: z.array(KnowledgeParseEventSchema),
+})
+export type KnowledgeEventsResponse = z.infer<typeof KnowledgeEventsResponseSchema>
+
+/** GET /documents/statuses 单项（轻量投影，响应 < 2KB）；'gone'=文档已不存在（差异轮询的删除翻转信号） */
+export const KnowledgeDocStatusLiteSchema = z.object({
+  id: z.string(),
+  status: z.union([KnowledgeDocStatusSchema, z.literal('gone')]),
+  errorCode: z.string().nullable(),
+  /** 距最近一次状态更新（updatedAt）的毫秒数；uploaded 停留判定用 */
+  ageMs: z.number().int().nonnegative(),
+})
+export type KnowledgeDocStatusLite = z.infer<typeof KnowledgeDocStatusLiteSchema>
+
+/** worker 心跳投影（app_settings['knowledge_worker_heartbeat']；alive 阈值 90s） */
+export const KnowledgeWorkerHeartbeatSchema = z.object({
+  alive: z.boolean(),
+  /** 距最近一次心跳的毫秒数；从未上报（app 进程无 worker）时为 null */
+  heartbeatAgeMs: z.number().int().nullable(),
+})
+export type KnowledgeWorkerHeartbeat = z.infer<typeof KnowledgeWorkerHeartbeatSchema>
+
+/** GET /documents/statuses 响应（差异轮询） */
+export const KnowledgeStatusesResponseSchema = z.object({
+  statuses: z.array(KnowledgeDocStatusLiteSchema),
+  worker: KnowledgeWorkerHeartbeatSchema,
+})
+export type KnowledgeStatusesResponse = z.infer<typeof KnowledgeStatusesResponseSchema>
+
+/** GET /versions 单项（版本历史弹窗） */
+export const KnowledgeVersionSummarySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  docCount: z.number().int(),
+  note: z.string().nullable(),
+  createdBy: z.string(),
+  createdAt: z.number().int(),
+})
+export type KnowledgeVersionSummary = z.infer<typeof KnowledgeVersionSummarySchema>
+
+export const KnowledgeVersionsResponseSchema = z.object({
+  versions: z.array(KnowledgeVersionSummarySchema),
+})
+export type KnowledgeVersionsResponse = z.infer<typeof KnowledgeVersionsResponseSchema>
+
+/** 批量操作结果（部分失败汇报） */
+export const KnowledgeBatchResponseSchema = z.object({
+  succeeded: z.array(z.string()),
+  failed: z.array(z.object({ id: z.string(), error: z.string() })),
+})
+export type KnowledgeBatchResponse = z.infer<typeof KnowledgeBatchResponseSchema>

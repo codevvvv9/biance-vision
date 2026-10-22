@@ -26,6 +26,12 @@ export async function enqueueKnowledgeParse(docId: string): Promise<boolean> {
 
 /** worker 侧注册处理器（batchSize=全局解析并发闸：1=同一时刻只解析一份文档） */
 export async function registerKnowledgeWorkers(boss: PgBoss, batchSize = 1): Promise<void> {
+  // W2 worker 心跳（UI 方案 §4.3）：每 30s 写 app_settings，statuses 端点聚合判断
+  // 「解析队列不可用」黄条；间隔为失联阈值（90s）的 1/3，进程退出后心跳自然过期
+  const { touchWorkerHeartbeat } = await import('./store.js')
+  void touchWorkerHeartbeat().catch(() => {})
+  const hb = setInterval(() => void touchWorkerHeartbeat().catch(() => {}), 30_000)
+  hb.unref?.()
   await boss.work<KnowledgeParseJob>(
     Q_KNOWLEDGE_PARSE,
     { batchSize },

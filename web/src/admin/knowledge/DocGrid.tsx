@@ -17,6 +17,10 @@ interface DocGridProps {
   onPublish: (id: string) => void
   onDelete: (id: string, purge?: boolean) => void
   onBatch: (action: 'publish' | 'reparse' | 'delete', ids: string[]) => void
+  /** W2：打开解析日志抽屉（失败/解析中卡可见入口） */
+  onLogs: (id: string) => void
+  /** W2：打开版本历史弹窗 */
+  onVersions: () => void
 }
 
 const FILTERS = [
@@ -27,7 +31,7 @@ const FILTERS = [
   { key: 'failed', label: '失败' },
 ]
 
-export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onReparse, onPublish, onDelete, onBatch }: DocGridProps): JSX.Element {
+export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onReparse, onPublish, onDelete, onBatch, onLogs, onVersions }: DocGridProps): JSX.Element {
   const gridRef = useRef<HTMLDivElement>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   useSpotlight(gridRef)
@@ -46,6 +50,7 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
     <div className="panel kb-docs-panel fx-in" style={{ '--fx-i': 2 } as CSSProperties}>
       <div className="kb-docs-head">
         <h4>资料库（{docs.length}）</h4>
+        <button className="kb-ver-entry" onClick={onVersions}>版本历史 ▾</button>
         <div className="kb-filter" role="tablist" aria-label="按状态筛选">
           {FILTERS.map((f) => (
             <button
@@ -112,6 +117,9 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
               )}
               <div className="kb-doc-acts" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => onPreview(d.id)}>预览</button>
+                {(d.status === 'failed' || d.status === 'parsing' || d.status === 'uploaded' || d.status === 'parsed' || d.status === 'chunked') && (
+                  <button className={d.status === 'failed' ? 'kb-log-btn' : ''} onClick={() => onLogs(d.id)}>日志</button>
+                )}
                 {d.status !== 'parsing' && <button onClick={() => onReparse(d.id)}>重解析</button>}
                 {d.status === 'indexed' && (
                   <button className="btn-primary" onClick={() => onPublish(d.id)}>发布</button>

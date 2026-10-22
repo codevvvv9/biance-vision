@@ -535,21 +535,58 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
     }
   })
 
-  // 轻量状态批量端点（差异轮询：只传 id 列表，只回 id/status/errorCode）
+  // 轻量状态批量端点（差异轮询：只传 id 列表，只回 id/status/errorCode/ageMs + worker 心跳）
   app.get('/api/admin/knowledge/documents/statuses', async (req, reply) => {
     deps.requireSuperadmin(req)
     if (!ensureStorage(reply)) return reply
     const ids = String((req.query as { ids?: string }).ids ?? '').split(',').filter(Boolean).slice(0, 100)
     if (ids.length === 0) return badRequest(reply, 'ids 参数必填（逗号分隔，≤100）')
-    const { listDocuments } = await import('./store.js')
-    const all = await listDocuments()
+    const { listDocuments, workerHeartbeat } = await import('./store.js')
+    const [all, worker] = await Promise.all([listDocuments(), workerHeartbeat()])
     const byId = new Map(all.map((d) => [d.id, d]))
+    const now = Date.now()
     return {
-      statuses: ids.map((id) => ({
-        id,
-        status: byId.get(id)?.status ?? 'gone',
-        errorCode: byId.get(id)?.error ?? null,
-      })),
+      statuses: ids.map((id) => {
+        const d = byId.get(id)
+        return {
+          id,
+          status: d?.status ?? 'gone',
+          errorCode: d?.error ?? null,
+          ageMs: d ? now - d.updatedAt.getTime() : 0,
+        }
+      }),
+      worker,
+    }
+  })
+
+  // 解析日志（ParseLogDrawer 数据源）：单轮=最近一轮的完整 stage 时间线；
+  // 旧文档（W2 打点启用前）无事件 → hasEvents=false，前端降级文案
+  app.get('/api/admin/knowledge/documents/:id/events', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const { getDocument } = await import('./store.js')
+    const doc = await getDocument(id)
+    if (!doc) return reply.code(404).send({ code: 'not_found', message: '文档不存在' })
+    const meta = doc.parseMeta as Record<string, unknown>
+    const events = Array.isArray(meta.events) ? (meta.events as unknown[]) : []
+    return {
+      docId: doc.id,
+      title: doc.title,
+      status: doc.status,
+      runNo: Number(meta.runNo) || 0,
+      attemptId: typeof meta.attemptId === 'string' ? meta.attemptId : null,
+      hasEvents: events.length > 0,
+      events: events.map((e, i) => {
+        const ev = e as { seq?: number; stage?: string; message?: string | null; atMs?: number; durationMs?: number | null }
+        return {
+          seq: ev.seq ?? i + 1,
+          stage: ev.stage ?? 'unknown',
+          message: ev.message ?? null,
+          atMs: ev.atMs ?? 0,
+          durationMs: ev.durationMs ?? null,
+        }
+      }),
     }
   })
 
@@ -566,7 +603,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
         docCount: v.docVersionIds.length,
         note: v.note,
         createdBy: v.createdBy,
-        createdAt: v.createdAt,
+        createdAt: v.createdAt.getTime(),
       })),
     }
   })

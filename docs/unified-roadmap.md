@@ -20,7 +20,7 @@
 | W0 | 已知缺陷修复 + 环境核验 + 文档修订 | 本文档 §2 | implemented（验收见 §4） |
 | W1-A | 知识库权限底座（access 甲，六路径统一上下文） | 本文档 §3；UI 方案 §4.6 v2 | **verified**（v0.9.7，PR#14：22 项双侧用例+线上验收） |
 | W1-B | 解析管线 R1+R2（九步/异步/OCR/headingPath fallback） | rag-pipeline §4-§7 v2 | **implemented**（v0.10.2~v0.12.2，PR#16-#33：Brooks 108 页 indexed 306s/192 chunks；OCR 链路+预检路由+headingPath 启发式已上线；headingPath 对自由格式书籍受限、parseMeta 持久化待 W2） |
-| W2 | 知识库交互（两段式删除/队列上传/差异轮询/日志下钻/批量/版本回滚/用户侧原文） | UI 方案 §3-§5 v2 | planned |
+| W2 | 知识库交互（两段式删除/队列上传/差异轮询/日志下钻/批量/版本回滚/用户侧原文） | UI 方案 §3-§5 v2 | **implemented（第一批 v0.14.0：两段式删除/批量/来源访问选择器/案例下架/七端点；第二批：差异轮询前端接入+worker 心跳黄条/ParseLogDrawer 失败下钻/版本历史回滚 UI——事件存 parseMeta.events 单轮覆盖（§4.3 独立事件表按证据作废，见 specs/knowledge-rag.md 调整记录）+UploadDialog 队列化/ManifestDialog/URL 同步属后续批） |
 | W3 | 双系统拆分：S1 双构建 → S2 存储配置收敛 → S3 切流 → S4 分权 | admin-isolation §3 v2 | planned |
 
 W1-A 先于 W1-B 的发布节点：**首次发布受限资料（purchase/member）之前权限过滤必须生效**。R2（扫描版/离线通道）、R3（LLM 增强，默认关、评测后拍板）按 rag-pipeline §7 排 W1 之后。

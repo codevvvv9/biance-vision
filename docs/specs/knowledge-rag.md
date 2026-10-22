@@ -9,6 +9,8 @@
 > ② **删除语义改两段式**——默认「移出当前发布集合+归档」（chunks/blob 保留，历史版本可恢复）；彻底清除为独立流程（DB 删除标记+幂等异步清理，冻结证据自包含不依赖文档行回查，服务端校验版本恢复能力）。
 > ③ 解析事件表按 `attemptId` 组织（异步任务取消/迟到结果隔离/自动重试与手动重解析区分），管线九步/staging/三类指纹等详设见 `docs/rag-pipeline-design.md` v2。
 
+> **W2 落地调整（2026-10-23，第二批，按证据收敛）**：解析事件**不建独立表**——W1-B 已将 research-py 阶段事件存 `parseMeta.events`（真实数据在库），W2 第二批补 Node 侧 stage 打点（enqueued/chunking/embedding/completed/failed）与 `runNo` 轮次号后直接作为 `GET /documents/:id/events` 数据源（单轮=最近一轮、覆盖语义、上限 200 条）；worker 心跳复用 `app_settings` KV（30s 上报、90s 失联阈值），不建 `knowledge_worker_heartbeat` 表。UI 方案 §4.3 原表设计作废，其余语义（失败下钻/黄条/轮次展示）不变。
+
 ## 实现状态（2026-10-01）
 
 已实现并验证（`pnpm knowledge:smoke` 28 项全绿 + HTTP 端到端：上传→worker 解析→发布→search-debug）：
@@ -52,7 +54,7 @@
 - 表 `knowledge_versions`：发布快照，不可变；Agent 版本绑定 `knowledgeVersion` 与检索策略（见 `docs/specs/admin-security.md`）。
 - 表 `knowledge_manifest_entries`：批量导入清单条目（对齐 `docs/references/knowledge-source-manifest.json` 的字段语义）。
 - 解析产物与原始文件存 MinIO，元数据落 PG。
-- API `/api/admin/knowledge/*`：`POST /documents`（上传）、`POST /documents/import-url`、`POST /documents/import-manifest`、`GET /documents`、`GET /documents/:id/preview`、`POST /documents/:id/reparse`、`POST /documents/:id/publish`、`GET /search-debug?query=`（各阶段打点）、`GET /chunks/:id`（引用定位原文）。
+- API `/api/admin/knowledge/*`：`POST /documents`（上传，含 sourceTier/access）、`POST /documents/import-url`、`POST /documents/import-manifest`、`POST /documents/import-parsed`（离线通道）、`GET /documents`、`GET /documents/statuses?ids=`（差异轮询轻量端点：id/status/errorCode/ageMs + worker 心跳投影）、`GET /documents/:id/events`（解析日志：单轮 stage 时间线）、`GET /documents/:id/preview`、`POST /documents/:id/reparse`、`POST /documents/:id/publish`、`DELETE /documents/:id?purge=`（两段式删除）、`POST /documents/batch`（批量 publish/reparse/delete，部分失败汇报）、`GET /versions`、`GET /versions/current`、`POST /versions/:id/restore`（旧集合发布新版本）、`POST /cases/:id/unpublish`、`GET /search-debug?query=`（各阶段打点）、`GET /chunks/:id`（引用定位原文）。契约见 `shared/src/contract/knowledge.ts`。
 - 知识后端：`KnowledgeStore` 接口（upsertChunks/searchHybrid/fetchCitation），首版 pgvector 实现。
 
 ## 流程

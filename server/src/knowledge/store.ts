@@ -132,6 +132,59 @@ export async function setDocBlobKey(id: string, blobKey: string): Promise<void> 
   await db().update(knowledgeDocuments).set({ blobKey, updatedAt: new Date() }).where(eq(knowledgeDocuments.id, id))
 }
 
+/**
+ * W2 解析日志（ParseLogDrawer 数据源）：向 parseMeta.events 追加一条 Node 侧
+ * stage 事件（读改写；每轮仅几十次、worker 侧单并发=1，无竞态面）。
+ * research-py 阶段事件由 parseStep 结束时随 meta 一次性写入，本函数只补
+ * 管线边界（enqueued/parsed/chunking/embedding/indexed/failed）。
+ */
+export async function appendParseEvent(
+  id: string,
+  stage: string,
+  message: string,
+  durationMs?: number,
+): Promise<void> {
+  const d = db()
+  const rows = await d.select({ parseMeta: knowledgeDocuments.parseMeta })
+    .from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id)).limit(1)
+  const meta = (rows[0]?.parseMeta ?? {}) as Record<string, unknown>
+  const events = Array.isArray(meta.events) ? [...(meta.events as unknown[])] : []
+  events.push({ seq: events.length + 1, stage, message, atMs: Date.now(), durationMs: durationMs ?? null })
+  // 上限 200 条（py 事件入 meta 时已截 100，node 打点从尾部追加，超限从头裁剪保最近）
+  const trimmed = events.length > 200 ? events.slice(-200) : events
+  await d.update(knowledgeDocuments)
+    .set({ parseMeta: { ...meta, events: trimmed }, updatedAt: new Date() })
+    .where(eq(knowledgeDocuments.id, id))
+}
+
+// ---- W2 worker 心跳（复用 app_settings KV，UI 方案 §4.3「复用既有设施」路线） ----
+
+const HEARTBEAT_KEY = 'knowledge_worker_heartbeat'
+/** 心跳判定阈值：30s 上报间隔 × 3 容忍（进程短暂卡顿/重启不误报） */
+export const WORKER_HEARTBEAT_STALE_MS = 90_000
+
+/** worker 每 30s 调用；app 进程（无 worker）从不写入 */
+export async function touchWorkerHeartbeat(): Promise<void> {
+  const d = getDb()
+  if (!d) return
+  const { appSettings } = await import('../models.js')
+  await d.insert(appSettings)
+    .values({ key: HEARTBEAT_KEY, value: { at: Date.now(), pid: process.pid } })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: { at: Date.now(), pid: process.pid } } })
+}
+
+/** statuses 端点聚合判断「解析队列不可用」用；从未上报返回 null（调用方按不活处理） */
+export async function workerHeartbeat(): Promise<{ alive: boolean; heartbeatAgeMs: number | null }> {
+  const d = getDb()
+  if (!d) return { alive: false, heartbeatAgeMs: null }
+  const { appSettings } = await import('../models.js')
+  const rows = await d.select().from(appSettings).where(eq(appSettings.key, HEARTBEAT_KEY)).limit(1)
+  const at = typeof rows[0]?.value.at === 'number' ? (rows[0].value.at as number) : null
+  if (at === null) return { alive: false, heartbeatAgeMs: null }
+  const age = Date.now() - at
+  return { alive: age < WORKER_HEARTBEAT_STALE_MS, heartbeatAgeMs: age }
+}
+
 /** 工作版本 id：解析/切分/索引写入的目标版本（发布后即成正式版本号） */
 export function workingVersionId(doc: KnowledgeDocumentRow): string {
   return `${doc.id}#${doc.version + 1}`

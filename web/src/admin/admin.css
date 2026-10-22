@@ -859,6 +859,71 @@
   background: rgba(7, 11, 20, 0.6); display: flex; flex-direction: column; gap: 6px;
 }
 
+/* ===== W2 第二批：worker 失联黄条 / 解析日志抽屉 / 版本历史弹窗 ===== */
+.kb-warn-bar {
+  padding: 10px 14px; margin-bottom: 10px; border: 1px solid rgba(255, 176, 32, 0.45); border-radius: 10px;
+  background: rgba(255, 176, 32, 0.08); color: var(--amber); font-size: 13px; line-height: 1.6;
+}
+.kb-log-btn { border-color: rgba(255, 77, 106, 0.45) !important; color: #ff8a9a !important; }
+.kb-log-drawer { max-width: 560px; }
+.kb-drawer-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-3); }
+.kb-log-attempt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.kb-log-empty { padding: 16px; line-height: 1.7; }
+.kb-log-timeline { list-style: none; margin: 0; padding: 0 4px; display: flex; flex-direction: column; }
+.kb-log-ev {
+  display: grid; grid-template-columns: 86px 1fr auto; gap: 10px; align-items: baseline;
+  padding: 7px 10px; border-left: 2px solid var(--line-2); margin-left: 6px; font-size: 12.5px;
+}
+.kb-log-ev + .kb-log-ev { margin-top: 2px; }
+.kb-log-ev.failed { border-left-color: var(--down); background: rgba(255, 77, 106, 0.06); }
+.kb-log-stage {
+  font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px; border: 1px solid; text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.kb-log-stage.lg-grey { color: var(--text-3); border-color: var(--line-2); }
+.kb-log-stage.lg-route { color: #c39bff; border-color: rgba(195, 155, 255, 0.45); }
+.kb-log-stage.lg-run { color: var(--blue); border-color: rgba(64, 156, 255, 0.45); }
+.kb-log-stage.lg-ok { color: var(--up); border-color: rgba(52, 208, 138, 0.45); }
+.kb-log-stage.lg-bad { color: #ff6b7e; border-color: rgba(255, 77, 106, 0.5); }
+.kb-log-msg { color: var(--text-2); word-break: break-all; line-height: 1.55; }
+.kb-log-ev.failed .kb-log-msg { color: #ff8a9a; }
+.kb-log-time { color: var(--text-3); font-size: 11px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.kb-modal-overlay {
+  position: fixed; inset: 0; z-index: 70; background: rgba(2, 4, 9, 0.6); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; padding: 24px; animation: kbFadeIn 0.15s ease;
+}
+.kb-modal {
+  width: min(720px, 100%); max-height: 80vh; overflow: auto; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--panel-bg); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  padding: 16px 18px;
+}
+.kb-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.kb-modal-head strong { font-size: 14px; color: var(--text); }
+.kb-modal-head button, .kb-ver-table button {
+  font-size: 12px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 7px;
+  background: rgba(16, 24, 42, 0.6); color: var(--text-2); cursor: pointer;
+}
+.kb-modal-head button:hover, .kb-ver-table button:hover { border-color: rgba(0, 229, 255, 0.4); }
+.kb-ver-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.kb-ver-table th {
+  text-align: left; font-weight: 600; color: var(--text-3); font-size: 11.5px;
+  padding: 6px 8px; border-bottom: 1px solid var(--line);
+}
+.kb-ver-table td { padding: 7px 8px; border-bottom: 1px solid var(--line-2); color: var(--text-2); vertical-align: top; }
+.kb-ver-table td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); white-space: nowrap; }
+.kb-ver-live {
+  margin-left: 8px; font-size: 10.5px; color: var(--up); border: 1px solid rgba(52, 208, 138, 0.5);
+  border-radius: 4px; padding: 0 5px; font-family: inherit;
+}
+.kb-ver-note { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.kb-modal-note { margin: 10px 0 0; font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+.kb-ver-entry {
+  font-size: 12px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(16, 24, 42, 0.6); color: var(--text-2); cursor: pointer; margin-right: auto;
+}
+.kb-ver-entry:hover { border-color: rgba(0, 229, 255, 0.4); }
+
+
 /* Agent 能力卡（AdminAgentsPage）：开关 + 状态灯 + 启用态视觉差异 */
 .cap-item.light-ok { border-color: color-mix(in srgb, var(--up) 35%, transparent); }
 .cap-item.light-warn { border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
