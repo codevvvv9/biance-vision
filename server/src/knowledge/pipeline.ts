@@ -196,15 +196,31 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
       throw new Error('解析轮次已失效（新轮次已接管），结果丢弃')
     }
     // W1-B 清洗（§4.5）+ 质量门（§4.7 empty_text 硬门）
+    // R2 多路径兜底：质量门警告达到阈值时提示离线导入备选路径（不阻塞——
+    // docling 结果能用但质量差时，用户可选择用 MinerU 等离线引擎重解析获得更好结果）
     const cleaned = cleanBlocks(parsed.blocks)
     const gate = qualityGate(cleaned.blocks, parsed.blocks)
-    if (gate.blocked) throw new Error(gate.blockReason ?? '质量门拦截')
+    if (gate.blocked) {
+      // 硬门拦截：如果是 empty_text（扫描版无 OCR），建议离线导入而非直接失败
+      const isScanEmpty = (gate.blockReason ?? '').includes('扫描版')
+      throw new Error(
+        isScanEmpty
+          ? `${gate.blockReason}\n建议：① ≤30 页扫描件请等待 RapidOCR 自动处理（当前容器需已安装 rapidocr-onnxruntime）；② 大部头扫描书请用本地 MinerU/Docling 完整版解析后通过 import-parsed 端点上传（多路径兜底）`
+          : gate.blockReason ?? '质量门拦截',
+      )
+    }
+    // 多路径建议：警告 ≥2 条时附提示（headingPath 空 + 块长异常 = docling 对此文件
+    // 效果有限，离线引擎可能更好）
+    const fallbackHint =
+      gate.warnings.length >= 2
+        ? '（提示：此文档解析质量警告较多。如需更好的章节结构/文本质量，可用 MinerU 等离线引擎解析后通过 import-parsed 端点上传替代结果）'
+        : ''
     await setDocStatus(docId, 'parsed', {
       parseMeta: {
         ...doc.parseMeta,
         ...parsed.meta,
         cleanStats: cleaned.stats,
-        qualityWarnings: gate.warnings,
+        qualityWarnings: [...gate.warnings, ...(fallbackHint ? [fallbackHint] : [])],
       },
     })
 
