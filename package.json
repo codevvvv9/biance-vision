@@ -32,6 +32,7 @@
     "eval:conversations": "tsx scripts/eval-conversations.ts",
     "knowledge:smoke": "tsx scripts/knowledge-smoke.ts",
     "knowledge:access-check": "tsx scripts/knowledge-access-check.ts",
+    "offline:parse": "tsx scripts/offline-parse.ts",
     "research:smoke": "tsx scripts/research-smoke.ts",
     "vector:smoke": "tsx scripts/vector-smoke.ts",
     "release:gate": "tsx scripts/release-gate.ts",

@@ -142,6 +142,136 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
     }
   })
 
+  // ---- 离线导入通道（R2 §3.7 多路径兜底：MinerU/任意解析器产物上传）----
+  // 接收 multipart：原文件（file）+ 解析产物（blocks JSON 字段）+ 元数据
+  // 原文件存 blob + 建档（contentHash 去重）+ 直接用 blocks 切分入库（跳过 parseStep）
+  // 产物走与在线通道完全相同的清洗→切分→质量门（红线 R-C：不允许绕过质量门）
+  app.post('/api/admin/knowledge/documents/import-parsed', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    if (!req.isMultipart()) return badRequest(reply, '请用 multipart/form-data（file + blocks + 可选元数据）')
+    const parts = req.parts({ limits: { fileSize: 50 * 1024 * 1024 } })
+    let file: { buffer: Buffer; filename: string } | null = null
+    let blocksJson = ''
+    let metaJson = ''
+    const fields: Record<string, string> = {}
+    for await (const part of parts) {
+      if (part.type === 'file') {
+        file = { buffer: Buffer.from(await part.toBuffer()), filename: part.filename }
+      } else if (part.fieldname === 'blocks') {
+        blocksJson = String(part.value)
+      } else if (part.fieldname === 'parseMeta') {
+        metaJson = String(part.value)
+      } else {
+        fields[part.fieldname] = String(part.value)
+      }
+    }
+    if (!file) return badRequest(reply, '缺少 file 字段（原始文件）')
+    if (!blocksJson) return badRequest(reply, '缺少 blocks 字段（解析产物 JSON 数组）')
+
+    // blocks 契约：ParsedBlock[]（kind/text/pageNo/figureId/level）
+    const blocksParse = z
+      .array(
+        z.object({
+          kind: z.enum(['text', 'figure', 'table', 'heading']),
+          text: z.string().optional(),
+          pageNo: z.number().int().positive().optional(),
+          figureId: z.string().optional(),
+          level: z.number().int().min(1).max(6).optional(),
+        }),
+      )
+      .min(1)
+      .safeParse(JSON.parse(blocksJson))
+    if (!blocksParse.success) {
+      return badRequest(reply, `blocks 格式不合法：${blocksParse.error.issues[0]?.message ?? '未知'}（期望 ParsedBlock[] JSON）`)
+    }
+    let externalMeta: Record<string, unknown> = {}
+    if (metaJson) {
+      try {
+        externalMeta = JSON.parse(metaJson) as Record<string, unknown>
+      } catch {
+        return badRequest(reply, 'parseMeta 字段不是合法 JSON')
+      }
+    }
+
+    const tier = TierSchema.safeParse(fields.sourceTier ?? 'community')
+    const access = AccessSchema.safeParse(fields.access ?? 'public')
+    if (!tier.success || !access.success) return badRequest(reply, 'sourceTier/access 取值不合法')
+    const title = (fields.title ?? '').trim() || file.filename
+
+    try {
+      // 建档（blob 存储 + contentHash 去重，与在线通道同一入口）
+      const result = await ingestBuffer({
+        buffer: file.buffer,
+        fileName: file.filename,
+        title,
+        sourceType: 'file',
+        sourceTier: tier.data,
+        access: access.data,
+      })
+      if (result.status === 'duplicate') {
+        return { status: 'duplicate', document: { id: result.existingId } }
+      }
+
+      // 跳过 parseStep，直接走清洗→切分→质量门→索引（红线 R-C：与在线同规）
+      const { processDocument } = await import('./pipeline.js')
+      const { getDocument, setDocStatus } = await import('./store.js')
+      const doc = await getDocument(result.docId)
+      if (!doc) return badRequest(reply, '建档后文档消失（内部错误）')
+
+      // 用 external blocks 替代 parseStep 的结果，标记来源
+      const offlineMeta = {
+        parser: (externalMeta.parser as string) ?? 'offline-import',
+        blockCount: blocksParse.data.length,
+        attemptId: crypto.randomUUID(),
+        importedAt: new Date().toISOString(),
+        ...externalMeta,
+      }
+      // 直接调用 processDocument 但注入 blocks（通过 pipeline 的离线入口）
+      // 简化实现：setDocStatus 到 parsed 再走后半段
+      await setDocStatus(result.docId, 'parsing', { parseMeta: offlineMeta })
+      const { cleanBlocks } = await import('./clean.js')
+      const { qualityGate: gate } = await import('./qualityGate.js')
+      const cleaned = cleanBlocks(blocksParse.data)
+      const gateResult = gate(cleaned.blocks, blocksParse.data)
+      if (gateResult.blocked) {
+        await setDocStatus(result.docId, 'failed', { error: gateResult.blockReason })
+        return reply.code(422).send({ code: 'quality_blocked', message: gateResult.blockReason })
+      }
+      await setDocStatus(result.docId, 'parsed', {
+        parseMeta: { ...offlineMeta, cleanStats: cleaned.stats, qualityWarnings: gateResult.warnings },
+      })
+      // 后半段（chunked → indexed）由 processDocument 从 parsed 状态续跑——但当前
+      // processDocument 是全流程。简化：直接在这里做切分+入库
+      const { chunkBlocks } = await import('./chunk.js')
+      const { replaceChunks, workingVersionId } = await import('./store.js')
+      const chunks = chunkBlocks(cleaned.blocks)
+      if (chunks.length === 0) {
+        await setDocStatus(result.docId, 'failed', { error: '切分结果为空' })
+        return badRequest(reply, '切分结果为空（blocks 内容不足以产生有效切块）')
+      }
+      const updatedDoc = (await getDocument(result.docId))!
+      await replaceChunks(updatedDoc, chunks)
+      await setDocStatus(result.docId, 'indexed', {
+        parseMeta: { ...offlineMeta, chunkCount: chunks.length, cleanStats: cleaned.stats, qualityWarnings: gateResult.warnings },
+      })
+      recordAudit(session, {
+        action: 'knowledge_import',
+        target: 'import-parsed',
+        detail: `离线导入 ${file.filename}（${blocksParse.data.length} blocks → ${chunks.length} chunks，parser=${offlineMeta.parser}）`,
+      })
+      return {
+        status: 'indexed',
+        document: { id: result.docId, title },
+        chunkCount: chunks.length,
+        qualityWarnings: gateResult.warnings,
+      }
+    } catch (err) {
+      const e = err as { statusCode?: number; message: string }
+      return reply.code(e.statusCode ?? 500).send({ code: 'import_parsed_failed', message: e.message })
+    }
+  })
+
   // ---- 单 URL 导入 ----
   app.post('/api/admin/knowledge/documents/import-url', async (req, reply) => {
     const session = deps.requireSuperadmin(req)
