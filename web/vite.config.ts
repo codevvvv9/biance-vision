@@ -1,3 +1,5 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -6,8 +8,18 @@ import react from '@vitejs/plugin-react'
 const apiPort = process.env.BV_API_PORT || 3200
 const webPort = Number(process.env.BV_WEB_PORT || 17834)
 
+const webDir = path.dirname(fileURLToPath(import.meta.url))
+
 export default defineConfig({
   plugins: [react()],
+  // W3-S1：共享 UI 基建源码直消费（packages/shared-ui，无构建产物）
+  resolve: {
+    alias: { '@biance/shared-ui': path.resolve(webDir, '../packages/shared-ui/src') },
+  },
+  define: {
+    // 用户端构建：非独立 admin 入口（AdminLayout 据此隐藏「返回主站」等嵌入态元素）
+    'import.meta.env.ADMIN_ENTRY': '"0"',
+  },
   build: {
     // 项目无需支持 2020 年前的浏览器（现代 evergreen），提升 target 去掉降级转换
     target: 'es2020',

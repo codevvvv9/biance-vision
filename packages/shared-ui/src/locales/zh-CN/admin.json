@@ -16,5 +16,17 @@
     "promptsHint": "模板版本 / 免责 / 输入配置",
     "evals": "评测与模型",
     "evalsHint": "数据集 / 训练 / 指标"
+  },
+  "gate": {
+    "verifying": "会话验证中…",
+    "user": "账号",
+    "password": "密码",
+    "submit": "登录管理后台",
+    "busy": "登录中…",
+    "required": "请输入账号和密码",
+    "loginFailed": "登录失败",
+    "forbidden": "非管理员账号",
+    "forbiddenHint": "账号 {{user}} 不是超级管理员，请切换账号后重试。",
+    "logout": "退出登录"
   }
 }

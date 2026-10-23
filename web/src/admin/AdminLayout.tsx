@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useAuth } from '../auth/AuthContext'
-import AiSettingsModal from '../ai/AiSettingsModal'
+import { useAuth } from '@biance/shared-ui'
+import AiSettingsModal from './AiSettingsModal'
 import { ADMIN_MENU } from './menu'
+
+/** 独立 admin 入口标记（vite.admin.config define；用户端构建恒为 "0"） */
+const STANDALONE = import.meta.env.ADMIN_ENTRY === '1'
 
 /** 管理后台统一布局：superadmin 守卫 + 页头导航 + 子页面出口 */
 export default function AdminLayout(): JSX.Element {
@@ -12,6 +15,7 @@ export default function AdminLayout(): JSX.Element {
   const [aiOpen, setAiOpen] = useState(false)
 
   // 普通用户直接输入 /admin/* 时跳回首页；接口侧同样有 403 拦截
+  // （独立入口下 AdminGate 已先行拦截，此守卫为嵌入态/兜底保留）
   if (user?.role !== 'superadmin') return <Navigate to="/" replace />
 
   return (
@@ -19,9 +23,12 @@ export default function AdminLayout(): JSX.Element {
       <div className="admin-head">
         <div className="admin-head-side">
           <span className="admin-head-title">{t('admin:layout.title')}</span>
-          <NavLink to="/" className="admin-back">
-            ← {t('admin:layout.back')}
-          </NavLink>
+          {/* 嵌入态（用户端构建）保留返回主站；独立 admin 入口下无主站可返 */}
+          {!STANDALONE && (
+            <NavLink to="/" className="admin-back">
+              ← {t('admin:layout.back')}
+            </NavLink>
+          )}
         </div>
         <nav className="admin-nav">
           {ADMIN_MENU.map((item) => (

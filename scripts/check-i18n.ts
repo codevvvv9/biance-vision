@@ -15,8 +15,10 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
-const WEB_SRC = path.join(ROOT, 'web/src')
-const LOCALES = path.join(WEB_SRC, 'locales')
+// W3-S1：i18n/locales 已下沉 @biance/shared-ui，扫描覆盖两端源码根
+const SCAN_ROOTS = [path.join(ROOT, 'web/src'), path.join(ROOT, 'packages/shared-ui/src')]
+const WEB_SRC = SCAN_ROOTS[0]
+const LOCALES = path.join(ROOT, 'packages/shared-ui/src/locales')
 
 const strict = process.argv.includes('--strict')
 
@@ -69,19 +71,22 @@ function stripComments(src: string): string[] {
 }
 
 let total = 0
-for (const file of walk(WEB_SRC)) {
-  const rel = path.relative(WEB_SRC, file)
-  if (EXEMPT_FILES.has(rel) || rel.startsWith('locales') || rel.startsWith('i18n')) continue
-  const lines = stripComments(readFileSync(file, 'utf8'))
-  const hits: string[] = []
-  lines.forEach((line, i) => {
-    if (!CJK_RE.test(line)) return
-    if (EXEMPT_LINE_RE.some((re) => re.test(line))) return
-    hits.push(`  ${rel}:${i + 1}: ${line.trim().slice(0, 100)}`)
-  })
-  if (hits.length > 0) {
-    total += hits.length
-    console.log(hits.join('\n'))
+for (const root of SCAN_ROOTS) {
+  for (const file of walk(root)) {
+    const rel = path.relative(root, file)
+    const display = path.relative(ROOT, path.join(root, rel))
+    if (EXEMPT_FILES.has(rel) || rel.startsWith('locales') || rel.startsWith('i18n')) continue
+    const lines = stripComments(readFileSync(file, 'utf8'))
+    const hits: string[] = []
+    lines.forEach((line, i) => {
+      if (!CJK_RE.test(line)) return
+      if (EXEMPT_LINE_RE.some((re) => re.test(line))) return
+      hits.push(`  ${display}:${i + 1}: ${line.trim().slice(0, 100)}`)
+    })
+    if (hits.length > 0) {
+      total += hits.length
+      console.log(hits.join('\n'))
+    }
   }
 }
 

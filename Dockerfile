@@ -6,6 +6,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY server/package.json server/
 COPY web/package.json web/
 COPY shared/package.json shared/
+COPY packages/shared-ui/package.json packages/shared-ui/
 RUN pnpm install --frozen-lockfile
 COPY . .
 # shared（Brooks 结构引擎）必须先构建：server 与 web 都消费其 dist 产物
@@ -20,6 +21,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY server/package.json server/
 COPY web/package.json web/
 COPY shared/package.json shared/
+COPY packages/shared-ui/package.json packages/shared-ui/
 # shared 的运行时依赖（zod 等）也要装：/app/shared/dist 内的 import 从 shared/node_modules 解析
 RUN pnpm --filter biance-vision-server --filter biance-vision-brooks install --frozen-lockfile --prod
 # shared 源码/编译器不进镜像，只带 dist（server 经 workspace 软链消费）
@@ -27,6 +29,7 @@ COPY --from=build /app/shared/dist ./shared/dist
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/server/drizzle ./server/drizzle
 COPY --from=build /app/web/dist ./web/dist
+COPY --from=build /app/web/dist-admin ./web/dist-admin
 # 容器内必须监听 0.0.0.0，宿主/隧道才能访问到
 ENV HOST=0.0.0.0 PORT=3200
 EXPOSE 3200
