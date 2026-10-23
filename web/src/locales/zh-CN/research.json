@@ -21,17 +21,26 @@
     "spot": {
       "label": "现货研究",
       "hint": "分析 BTC 当前的趋势、结构与关键价位",
-      "examples": ["BTC 当前是趋势还是震荡？", "解释二次进场的确认与失效条件"]
+      "examples": [
+        "BTC 当前是趋势还是震荡？",
+        "解释二次进场的确认与失效条件"
+      ]
     },
     "perp": {
       "label": "USDT 永续",
       "hint": "描述持仓或研究问题，一起检查结构与风险",
-      "examples": ["BTC 永续多头还能继续持有吗？", "当前回调二次进场，需要等哪些确认？"]
+      "examples": [
+        "BTC 永续多头还能继续持有吗？",
+        "当前回调二次进场，需要等哪些确认？"
+      ]
     },
     "event": {
       "label": "事件合约",
       "hint": "描述执行价、到期时间与报价，评估参与条件",
-      "examples": ["BTC 未来 10 分钟的结构偏向是什么？", "如何判断一笔事件合约的盈亏平衡胜率？"]
+      "examples": [
+        "BTC 未来 10 分钟的结构偏向是什么？",
+        "如何判断一笔事件合约的盈亏平衡胜率？"
+      ]
     }
   },
   "age": {
@@ -296,7 +305,14 @@
     "locateAria": "定位 {{kind}} 到 K 线",
     "pending": "待确认",
     "confirmedTag": "已确认",
-    "confirmedAt": "（确认于 {{time}}）"
+    "confirmedAt": "（确认于 {{time}}）",
+    "viewSource": "查看原文",
+    "sourcePreview": "原文预览",
+    "sourceUpdated": "文档已更新，定位可能失效（引用为冻结时的版本）",
+    "sourceUnavailable": "原文不可用（已归档/清除或无本地文件）",
+    "sourceLoading": "加载原文…",
+    "sourceDownload": "下载文件",
+    "sourceUnsupported": "该格式无在线预览，可下载后查看。"
   },
   "form": {
     "positionTitle": "录入持仓（App 抄录）",

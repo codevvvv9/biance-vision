@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import type { FollowUpAction, ResearchResult } from 'biance-vision-brooks'
 import MiniMarkdown from '../components/MiniMarkdown'
+import SourcePreviewModal, { type SourcePreviewTarget } from './SourcePreviewModal'
 
 /** 决策 → research:result.decision.* 词典 key */
 const DECISION_KEYS: Record<string, string> = {
@@ -54,6 +55,11 @@ interface EvidenceItem {
   figureId: string | null
   sourceTier: string | null
   text: string
+  /** W2 流程 7（只增字段）：证据源投影——fileUrl 在且仅当源文档当前可读 */
+  docId?: string | null
+  contentHash?: string | null
+  fileUrl?: string | null
+  docUpdated?: boolean
 }
 
 interface StructureEventItem {
@@ -95,6 +101,8 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
   // 论断引用定位（P2）：evidenceIds → 可点击标记，展开冻结原文（页码/来源/文档）
   const [evidenceMap, setEvidenceMap] = useState<Map<string, EvidenceItem> | null>(null)
   const [openEvidence, setOpenEvidence] = useState<string | null>(null)
+  // W2 流程 7：引用定位 → 只读原文预览（fileUrl 由服务端按当前 access 判权给出）
+  const [sourceTarget, setSourceTarget] = useState<SourcePreviewTarget | null>(null)
   // P1-8 免责文案（服务端配置，按产品；失败静默）
   const [disclaimer, setDisclaimer] = useState('')
   useEffect(() => {
@@ -231,6 +239,22 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
                         </span>
                       </span>
                       <MiniMarkdown text={ev.text} className="evidence-md" />
+                      {ev.fileUrl != null && ev.fileUrl !== '' && (
+                        <button
+                          className="cite-source-btn"
+                          onClick={() =>
+                            setSourceTarget({
+                              evidenceId: ev.id,
+                              docTitle: ev.docTitle ?? '',
+                              pageNo: ev.pageNo,
+                              fileUrl: ev.fileUrl ?? '',
+                              docUpdated: ev.docUpdated === true,
+                            })
+                          }
+                        >
+                          {t('research:result.viewSource')}
+                        </button>
+                      )}
                     </span>
                   )}
                 </span>
@@ -335,6 +359,7 @@ export function ResultCard({ result, horizon, runId, onCitation, onFollowUp }: {
         </>
       )}
       {disclaimer !== '' && <p className="disclaimer-line" role="note">{disclaimer}</p>}
+      {sourceTarget !== null && <SourcePreviewModal target={sourceTarget} onClose={() => setSourceTarget(null)} />}
     </div>
   )
 }
@@ -345,6 +370,7 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = f
   const [structures, setStructures] = useState<StructureEventItem[]>([])
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [sourceTarget, setSourceTarget] = useState<SourcePreviewTarget | null>(null)
   const listRef = useRef<HTMLUListElement>(null)
   useEffect(() => {
     if (!open || !selectedEvidenceId || items === null) return
@@ -400,6 +426,22 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = f
             {expanded === e.id && (
               <div className="evidence-card-body">
                 <MiniMarkdown text={e.text} className="evidence-md" />
+                {e.fileUrl != null && e.fileUrl !== '' && (
+                  <button
+                    className="cite-source-btn"
+                    onClick={() =>
+                      setSourceTarget({
+                        evidenceId: e.id,
+                        docTitle: e.docTitle ?? '',
+                        pageNo: e.pageNo,
+                        fileUrl: e.fileUrl ?? '',
+                        docUpdated: e.docUpdated === true,
+                      })
+                    }
+                  >
+                    {t('research:result.viewSource')}
+                  </button>
+                )}
               </div>
             )}
           </li>
@@ -436,6 +478,7 @@ export function EvidenceDrawer({ runId, open, onClose, onLocateBar, embedded = f
           </ul>
         </>
       )}
+      {sourceTarget !== null && <SourcePreviewModal target={sourceTarget} onClose={() => setSourceTarget(null)} />}
     </div>
   )
 }

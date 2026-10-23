@@ -338,17 +338,18 @@ curl -s http://127.0.0.1:8100/health   # 期望 docling:true
 - 验收：§6 清单 T2-T6
 
 ### 阶段 3 · 交互升级 P1（3 天）
-- [ ] UploadDialog 队列化 + 放弃回滚（流程 1）
-- [ ] statuses 轻量端点 + 差异轮询 + worker 心跳黄条（流程 2，G6/G8）
-- [ ] ParseLogDrawer 失败下钻（流程 3，G7）
-- [ ] 批量操作 + 部分失败汇报（流程 4/6，G9）
-- [ ] 版本历史与回滚（流程 5，G5）
+- [x] UploadDialog 队列化 + 放弃回滚（流程 1；W2 第三批实现——三道校验+precheck 预检+串行 XHR 进度+取消=abort+purge 回滚；URL/清单同窗 Tab）
+- [x] statuses 轻量端点 + 差异轮询 + worker 心跳黄条（流程 2，G6/G8；W2 第二批实现）
+- [x] ParseLogDrawer 失败下钻（流程 3，G7；W2 第二批实现）
+- [x] 批量操作 + 部分失败汇报（流程 4/6，G9；W2 第一批实现）
+- [x] 版本历史与回滚（流程 5，G5；W2 第二批实现）
+- [x] ManifestDialog 独立弹窗（流程 6，修 G1；W2 第三批实现——GET/POST manifest-entries 端点+重新同步保留状态+单条重试+勾选导入）
 - 验收：§6 清单 T7-T12
 
 ### 阶段 4 · 用户侧透明 P2（2 天，可独立排期）
-- [ ] evidence 加 fileUrl + contentHash；只读原文预览（流程 7）
-- [ ] access 过滤决策落地（§4.6 拍板后实施）
-- 验收：§6 清单 T13-T14
+- [x] evidence 加 fileUrl + contentHash；只读原文预览（流程 7；W2 第三批实现——只增 docId/contentHash/fileUrl/docUpdated 四字段+鉴权文件端点（受限 403/清除 404）+iframe sandbox 与服务端 CSP sandbox 双层+docUpdated 不定位提示；投影纯函数双侧断言入 smoke）
+- [x] access 过滤决策落地（§4.6 拍板后实施；已前置 W1-A v0.9.7 verified）
+- 验收：§6 清单 T13-T14（聊天侧引用角标化属另一工单，契约已预留）
 
 ### 与 admin 拆分的关系（v2：并入统一路线）
 

@@ -182,4 +182,54 @@ export const KnowledgeBatchResponseSchema = z.object({
   succeeded: z.array(z.string()),
   failed: z.array(z.object({ id: z.string(), error: z.string() })),
 })
+
+// ---- W2 第三批：manifest 条目状态 / 上传预检 / 用户侧证据源（契约只增，红线 6/8） ----
+
+/** GET /manifest-entries 单项（DB 行投影：含导入状态与最近错误，ManifestDialog 数据源） */
+export const KnowledgeManifestEntryStatusSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  type: z.string(),
+  title: z.string(),
+  topics: z.array(z.string()),
+  /** pending | imported | skipped | failed */
+  status: z.string(),
+  docId: z.string().nullable(),
+  lastError: z.string().nullable(),
+  enabled: z.boolean(),
+  access: AccessSchema,
+  sourceTier: SourceTierSchema,
+  importMethod: z.enum(['url_fetch', 'user_upload']),
+  notes: z.string().nullable(),
+  updatedAt: z.number().int(),
+})
+export type KnowledgeManifestEntryStatus = z.infer<typeof KnowledgeManifestEntryStatusSchema>
+
+export const KnowledgeManifestEntriesResponseSchema = z.object({
+  entries: z.array(KnowledgeManifestEntryStatusSchema),
+})
+export type KnowledgeManifestEntriesResponse = z.infer<typeof KnowledgeManifestEntriesResponseSchema>
+
+/** POST /documents/precheck 响应（上传前三道校验的第三道：contentHash 服务端查重） */
+export const KnowledgePrecheckResponseSchema = z.object({
+  duplicate: z.boolean(),
+  /** duplicate 时指向已有文档 */
+  existingId: z.string().nullable(),
+  existingTitle: z.string().nullable(),
+})
+export type KnowledgePrecheckResponse = z.infer<typeof KnowledgePrecheckResponseSchema>
+
+/**
+ * GET /research/runs/:id/evidence 单项新增的「证据源」字段（W2 流程 7，只增不改）：
+ * fileUrl 指向用户侧鉴权读取端点（按当前 access 判权，受限/无文件/规则卡时为 null）；
+ * docUpdated=true 表示文档已重发布/归档/清除，冻结定位可能失效（前端不高亮并提示）。
+ */
+export const EvidenceSourceSchema = z.object({
+  docId: z.string().nullable(),
+  /** 冻结时的切块指纹（evidence_items.contentHash） */
+  contentHash: z.string().nullable(),
+  fileUrl: z.string().nullable(),
+  docUpdated: z.boolean(),
+})
+export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>
 export type KnowledgeBatchResponse = z.infer<typeof KnowledgeBatchResponseSchema>

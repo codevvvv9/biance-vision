@@ -340,6 +340,12 @@ export async function listEvidence(runId: string): Promise<EvidenceItemRow[]> {
   return db().select().from(evidenceItems).where(eq(evidenceItems.runId, runId))
 }
 
+/** 单条证据（用户侧原文端点用；配合 getRunForUser 做归属校验） */
+export async function getEvidenceItem(id: string): Promise<EvidenceItemRow | null> {
+  const rows = await db().select().from(evidenceItems).where(eq(evidenceItems.id, id)).limit(1)
+  return rows[0] ?? null
+}
+
 /** 证据冻结：把检索命中的片段写入 evidence_items（发布回答前调用，此后资料更新不影响） */
 export async function freezeEvidence(
   runId: string,
