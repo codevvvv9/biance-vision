@@ -408,7 +408,7 @@ pnpm workspace
   user-web/admin-web 双构建（vite.admin.config → dist-admin；入口 admin.html/admin-main.tsx/AdminGate 极简登录+非超管禁入；AiSettingsModal 迁入 admin 树）；
   主进程单入口托管双产品（/admin 前缀静态+SPA 回退；产物缺失时 /admin* 回退用户端产物=平滑升级）；admin 域名根 302 /admin；
   Dockerfile/web 构建脚本/pnpm-workspace/check-i18n 随多包调整。验收：用户 dist 零 admin chunk/AiSettingsModal（产物清单核查）；本地双入口运行+门禁行为（错误 Host /admin 404、admin Host 根 302）实测通过。
-- **S2 存储与配置收敛（❗必须先于双进程上线）**：users/sessions 真源切 PostgreSQL
+- **S2 存储与配置收敛**（✓ 2026-10-23 implemented）：users/sessions 真源切 PostgreSQL
   （认证数据 fail-closed：生产 PG 不可用时**拒绝新登录与管理认证**，不降级 JSON 判权；
   JSON 仅备份、**移除「JSON 优先合并回数据库」的初始化逻辑**、不自动反向覆盖 PG）；
   ❗**DB 迁移从服务启动流程分离**（独立迁移命令/容器，为 S4 后 user-api 不承担 DDL 铺路）；
@@ -416,6 +416,7 @@ pnpm workspace
   能力配置与密钥引用**跨进程化**（迁 PG 或共享存储+版本号，admin 修改后 user-api/worker
   的进程内缓存刷新机制先定义再实施——仅给 admin 挂配置卷会让其他进程读不到新配置）；
   会话增加**用途标记**（user/admin），服务端拒绝跨用途使用；登录限速计数入 PG。
+  实施细节：① users/sessions 真源切 PG（auth_sessions 表 token 存 sha256；sessions.json 不迁移不回读=存量全失效要求重登；users.json 仅备份，「JSON 优先合并回写」已删；PG 不可用=登录/管理认证拒绝 fail-closed；用户缓存 60s 周期同步为双进程预备；worker 启动补 initUsers）；② 登录限速 login_guards 表（❗计数保存必须 await——fire-and-forget 并发 upsert 与成功登录的 delete 在连接池并行提交会丢锁定，实测复现并修复）；③ 迁移分离：dbMigrate.ts 独立入口 + compose migrate 一次性容器（app/worker BV_AUTO_MIGRATE=0 + depends_on completed_successfully；本地/脚本缺省仍自动迁移）；④ AI 配置跨进程契约=共享卷+mtime 检测重载+版本号自增（syncStoreFromDisk，解析前必查）。断言：登录回归 25 项（P 组 11 项新增：用途标记双向拒绝/限速重启持久/fail-closed 503）；admin:gate-check 35 顱；release:gate 十步全绿。
 - **S3 双进程切流**：index.ts 移除全部管理注册（含 /api/admin/ai/* 物理收口到 admin 路由模块）；
   新增 admin-api 入口（不注册用户路由）；compose 双容器（127.0.0.1:3200/3201）；
   Caddy admin 域名改指 3201；ADMIN_HOSTS 门禁退役（路由物理不存在）。
@@ -450,10 +451,10 @@ admin-api 容器为纯 Node 进程，参照 app 实测 ~60MB；当前发版后�
 - [ ] admin 域名（Basic Auth → 仅超管登录 → 六页 + AI 设置）全功能冒烟，含知识库上传→解析→发布
 - [ ] worker 队列跨端正常：admin 域名上传文档 → worker 消费 → 状态回读
 - [ ] 主站超管账号登录被拒（提示走管理域名）；管理域名普通账号登录被拒
-- [ ] 登录限速跨域名合并计数（admin 域连败 5 次后主站同 IP 也受限）且重启不丢（PG 持久化）
+- [x] 登录限速跨域名合并计数（admin 域连败后主站同 IP 也受限）且重启不丢（PG 持久化；回归 P4 断言钉住）
 - [ ] user-api 数据库账号无管理表写权限（直连尝试写 users 表被拒）
 - [ ] 回滚演练（v2）：按 §3.3 回滚条款执行——保存配置/数据备份、切流→验证→切回全程演练，DB 迁移兼容范围核对；不只是退 BV_VERSION
-- [ ] 会话用途标记生效：user 会话访问管理 API 被拒、admin 会话访问用户端按设计判定（服务端校验，非 UI 禁用）
+- [x] 会话用途标记生效：user/admin 会话跨入口一律 401（回归 P1/P2 双向断言；服务端 findSession 校验）
 
 ---
 

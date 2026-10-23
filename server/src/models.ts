@@ -58,6 +58,35 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+/**
+ * 登录会话（W3-S2：PG 唯一真源，sessions.json 退役为备份不再回读）：
+ * token 只存 sha256（库泄露不可直接重放）；purpose 用途标记（user/admin）——
+ * 签发入口决定、findSession 按当前入口类型校验，跨用途会话一律无效。
+ */
+export const authSessions = pgTable(
+  'auth_sessions',
+  {
+    /** sha256(token) hex */
+    tokenHash: text('token_hash').primaryKey(),
+    username: text('username').notNull(),
+    role: text('role').notNull(),
+    /** user | admin */
+    purpose: text('purpose').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [index('auth_sessions_expires_at_idx').on(table.expiresAt)],
+)
+
+/** 登录限速计数（W3-S2 入 PG：跨域名合并 + 重启不丢；毫秒时间戳用 bigint number） */
+export const loginGuards = pgTable('login_guards', {
+  ip: text('ip').primaryKey(),
+  winStart: bigint('win_start', { mode: 'number' }).notNull(),
+  winCount: integer('win_count').notNull(),
+  fails: integer('fails').notNull(),
+  lockedUntil: bigint('locked_until', { mode: 'number' }).notNull(),
+})
 /**
  * 操作审计记录（会话聚合式）：一次登录 = 一条记录，登录后的全部操作
  * 追加在 actions JSON 里；登录失败是无会话的独立事件记录。

@@ -20,6 +20,20 @@ services:
       timeout: 3s
       retries: 5
 
+  # 一次性迁移容器（W3-S2）：DDL 先行，app/worker 以 BV_AUTO_MIGRATE=0 不再承担迁移；
+  # 幂等可重复执行；失败（退出码 1）会阻止 app/worker 启动（depends_on completed_successfully）
+  migrate:
+    image: biance-vision:latest
+    container_name: biance-vision-migrate
+    restart: "no"
+    command: ["node", "server/dist/dbMigrate.js"]
+    environment:
+      TZ: Asia/Shanghai
+      DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # 完整线上服务：一个进程同源托管 前端页面 / API / WebSocket
   app:
     build: .
@@ -36,12 +50,15 @@ services:
       MINIO_ACCESS_KEY: biance_minio
       MINIO_SECRET_KEY: biance_minio_secret
       MINIO_BUCKET: biance-knowledge
+      BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
     # JSON 镜像 + seed-users.json + secrets.json 放宿主机这份目录，容器重建数据不丢
     volumes:
       - ./server/data:/app/server/data
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   # 队列消费进程：行情采集/补洞 + 知识文档解析（与 app 同镜像不同入口）
   worker:
@@ -57,13 +74,14 @@ services:
       MINIO_ACCESS_KEY: biance_minio
       MINIO_SECRET_KEY: biance_minio_secret
       MINIO_BUCKET: biance-knowledge
+      BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
     volumes:
       - ./server/data:/app/server/data
     depends_on:
       postgres:
         condition: service_healthy
-      app:
-        condition: service_started # 先让 app 跑迁移再消费（worker 自身 initDb 也会迁移，双保险）
+      migrate:
+        condition: service_completed_successfully
 
   # 对象存储：知识库原始文件/解析产物（BlobStore 接口；本地开发不设 MINIO_* 时自动落磁盘）
   minio:

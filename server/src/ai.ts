@@ -1,4 +1,6 @@
-import { loadJson, saveJson } from './store.js'
+import fs from 'node:fs'
+import path from 'node:path'
+import { DATA_DIR, loadJson, saveJson } from './store.js'
 import { fmtMs, kv, log } from './logger.js'
 import { marketStats, topUsdtTickers } from './binance.js'
 import type { RawTicker } from './types.js'
@@ -27,6 +29,11 @@ export interface AiProfileMasked extends Omit<AiProfile, 'apiKey'> {
 }
 
 interface AiStore {
+  /**
+   * 跨进程配置版本号（W3-S2）：每次保存自增。共享卷上的 ai-config.json 是真源，
+   * 各进程按 mtime 检测重载（syncStoreFromDisk）；version 用于日志排查进程是否读到新配置。
+   */
+  version?: number
   profiles: Record<string, AiProfile>
 }
 
@@ -50,11 +57,46 @@ function loadAiStore(): AiStore {
 }
 
 let store: AiStore = loadAiStore()
+const AI_CONFIG_FILE = path.join(DATA_DIR, 'ai-config.json')
+let storeMtime = 0
+try {
+  storeMtime = fs.statSync(AI_CONFIG_FILE).mtimeMs
+} catch {
+  /* 尚无配置文件 */
+}
+
+/**
+ * W3-S2 跨进程刷新契约：admin 保存 → 写共享卷（版本自增）；其他进程在解析档案前
+ * 按 mtime 检测并重载（S3 admin-api/user-api 分进程后仍一致）。
+ */
+function syncStoreFromDisk(): void {
+  try {
+    const m = fs.statSync(AI_CONFIG_FILE).mtimeMs
+    if (m === storeMtime) return
+    store = loadAiStore()
+    storeMtime = m
+  } catch {
+    /* 文件不可读保持现状 */
+  }
+}
+
+/** 保存（版本自增 + 记录 mtime） */
+function persistStore(operator: string | undefined, message: string, detail: Record<string, unknown>): void {
+  store = { ...store, version: (store.version ?? 0) + 1 }
+  saveJson('ai-config.json', store)
+  try {
+    storeMtime = fs.statSync(AI_CONFIG_FILE).mtimeMs
+  } catch {
+    /* noop */
+  }
+  log.info('ai', message, kv({ 操作者: operator ?? '', 配置版本: store.version, ...detail }))
+}
 
 const isComplete = (p?: Partial<AiProfile>): p is AiProfile => !!(p?.baseUrl && p?.apiKey && p?.model)
 
 /** default 档案是否完整可用（机器人与聊天入口的总开关） */
 export function isAiConfigured(): boolean {
+  syncStoreFromDisk()
   return isComplete(store.profiles[AI_DEFAULT_PROFILE])
 }
 
@@ -64,6 +106,7 @@ export function aiModelName(): string {
 
 /** 按用户解析生效档案：先匹配绑定用户的档案，否则 default */
 export function resolveAiProfile(username: string): AiProfile | null {
+  syncStoreFromDisk()
   for (const p of Object.values(store.profiles)) {
     if (p.allowedUsers?.includes(username) && isComplete(p)) return p
   }
@@ -73,6 +116,7 @@ export function resolveAiProfile(username: string): AiProfile | null {
 
 /** 按用户解析生效档案名（管理端展示用），与 resolveAiProfile 同规则 */
 export function resolveAiProfileName(username: string): string {
+  syncStoreFromDisk()
   for (const [name, p] of Object.entries(store.profiles)) {
     if (p.allowedUsers?.includes(username) && isComplete(p)) return name
   }
@@ -87,6 +131,7 @@ export function aiProfileByName(name?: string): AiProfile | undefined {
 
 /** 超管读取全部档案：Key 打码 */
 export function getAiProfilesMasked(): Record<string, AiProfileMasked> {
+  syncStoreFromDisk()
   const out: Record<string, AiProfileMasked> = {}
   for (const [name, p] of Object.entries(store.profiles)) {
     const key = p.apiKey ?? ''
@@ -190,12 +235,13 @@ export function saveAiProfiles(input: unknown, operator?: string): void {
     }
   }
   store = { profiles: next }
-  saveJson('ai-config.json', store)
-  log.ok('ai', 'AI 配置已更新', kv({
-    操作者: operator,
+  persistStore(operator, 'AI 配置已更新', {
     档案: entries.map(([n]) => n).join('、'),
     接口: hostOf(next[AI_DEFAULT_PROFILE].baseUrl),
     绑定: bound.size > 0 ? [...bound.entries()].map(([u, p]) => `${u}→${p}`).join('，') : undefined,
+  })
+  log.ok('ai', 'AI 配置已更新', kv({
+    配置版本: store.version,
   }))
 }
 
@@ -204,15 +250,13 @@ export function clearAiProfile(name: string, operator?: string): void {
   if (name === AI_DEFAULT_PROFILE) throw badRequest('default 档案不可删除（可编辑，或使用「清空全部」）')
   if (!store.profiles[name]) throw badRequest(`档案「${name}」不存在`)
   delete store.profiles[name]
-  saveJson('ai-config.json', store)
-  log.info('ai', 'AI 档案已删除', kv({ 操作者: operator, 档案: name }))
+  persistStore(operator, 'AI 档案已删除', { 档案: name })
 }
 
 /** 清空全部 AI 配置（超管操作）：机器人、聊天入口随之消失 */
 export function clearAiConfig(operator?: string): void {
   store = { profiles: {} }
-  saveJson('ai-config.json', store)
-  log.info('ai', 'AI 配置已清除', kv({ 操作者: operator }))
+  persistStore(operator ?? '', 'AI 配置已清除', {})
 }
 
 /** 测试连通性：GET {baseUrl}/models，并校验模型名是否在服务方列表中 */

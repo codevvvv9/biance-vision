@@ -591,7 +591,7 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
       reply,
     )
     if (!body) return reply
-    const user = updateChatPolicy(username, body)
+    const user = await updateChatPolicy(username, body)
     if (!user) return reply.code(404).send({ code: 'not_found', message: `用户 ${username} 不存在` })
     const chatPolicy = normalizeChatPolicy(user)
     recordAudit(session, {
@@ -608,7 +608,7 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
   app.post('/api/admin/users/:username/chat-cutoff', async (req, reply) => {
     const session = deps.requireSuperadmin(req)
     const { username } = req.params as { username: string }
-    const user = updateChatPolicy(username, { disabled: true })
+    const user = await updateChatPolicy(username, { disabled: true })
     if (!user) return reply.code(404).send({ code: 'not_found', message: `用户 ${username} 不存在` })
     const cancelledRuns: string[] = []
     let cancelDeferred = false

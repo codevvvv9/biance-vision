@@ -89,7 +89,7 @@ function persistAll(): void {
  * - 数据库不可用：纯 JSON 降级运行，功能不受影响
  */
 export async function initStorage(): Promise<void> {
-  const ok = await initDb()
+  const ok = await initDb({ migrate: process.env.BV_AUTO_MIGRATE !== '0' })
   if (!ok) return
   const loaded = await loadAllFromDb()
   if (!loaded) return
