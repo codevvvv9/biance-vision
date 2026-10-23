@@ -16,5 +16,17 @@
     "promptsHint": "Template versions / disclaimers / input config",
     "evals": "Evals & models",
     "evalsHint": "Datasets / training / metrics"
+  },
+  "gate": {
+    "verifying": "Verifying session…",
+    "user": "Username",
+    "password": "Password",
+    "submit": "Sign in to admin",
+    "busy": "Signing in…",
+    "required": "Username and password are required",
+    "loginFailed": "Sign-in failed",
+    "forbidden": "Not an admin account",
+    "forbiddenHint": "Account {{user}} is not a superadmin. Please switch accounts.",
+    "logout": "Sign out"
   }
 }

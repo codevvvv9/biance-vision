@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
-import { useAi } from './AiContext'
+import { useAi } from '../ai/AiContext'
 import type { AdminUser } from '../types'
 
 interface Props {

@@ -83,7 +83,7 @@ import {
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
-import { isAdminHost, loginEntryPolicy, loginPrecheck, registerAdminGate } from './adminGate.js'
+import { adminGate, isAdminHost, loginEntryPolicy, loginPrecheck, registerAdminGate } from './adminGate.js'
 import { startQueue } from './queue.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
@@ -281,17 +281,40 @@ await app.register(fastifyWs)
 // ---------------------------------------------------------------------------
 // 生产模式：托管 web/dist 静态资源，一个端口同时服务页面 / API / WebSocket；
 // 未构建（开发模式目录不存在）时跳过，前端仍由 Vite dev server 提供。
-// SPA 回退：非 /api 的 GET 未命中文件时返回 index.html，支持 /login 等前端路由直开
+// SPA 回退：非 /api 的 GET 未命中文件时返回 index.html，支持 /login 等前端路由直开。
+// W3-S1 双产物：web/dist-admin（管理端独立构建）以 /admin 前缀托管——
+// /admin 与 /admin/* 的 SPA 回退回 admin dist 的 index.html；产物缺失时
+// /admin* 回退用户端 index.html（与单产物时代行为一致，平滑升级）。
 // ---------------------------------------------------------------------------
+const ADMIN_DIST = process.env.BV_ADMIN_DIST || fileURLToPath(new URL('../../web/dist-admin', import.meta.url))
 if (fs.existsSync(WEB_DIST)) {
+  const adminDistExists = fs.existsSync(ADMIN_DIST)
   await app.register(fastifyStatic, { root: path.resolve(WEB_DIST) })
+  if (adminDistExists) {
+    // admin 构建入口文件名为 admin.html（vite 保留源文件名；index 选项对齐）
+    await app.register(fastifyStatic, { root: path.resolve(ADMIN_DIST), prefix: '/admin/', decorateReply: false, index: 'admin.html' })
+  }
   app.setNotFoundHandler((req, reply) => {
-    if (req.method === 'GET' && !req.url.split('?')[0].startsWith('/api/')) {
+    const p = req.url.split('?')[0]
+    if (req.method === 'GET' && !p.startsWith('/api/')) {
+      if (adminDistExists && (p === '/admin' || p.startsWith('/admin/'))) {
+        return reply.sendFile('admin.html', path.resolve(ADMIN_DIST))
+      }
       return reply.sendFile('index.html')
     }
     reply.code(404).send({ message: 'Not Found' })
   })
-  log.info('server', `托管前端静态资源：${WEB_DIST}`)
+  log.info('server', `托管前端静态资源：${WEB_DIST}${adminDistExists ? ` + 管理端 ${ADMIN_DIST}（/admin）` : ''}`)
+}
+
+// 管理域名根路径直达管理端（W3-S1：admin 域名打开即 /admin，无需手动输路径；
+// 未启用 ADMIN_HOSTS 的本地/单产物环境不受影响）
+if (adminGate.enabled) {
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method !== 'GET' || req.url.split('?')[0] !== '/') return
+    if (!isAdminHost(req.headers.host)) return
+    return reply.redirect('/admin')
+  })
 }
 
 // ---------------------------------------------------------------------------

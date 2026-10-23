@@ -21,7 +21,7 @@
 | W1-A | 知识库权限底座（access 甲，六路径统一上下文） | 本文档 §3；UI 方案 §4.6 v2 | **verified**（v0.9.7，PR#14：22 项双侧用例+线上验收） |
 | W1-B | 解析管线 R1+R2（九步/异步/OCR/headingPath fallback） | rag-pipeline §4-§7 v2 | **implemented**（v0.10.2~v0.12.2，PR#16-#33：Brooks 108 页 indexed 306s/192 chunks；OCR 链路+预检路由+headingPath 启发式已上线；headingPath 对自由格式书籍受限、parseMeta 持久化待 W2） |
 | W2 | 知识库交互（两段式删除/队列上传/差异轮询/日志下钻/批量/版本回滚/用户侧原文） | UI 方案 §3-§5 v2 | **implemented（第一批 v0.14.0：两段式删除/批量/来源访问选择器/案例下架/七端点；第二批：差异轮询+worker 心跳黄条/ParseLogDrawer/版本历史回滚——事件存 parseMeta.events 单轮覆盖（§4.3 独立事件表按证据作废）；第三批：UploadDialog 队列化（三道校验+precheck 预检+串行进度+取消回滚）/ManifestDialog（条目状态/重新同步/单条重试/勾选导入，修 G1）/用户侧原文（evidence 增 fileUrl/contentHash/docUpdated 只增字段+鉴权文件端点+CSP sandbox 双层防线+只读预览弹窗，流程 7 落地；smoke 12 项双侧断言入 gate） |
-| W3 | 双系统拆分：S1 双构建 → S2 存储配置收敛 → S3 切流 → S4 分权 | admin-isolation §3 v2 | planned |
+| W3 | 双系统拆分：S1 双构建 → S2 存储配置收敛 → S3 切流 → S4 分权 | admin-isolation §3 v2 | **S1 implemented**（packages/shared-ui 下沉+web 双构建 dist/dist-admin+服务单入口双产品托管+admin 域名根 302/admin；用户产物零 admin chunk 已验证）→ S2 存储收敛 → S3 切流 → S4 分权 |
 
 W1-A 先于 W1-B 的发布节点：**首次发布受限资料（purchase/member）之前权限过滤必须生效**。R2（扫描版/离线通道）、R3（LLM 增强，默认关、评测后拍板）按 rag-pipeline §7 排 W1 之后。
 

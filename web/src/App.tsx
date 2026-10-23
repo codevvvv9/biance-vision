@@ -16,7 +16,7 @@ import RegisterPage from './pages/RegisterPage'
 import { authReturnTo, authUrl, researchUiMode } from './research/uiMode'
 
 // 重页面全部懒加载：登录后的首屏只有大盘，K 线/研究/价格行为按需取 chunk
-const AdminApp = lazy(() => import('./admin'))
+// （W3-S1 起管理端为独立构建 admin.html/admin-main.tsx，用户端包不再含 admin 子应用）
 const AlertsPage = lazy(() => import('./pages/AlertsPage'))
 const BrooksPage = lazy(() => import('./pages/BrooksPage'))
 const MoversPage = lazy(() => import('./pages/MoversPage'))
@@ -87,24 +87,8 @@ function AuthedApp(): JSX.Element {
                 </ErrorBoundary>
               }
             />
-            {/* 管理后台子应用：主域名经 Caddy + ADMIN_HOSTS 门禁双层 404 不可达，
-                本路由仅供管理域名（btcpilot-admin，Basic Auth 门禁内）渲染界面 */}
-            <Route
-              path="/admin/*"
-              element={
-                <ErrorBoundary>
-                  <Suspense
-                    fallback={
-                      <div className="auth-wrap">
-                        <div className="auth-loading">{t('app.loadingAdmin')}</div>
-                      </div>
-                    }
-                  >
-                    <AdminApp />
-                  </Suspense>
-                </ErrorBoundary>
-              }
-            />
+            {/* W3-S1：管理端已独立构建（admin.html → dist-admin，经 /admin 前缀托管），
+                用户端产物不再包含 admin 子应用；主域名 /admin 由 Caddy+ADMIN_HOSTS 双层 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

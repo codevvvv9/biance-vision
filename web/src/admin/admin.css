@@ -1023,3 +1023,10 @@
 .diff-same { color: var(--muted); }
 .admin-hint-list { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.8; }
 .admin-hint-list code { background: var(--bg-2); padding: 0 4px; border-radius: 3px; }
+
+/* ---- W3-S1 独立 admin 入口门卫（AdminGate 登录/禁入卡，复用全局 .auth-wrap/.auth-card） ---- */
+.admin-gate-card { display: flex; flex-direction: column; gap: 12px; width: min(360px, 90vw); padding: 28px 26px; }
+.admin-gate-title { margin: 0; font-size: 16px; color: var(--text); letter-spacing: 0.04em; }
+.admin-gate-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.admin-gate-field input { width: 100%; }
+.admin-gate-hint { margin: 0; font-size: 12.5px; color: var(--text-3); line-height: 1.6; }

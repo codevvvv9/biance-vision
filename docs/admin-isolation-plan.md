@@ -403,9 +403,11 @@ pnpm workspace
 
 ### 3.2 迁移批次（v2 重排：收敛先于双进程切流；每批独立可发布）
 
-- **S1 公共包与双构建**：workspace 加 shared-ui（组件下沉，按 admin-web 实际引用集切分）+
-  user-web/admin-web 双构建（vite 双配置）；主进程暂仍单入口托管双产物（行为不变）；
-  Docker 构建、根脚本、CI 验证范围随多包调整。
+- **S1 公共包与双构建**（✓ 2026-10-23 implemented）：
+  workspace 加 shared-ui（packages/shared-ui：api/i18n+词典/types/utils/AuthContext/MiniMarkdown/Dropdown+anchoredPanel/useSpotlight/ErrorBoundary 按 admin 引用集下沉，web 侧留 shim 兼容既有相对导入）；
+  user-web/admin-web 双构建（vite.admin.config → dist-admin；入口 admin.html/admin-main.tsx/AdminGate 极简登录+非超管禁入；AiSettingsModal 迁入 admin 树）；
+  主进程单入口托管双产品（/admin 前缀静态+SPA 回退；产物缺失时 /admin* 回退用户端产物=平滑升级）；admin 域名根 302 /admin；
+  Dockerfile/web 构建脚本/pnpm-workspace/check-i18n 随多包调整。验收：用户 dist 零 admin chunk/AiSettingsModal（产物清单核查）；本地双入口运行+门禁行为（错误 Host /admin 404、admin Host 根 302）实测通过。
 - **S2 存储与配置收敛（❗必须先于双进程上线）**：users/sessions 真源切 PostgreSQL
   （认证数据 fail-closed：生产 PG 不可用时**拒绝新登录与管理认证**，不降级 JSON 判权；
   JSON 仅备份、**移除「JSON 优先合并回数据库」的初始化逻辑**、不自动反向覆盖 PG）；
