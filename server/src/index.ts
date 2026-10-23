@@ -33,6 +33,7 @@ import {
   updateSettings,
 } from './alerts.js'
 import { endSessionAudit, initAudit, recordAudit, recordFailedLogin, startSessionAudit } from './audit.js'
+import { isDbAvailable } from './db.js'
 import {
   aiModelName,
   aiProfileByName,
@@ -73,6 +74,7 @@ import {
   createSession,
   destroySession,
   findSession,
+  initSessions,
   initUsers,
   readSessionToken,
   roleOfUsername,
@@ -80,7 +82,8 @@ import {
   toPublic,
   verifyLogin,
 } from './users.js'
-import type { SessionRecord } from './users.js'
+import type { SessionPurpose, SessionRecord, UserRecord } from './users.js'
+import { LOGIN_LOCK_MS, LOGIN_WINDOW_MS, clearLoginGuard, loginGuardOf, saveLoginGuard } from './loginGuard.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { adminGate, isAdminHost, loginEntryPolicy, loginPrecheck, registerAdminGate } from './adminGate.js'
@@ -108,6 +111,7 @@ const INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h',
 // 存储初始化（PostgreSQL 优先，不可用降级 JSON），完成后再连行情流
 await initStorage()
 await initUsers()
+await initSessions()
 await initAudit()
 await initAiMemory()
 // 地域封锁（默认屏蔽中国大陆来源 IP；名单缺失时 fail-open 并告警，详见 geoblock.ts）
@@ -322,8 +326,13 @@ if (adminGate.enabled) {
 // ---------------------------------------------------------------------------
 const unauthorized = (): Error => Object.assign(new Error('未登录或会话已过期'), { statusCode: 401 })
 
+/** 访问入口对应的会话用途（W3-S2：跨用途会话一律无效） */
+function sessionPurposeOf(req: FastifyRequest): SessionPurpose {
+  return isAdminHost(req.headers.host) ? 'admin' : 'user'
+}
+
 function requireSession(req: FastifyRequest): SessionRecord {
-  const session = findSession(readSessionToken(req.headers.cookie))
+  const session = findSession(readSessionToken(req.headers.cookie), sessionPurposeOf(req))
   if (!session) throw unauthorized()
   return session
 }
@@ -387,38 +396,6 @@ registerGeoBlock(app, clientIp, (req) => isAdminHost(req.headers.host))
 // 非管理域 Host 的 /admin* 与 /api/admin/* 一律 404，与 Caddy 主域名屏蔽互为纵深
 registerAdminGate(app)
 
-// ---------------------------------------------------------------------------
-// 登录限速（公网爆破防线，进程内计数，重启即清）：
-// 每 IP 每分钟最多 5 次尝试；累计失败 10 次锁定 15 分钟（成功登录即清零）
-// ---------------------------------------------------------------------------
-const LOGIN_WINDOW_MS = 60_000
-// LOGIN_MAX_PER_WINDOW / LOGIN_LOCK_FAILS 的定义与 positiveIntEnv 校验在 env.ts
-//（入口 import 首位，先于 alerts 等模块的顶层写盘与一切初始化——非法配置须零副作用拒绝启动）
-const LOGIN_LOCK_MS = 15 * 60_000
-const LOGIN_GUARD_MAX_KEYS = 20_000
-
-interface LoginGuard {
-  winStart: number
-  winCount: number
-  fails: number
-  lockedUntil: number
-}
-const loginGuards = new Map<string, LoginGuard>()
-
-function loginGuardOf(ip: string): LoginGuard {
-  let g = loginGuards.get(ip)
-  if (g) return g
-  // 防内存膨胀：超限时先清一遍完全过期的条目
-  if (loginGuards.size >= LOGIN_GUARD_MAX_KEYS) {
-    const now = Date.now()
-    for (const [k, v] of loginGuards) {
-      if (v.lockedUntil < now && v.winStart + LOGIN_WINDOW_MS < now) loginGuards.delete(k)
-    }
-  }
-  g = { winStart: Date.now(), winCount: 0, fails: 0, lockedUntil: 0 }
-  loginGuards.set(ip, g)
-  return g
-}
 
 /** 浏览器 / 客户端标识（截断，用于会话审计） */
 function userAgent(req: FastifyRequest): string {
@@ -476,8 +453,13 @@ app.post('/api/auth/login', async (req, reply) => {
   const name = String(body.username ?? '').trim()
   const ip = clientIp(req)
   const ua = userAgent(req)
-  // 限速：锁定期内直接拒绝；滑动窗口每分钟最多 5 次尝试
-  const guard = loginGuardOf(ip)
+  // 认证 fail-closed（W3-S2）：PG 不可用时拒绝登录（不降级 JSON 判权；限速计数也在 PG，无法正常工作）
+  if (!isDbAvailable()) {
+    log.warn('auth', '认证存储不可用，登录被拒（fail-closed）', kv({ ip }))
+    throw Object.assign(new Error('认证服务暂不可用，请稍后重试'), { statusCode: 503 })
+  }
+  // 限速（PG 持久化，跨域名合并计数，重启不丢）：锁定期内直接拒绝；滑动窗口每分钟最多 5 次尝试
+  const guard = await loginGuardOf(ip)
   const now = Date.now()
   if (guard.lockedUntil > now) {
     log.warn('auth', '登录被锁定拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 剩余秒: Math.ceil((guard.lockedUntil - now) / 1000) }))
@@ -488,18 +470,24 @@ app.post('/api/auth/login', async (req, reply) => {
     guard.winCount = 0
   }
   guard.winCount++
+  await saveLoginGuard(ip, guard)
   if (guard.winCount > LOGIN_MAX_PER_WINDOW) {
     log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: guard.winCount }))
     throw Object.assign(new Error('尝试过于频繁，请一分钟后再试'), { statusCode: 429 })
   }
-  /** 统一失败出口：计数/锁定/审计/401 一处收口——入口不匹配与密码错误对外完全同构 */
-  function failLogin(logMsg: string, detail: Record<string, unknown>): never {
+  /**
+   * 统一失败出口：计数/锁定/审计/401 一处收口——入口不匹配与密码错误对外完全同构。
+   * ❗计数保存必须 await：锁定状态在响应前落库（否则两个保存点与成功登录的 delete
+   * 在连接池里并行提交，最后提交者不是逻辑最新状态——锁定丢失、重启后限速失效）。
+   */
+  async function failLogin(logMsg: string, detail: Record<string, unknown>): Promise<never> {
     guard.fails++
     if (guard.fails >= LOGIN_LOCK_FAILS) {
       guard.lockedUntil = Date.now() + LOGIN_LOCK_MS
       guard.fails = 0
       log.warn('auth', '连续登录失败触发锁定', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 锁定分钟: LOGIN_LOCK_MS / 60_000 }))
     }
+    await saveLoginGuard(ip, guard)
     recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
     log.warn('auth', logMsg, kv({ ...detail, 累计失败: guard.fails }))
     throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
@@ -511,7 +499,7 @@ app.post('/api/auth/login', async (req, reply) => {
   // 未知用户名放行至 verifyLogin 正常 401（不暴露账号存在性）。
   const pre = loginPrecheck(name, isAdminHost(req.headers.host), roleOfUsername)
   if (!pre.allowed) {
-    failLogin('登录入口与账号角色不匹配被拒（验证前预检，密码校验未执行）', {
+    await failLogin('登录入口与账号角色不匹配被拒（验证前预检，密码校验未执行）', {
       用户: name.slice(0, 64),
       角色: pre.role === 'superadmin' ? '超管' : '用户',
       入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
@@ -523,26 +511,29 @@ app.post('/api/auth/login', async (req, reply) => {
   // 入口纵深二次校验：预检放行但 verifyLogin 结果角色不匹配时仍拒绝（防
   // roleOfUsername 与 verifyLogin 的用户名匹配语义漂移），同样走同构 failLogin
   if (user && !loginEntryPolicy(user.role, isAdminHost(req.headers.host)).ok) {
-    failLogin('登录入口与账号角色不匹配被拒（对客户端与密码错误同构）', {
+    await failLogin('登录入口与账号角色不匹配被拒（对客户端与密码错误同构）', {
       用户: user.username,
       角色: user.role === 'superadmin' ? '超管' : '用户',
       入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
       ip,
     })
   }
-  if (!user) failLogin('登录失败', { 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua) })
-  // 成功登录清零该 IP 的失败计数
-  loginGuards.delete(ip)
-  const session = createSession(user)
+  // failLogin 恒抛出；`?? await` 兼作类型收窄（Promise<never> 不参与控制流分析）
+  const verified: UserRecord = user ?? (await failLogin('登录失败', { 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua) }))
+  // 成功登录清零该 IP 的失败计数（PG 行 + 缓存）
+  await clearLoginGuard(ip)
+  // 用途标记按签发入口（W3-S2）：admin 域名签发 admin 会话，其余入口 user；跨用途使用在 findSession 拒绝
+  const purpose: SessionPurpose = isAdminHost(req.headers.host) ? 'admin' : 'user'
+  const session = await createSession(verified, purpose)
   startSessionAudit(session, { ip, userAgent: ua })
   log.ok('auth', '登录成功', kv({
-    用户: user.username,
-    角色: user.role === 'superadmin' ? '超管' : '用户',
+    用户: verified.username,
+    角色: verified.role === 'superadmin' ? '超管' : '用户',
     ip,
     客户端: briefUa(ua),
   }))
   reply.header('set-cookie', sessionCookie(session.token))
-  return { user: toPublic(user) }
+  return { user: toPublic(verified) }
 })
 
 app.post('/api/auth/logout', async (req, reply) => {
@@ -552,13 +543,13 @@ app.post('/api/auth/logout', async (req, reply) => {
     endSessionAudit(session)
     log.info('auth', '已登出', kv({ 用户: session.username }))
   }
-  destroySession(token)
+  await destroySession(token)
   reply.header('set-cookie', clearSessionCookie())
   return { ok: true }
 })
 
 app.get('/api/auth/me', async (req) => {
-  const session = findSession(readSessionToken(req.headers.cookie))
+  const session = findSession(readSessionToken(req.headers.cookie), sessionPurposeOf(req))
   if (!session) throw unauthorized()
   const user = { username: session.username, role: session.role }
   return { user }
@@ -957,7 +948,7 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
     connection.socket.close(4003, 'region_blocked')
     return
   }
-  const session = findSession(readSessionToken(req.headers.cookie))
+  const session = findSession(readSessionToken(req.headers.cookie), isAdminHost(req.headers.host) ? 'admin' : 'user')
   if (!session) {
     log.warn('ws', '未登录连接被拒', kv({ ip: clientIp(req), 客户端: briefUa(String(req.headers['user-agent'] ?? '')) }))
     connection.socket.close(4001, 'unauthorized')

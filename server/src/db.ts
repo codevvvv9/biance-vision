@@ -56,8 +56,14 @@ export function isDbAvailable(): boolean {
   return available
 }
 
-/** 连接 + 自动执行迁移；失败则降级为纯 JSON 存储 */
-export async function initDb(): Promise<boolean> {
+/**
+ * 连接 + 自动执行迁移；失败则降级为纯 JSON 存储。
+ * W3-S2：迁移可从启动流程剥离——opts.migrate=false 时只连接不执行 DDL
+ * （生产 compose 走独立 migrate 容器先行，app/worker 传 BV_AUTO_MIGRATE=0；
+ * 缺省 true 保持脚本/本地开发的既有行为）。
+ */
+export async function initDb(opts: { migrate?: boolean } = {}): Promise<boolean> {
+  const runMigrate = opts.migrate ?? true
   let client: postgres.Sql | null = null
   try {
     client = postgres(DATABASE_URL, { max: 5, connect_timeout: 3, idle_timeout: 20 })
@@ -75,10 +81,12 @@ export async function initDb(): Promise<boolean> {
         structureEvents,
       },
     })
-    await migrate(conn, { migrationsFolder: MIGRATIONS_FOLDER })
+    if (runMigrate) {
+      await migrate(conn, { migrationsFolder: MIGRATIONS_FOLDER })
+    }
     db = conn
     available = true
-    log.ok('db', `PostgreSQL 已连接：${DATABASE_URL.replace(/\/\/[^@]*@/, '//***@')}`)
+    log.ok('db', `PostgreSQL 已连接：${DATABASE_URL.replace(/\/\/[^@]*@/, '//***@')}${runMigrate ? '' : '（跳过迁移，由独立迁移容器负责）'}`)
     return true
   } catch (err) {
     available = false

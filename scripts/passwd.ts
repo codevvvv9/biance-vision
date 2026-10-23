@@ -27,7 +27,7 @@ const finalPassword = password ?? crypto.randomBytes(9).toString('base64url')
 
 try {
   await initUsers()
-  updatePassword(username, finalPassword)
+  await updatePassword(username, finalPassword)
 } catch (err) {
   console.error(`✗ 修改失败：${(err as Error).message}`)
   process.exit(1)

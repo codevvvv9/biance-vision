@@ -6,6 +6,7 @@
 import './env.js'
 import { kv, log } from './logger.js'
 import { initDb } from './db.js'
+import { initUsers } from './users.js'
 import { Q_BACKFILL, Q_FUNDING, Q_INGEST, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, getBoss, startQueue, stopQueue } from './queue.js'
 import { backfillRange, backfillRecent, detectGaps, isFreshSeries, refreshGapCount } from './market/backfill.js'
 import { ingestFunding } from './market/funding.js'
@@ -29,11 +30,15 @@ const INITIAL_BACKFILL_BARS = 2000
 /** 单次缺口回补任务展开的最大段数（防爆队列） */
 const MAX_BACKFILL_SEGMENTS = 10
 
-const dbOk = await initDb()
+// BV_AUTO_MIGRATE=0：DDL 由独立 migrate 容器先行（W3-S2）；本地/缺省仍自动迁移
+const dbOk = await initDb({ migrate: process.env.BV_AUTO_MIGRATE !== '0' })
 if (!dbOk) {
   log.warn('worker', '数据库不可用，worker 退出（退出码 0，由重启策略重试）')
   process.exit(0)
 }
+// W3-S2：用户真源在 PG（研究 run 的 accessCtxForUser 按发起者角色过滤知识库）；
+// users.json 已退役为备份——未加载时按保守语义全体视为普通用户
+await initUsers()
 const boss = await startQueue()
 if (!boss) {
   log.warn('worker', '队列启动失败，worker 退出（退出码 0，由重启策略重试）')

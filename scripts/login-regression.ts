@@ -66,7 +66,7 @@ interface LoginRes {
 
 /** 必须用 node:http：Undici fetch 会忽略自定义 host 头（实测被替换为 URL authority），
  * 导致入口策略恒判为用户域名——host 头是本测试的核心变量 */
-function login(host: string, username: string, password: string): Promise<LoginRes> {
+function login(host: string, username: string, password: string, xff?: string): Promise<LoginRes> {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({ username, password })
     const req = request(
@@ -79,6 +79,7 @@ function login(host: string, username: string, password: string): Promise<LoginR
           'content-type': 'application/json',
           host,
           'content-length': String(Buffer.byteLength(body)),
+          ...(xff !== undefined ? { 'x-forwarded-for': xff } : {}),
         },
       },
       (res) => {
@@ -95,6 +96,32 @@ function login(host: string, username: string, password: string): Promise<LoginR
     )
     req.on('error', reject)
     req.end(body)
+  })
+}
+
+/** GET 请求（带 cookie/host；会话用途标记断言用） */
+function getWithCookie(host: string, getPath: string, cookie: string | undefined, xff?: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port: PORT,
+        method: 'GET',
+        path: getPath,
+        headers: {
+          host,
+          ...(cookie !== undefined ? { cookie } : {}),
+          ...(xff !== undefined ? { 'x-forwarded-for': xff } : {}),
+        },
+      },
+      (res) => {
+        let data = ''
+        res.on('data', (c: Buffer) => (data += c.toString()))
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: data }))
+      },
+    )
+    req.on('error', reject)
+    req.end()
   })
 }
 
@@ -208,11 +235,16 @@ let testUrl: URL | null = null
 const dataDir = await mkdtemp(path.join(tmpdir(), 'bv-login-reg-'))
 const adminUser = 'login-reg-admin'
 const adminPass = randomBytes(12).toString('hex')
+const normalUser = 'login-reg-user'
+const normalPass = randomBytes(12).toString('hex')
 
 try {
   await writeFile(
     path.join(dataDir, 'seed-users.json'),
-    JSON.stringify([{ username: adminUser, password: adminPass, role: 'superadmin' }]),
+    JSON.stringify([
+      { username: adminUser, password: adminPass, role: 'superadmin' },
+      { username: normalUser, password: normalPass, role: 'user' },
+    ]),
   )
   testUrl = await recreateTestDb(base)
 
@@ -268,6 +300,63 @@ try {
     check('R4b 全程仅一次登录成功（R1 管理域；主站正确密码未成功）', fullLog.split('登录成功').length - 1, 1)
   }
 
+  // ---- P 组（W3-S2 存储收敛）：会话用途标记 / 限速 PG 持久化 / 认证 fail-closed ----
+  {
+    // P4 限速重启不丢：主流程已把 127.0.0.1 锁定（R7/R8），
+    // 新起一个 server（同测试库）后该 IP 仍应被锁（旧实现为进程内计数，重启即清→本断言针住跥代）
+    const s2 = startServer({
+      PORT: String(PORT),
+      ADMIN_HOSTS: ADMIN_HOST,
+      LOGIN_MAX_PER_WINDOW: '100',
+      LOGIN_LOCK_FAILS: '3',
+      BV_DATA_DIR: dataDir,
+      DATABASE_URL: testUrl.toString(),
+    })
+    try {
+      if (!(await waitForHealth(30_000))) throw new Error(`P 组 server 未就绪：${s2.log.slice(-8).join('\n')}`)
+      const p4 = await login(MAIN_HOST, adminUser, 'still-wrong')
+      check('P4 限速锁定跨进程重启仍生效（PG 持久化）', p4.status, 429)
+
+      // 用途标记：独立 XFF IP 避开上述锁定，分别在两个入口签发会话
+      const xff = '10.99.1.7'
+      const aLogin = await login(ADMIN_HOST, adminUser, adminPass, xff)
+      check('P1a 管理域名超管登录 → 200', aLogin.status, 200)
+      const adminCookie = (aLogin.setCookie ?? '').split(';')[0]
+      const meAdminOk = await getWithCookie(ADMIN_HOST, '/api/auth/me', adminCookie, xff)
+      check('P1b admin 会话在管理入口有效', meAdminOk.status, 200)
+      const meAdminCross = await getWithCookie(MAIN_HOST, '/api/auth/me', adminCookie, xff)
+      check('P1c admin 会话在用户入口被拒（跨用途）', meAdminCross.status, 401)
+      const adminApi = await getWithCookie(ADMIN_HOST, '/api/admin/users', adminCookie, xff)
+      check('P1d admin 会话访问管理 API → 200', adminApi.status, 200)
+
+      const uLogin = await login(MAIN_HOST, normalUser, normalPass, xff)
+      check('P2a 主站普通用户登录 → 200', uLogin.status, 200)
+      const userCookie = (uLogin.setCookie ?? '').split(';')[0]
+      const meUserOk = await getWithCookie(MAIN_HOST, '/api/auth/me', userCookie, xff)
+      check('P2b user 会话在用户入口有效', meUserOk.status, 200)
+      const meUserCross = await getWithCookie(ADMIN_HOST, '/api/auth/me', userCookie, xff)
+      check('P2c user 会话在管理入口被拒（跨用途）', meUserCross.status, 401)
+    } finally {
+      await stopServer(s2.child)
+    }
+
+    // P5 认证 fail-closed：DATABASE_URL 指向死端口 → 登录 503（不降级 JSON 判权）
+    const s3 = startServer({
+      PORT: String(PORT),
+      ADMIN_HOSTS: ADMIN_HOST,
+      BV_DATA_DIR: dataDir,
+      DATABASE_URL: 'postgresql://biance_app:biance_app@127.0.0.1:1/biance_vision',
+    })
+    try {
+      if (!(await waitForHealth(30_000))) throw new Error(`P5 server 未就绪：${s3.log.slice(-8).join('\n')}`)
+      const p5 = await login(MAIN_HOST, normalUser, normalPass, '10.99.1.8')
+      check('P5 PG 不可用时登录被拒 503（fail-closed）', p5.status, 503)
+      check('P5 fail-closed 日志证据', s3.log.join('\n').includes('fail-closed'), true)
+    } finally {
+      await stopServer(s3.child)
+    }
+  }
+
   // ---- C 组：限速 env 非法值拒绝启动 ----
   // ❗必须同样传全套隔离 env：校验虽已上移到一切初始化之前，但不传隔离意味着
   // 回归一旦失效（校验被挪后）就会连业务库、写业务 data——测试不能依赖被测行为
@@ -314,4 +403,4 @@ if (failed > 0) {
   console.error(`\n登录回归未通过 ✖（${failed} 项失败）`)
   process.exit(1)
 }
-console.log('\n登录回归全部通过 ✔（16 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入）')
+console.log('\n登录回归全部通过 ✔（25 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入 / W3-S2 用途标记+限速持久化+fail-closed）')

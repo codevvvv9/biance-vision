@@ -31,7 +31,7 @@ const finalPassword = password ?? crypto.randomBytes(9).toString('base64url')
 
 try {
   await initUsers()
-  createUser(username, finalPassword, role)
+  await createUser(username, finalPassword, role)
 } catch (err) {
   console.error(`✗ 添加失败：${(err as Error).message}`)
   process.exit(1)
