@@ -183,6 +183,13 @@
       "when": 1792482252908,
       "tag": "0025_intent_classifier_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792734967698,
+      "tag": "0026_auth_sessions_login_guards",
+      "breakpoints": true
     }
   ]
 }
