@@ -1,4 +1,4 @@
-import { LOGIN_LOCK_FAILS, LOGIN_MAX_PER_WINDOW } from './env.js'
+import './env.js' // 入口首位：env 校验先于一切模块顶层写盘（C3 断言依赖）
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
@@ -69,34 +69,18 @@ import {
 import { assertChatAllowed, recordChatMessage } from './chatPolicy.js'
 import { runSlashCommand, runToolLoop } from './aiTools.js'
 import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage } from './types.js'
-import {
-  clearSessionCookie,
-  createSession,
-  destroySession,
-  findSession,
-  initSessions,
-  initUsers,
-  readSessionToken,
-  roleOfUsername,
-  sessionCookie,
-  toPublic,
-  verifyLogin,
-} from './users.js'
-import type { SessionPurpose, SessionRecord, UserRecord } from './users.js'
-import { LOGIN_LOCK_MS, LOGIN_WINDOW_MS, clearLoginGuard, loginGuardOf, saveLoginGuard } from './loginGuard.js'
+import { findSession, initSessions, initUsers, readSessionToken } from './users.js'
+import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
-import { adminGate, isAdminHost, loginEntryPolicy, loginPrecheck, registerAdminGate } from './adminGate.js'
 import { startQueue } from './queue.js'
+import { clientIpOf, registerAuthRoutes, unauthorized } from './authRoutes.js'
+
+const clientIp = clientIpOf
 import { registerMarketRoutes } from './market/routes.js'
-import { registerKnowledgeRoutes } from './knowledge/routes.js'
 import { currentBlobStoreKind } from './knowledge/blobstore.js'
-import { probeVectorSupport } from './knowledge/vector.js'
-import { refreshCapabilities } from './admin/capabilities.js'
 import { registerProductRoutes } from './research/productRoutes.js'
 import { registerResearchRunRoutes } from './research/runs/routes.js'
-import { registerAdminRoutes } from './admin/routes.js'
-import multipart from '@fastify/multipart'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 const PORT = Number(process.env.PORT || 3200)
@@ -283,64 +267,45 @@ await app.register(cors, { origin: true })
 await app.register(fastifyWs)
 
 // ---------------------------------------------------------------------------
-// 生产模式：托管 web/dist 静态资源，一个端口同时服务页面 / API / WebSocket；
-// 未构建（开发模式目录不存在）时跳过，前端仍由 Vite dev server 提供。
+// 生产模式：托管 web/dist（用户端）静态资源；未构建时跳过（Vite dev 提供）。
 // SPA 回退：非 /api 的 GET 未命中文件时返回 index.html，支持 /login 等前端路由直开。
-// W3-S1 双产物：web/dist-admin（管理端独立构建）以 /admin 前缀托管——
-// /admin 与 /admin/* 的 SPA 回退回 admin dist 的 index.html；产物缺失时
-// /admin* 回退用户端 index.html（与单产物时代行为一致，平滑升级）。
+// W3-S3：管理端产物（dist-admin）与管理 API 改由 admin-api 进程（adminApi.ts，
+// 端口 3201）承担——user-api 物理上没有管理前端与管理路由。/admin* 显式 404
+// （绝不落到 SPA 回退把用户端壳发给爬虫），与 Caddy 主域名 404 屏蔽互为纵深。
 // ---------------------------------------------------------------------------
-const ADMIN_DIST = process.env.BV_ADMIN_DIST || fileURLToPath(new URL('../../web/dist-admin', import.meta.url))
-if (fs.existsSync(WEB_DIST)) {
-  const adminDistExists = fs.existsSync(ADMIN_DIST)
+const webDistExists = fs.existsSync(WEB_DIST)
+if (webDistExists) {
   await app.register(fastifyStatic, { root: path.resolve(WEB_DIST) })
-  if (adminDistExists) {
-    // admin 构建入口文件名为 admin.html（vite 保留源文件名；index 选项对齐）
-    await app.register(fastifyStatic, { root: path.resolve(ADMIN_DIST), prefix: '/admin/', decorateReply: false, index: 'admin.html' })
+  log.info('server', `托管前端静态资源：${WEB_DIST}（user-api；管理端见 admin-api 进程）`)
+}
+// SPA 回退：dist 存在时非 /api、非 /admin 的 GET 回用户端 index.html；
+// /admin* 与 dist 缺失（开发模式）一律 404——不回退 SPA、不留 /admin* 空门
+app.setNotFoundHandler((req, reply) => {
+  const p = req.url.split('?')[0]
+  if (webDistExists && req.method === 'GET' && !p.startsWith('/api/') && !p.startsWith('/admin')) {
+    return reply.sendFile('index.html')
   }
-  app.setNotFoundHandler((req, reply) => {
-    const p = req.url.split('?')[0]
-    if (req.method === 'GET' && !p.startsWith('/api/')) {
-      if (adminDistExists && (p === '/admin' || p.startsWith('/admin/'))) {
-        return reply.sendFile('admin.html', path.resolve(ADMIN_DIST))
-      }
-      return reply.sendFile('index.html')
-    }
-    reply.code(404).send({ message: 'Not Found' })
-  })
-  log.info('server', `托管前端静态资源：${WEB_DIST}${adminDistExists ? ` + 管理端 ${ADMIN_DIST}（/admin）` : ''}`)
-}
+  reply.code(404).send({ message: 'Not Found' })
+})
+// /admin* 显式 404 路由（GET 命中即 404；其余方法走上方回退的 /admin 分支 404）
+app.get('/admin*', async () => {
+  throw Object.assign(new Error('Not Found'), { statusCode: 404 })
+})
 
-// 管理域名根路径直达管理端（W3-S1：admin 域名打开即 /admin，无需手动输路径；
-// 未启用 ADMIN_HOSTS 的本地/单产物环境不受影响）
-if (adminGate.enabled) {
-  app.addHook('onRequest', async (req, reply) => {
-    if (req.method !== 'GET' || req.url.split('?')[0] !== '/') return
-    if (!isAdminHost(req.headers.host)) return
-    return reply.redirect('/admin')
-  })
-}
 
 // ---------------------------------------------------------------------------
 // 登录鉴权：Cookie 会话；除白名单外的 /api/* 与 /ws 均要求已登录
 // ---------------------------------------------------------------------------
-const unauthorized = (): Error => Object.assign(new Error('未登录或会话已过期'), { statusCode: 401 })
-
-/** 访问入口对应的会话用途（W3-S2：跨用途会话一律无效） */
-function sessionPurposeOf(req: FastifyRequest): SessionPurpose {
-  return isAdminHost(req.headers.host) ? 'admin' : 'user'
-}
-
-function requireSession(req: FastifyRequest): SessionRecord {
-  const session = findSession(readSessionToken(req.headers.cookie), sessionPurposeOf(req))
-  if (!session) throw unauthorized()
-  return session
-}
 
 // 登录 / 会话查询走白名单，其余 /api/* 一律拦截
 app.addHook('preHandler', async (req, reply) => {
   const url = req.url.split('?')[0]
   if (!url.startsWith('/api/')) return
+  // W3-S3：管理 API 在 user-api 物理不存在——登录与否一律 404（不进鉴权，不暴露存在性）
+  if (url === '/api/admin' || url.startsWith('/api/admin/')) {
+    reply.code(404).send({ message: 'Not Found' })
+    return
+  }
   if (url === '/api/health' || url.startsWith('/api/auth/')) return
   try {
     requireSession(req)
@@ -374,27 +339,12 @@ app.addHook('onResponse', (req, reply, done) => {
  * 客户端 IP 追加在末尾，首段可被客户端伪造；按首段计数会被随机伪造 XFF 绕过限速。
  * 其次 x-real-ip（nginx 惯例）；直连时就是连接地址。
  */
-function clientIp(req: FastifyRequest): string {
-  const last = (v: string | string[] | undefined): string => {
-    const raw = Array.isArray(v) ? v.join(',') : v
-    const parts = (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-    return parts.length > 0 ? parts[parts.length - 1] : ''
-  }
-  const xf = last(req.headers['x-forwarded-for'])
-  if (xf) return xf.slice(0, 64)
-  const real = last(req.headers['x-real-ip'])
-  if (real) return real.slice(0, 64)
-  return String(req.ip ?? '')
-}
 
-// 地域封锁钩子：onRequest 阶段执行，早于鉴权与所有路由（与限速/审计同用 clientIp 口径）；
-// 管理端域名豁免地域封锁——admin 入口有 Caddy Basic Auth 门禁在前，运营者可能
-// 从大陆直连管理端而不挂代理，应用层地域封锁对它没有意义
-registerGeoBlock(app, clientIp, (req) => isAdminHost(req.headers.host))
-
-// 管理端域名门禁（ADMIN_HOSTS 未配置时零行为变化；详见 server/src/adminGate.ts）：
-// 非管理域 Host 的 /admin* 与 /api/admin/* 一律 404，与 Caddy 主域名屏蔽互为纵深
-registerAdminGate(app)
+// 地域封锁钩子：onRequest 阶段执行，早于鉴权与所有路由（与限速/审计同用 clientIp 口径）。
+// W3-S3：ADMIN_HOSTS 域名门禁退役——admin 域名流量由 Caddy 直接反代到 admin-api 进程
+// （3201），user-api 只承接主域名，不再需要按 Host 豁免地域封锁或 404 管理路径
+// （管理路由物理不存在 + /admin* 显式 404）。
+registerGeoBlock(app, clientIp)
 
 
 /** 浏览器 / 客户端标识（截断，用于会话审计） */
@@ -448,112 +398,10 @@ function bodyForLog(body: unknown): string {
   return text.length > 500 ? `${text.slice(0, 500)}…` : text
 }
 
-app.post('/api/auth/login', async (req, reply) => {
-  const body = (req.body ?? {}) as { username?: unknown; password?: unknown }
-  const name = String(body.username ?? '').trim()
-  const ip = clientIp(req)
-  const ua = userAgent(req)
-  // 认证 fail-closed（W3-S2）：PG 不可用时拒绝登录（不降级 JSON 判权；限速计数也在 PG，无法正常工作）
-  if (!isDbAvailable()) {
-    log.warn('auth', '认证存储不可用，登录被拒（fail-closed）', kv({ ip }))
-    throw Object.assign(new Error('认证服务暂不可用，请稍后重试'), { statusCode: 503 })
-  }
-  // 限速（PG 持久化，跨域名合并计数，重启不丢）：锁定期内直接拒绝；滑动窗口每分钟最多 5 次尝试
-  const guard = await loginGuardOf(ip)
-  const now = Date.now()
-  if (guard.lockedUntil > now) {
-    log.warn('auth', '登录被锁定拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 剩余秒: Math.ceil((guard.lockedUntil - now) / 1000) }))
-    throw Object.assign(new Error('尝试过于频繁，账号已临时锁定，请稍后再试'), { statusCode: 429 })
-  }
-  if (now - guard.winStart >= LOGIN_WINDOW_MS) {
-    guard.winStart = now
-    guard.winCount = 0
-  }
-  guard.winCount++
-  await saveLoginGuard(ip, guard)
-  if (guard.winCount > LOGIN_MAX_PER_WINDOW) {
-    log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: guard.winCount }))
-    throw Object.assign(new Error('尝试过于频繁，请一分钟后再试'), { statusCode: 429 })
-  }
-  /**
-   * 统一失败出口：计数/锁定/审计/401 一处收口——入口不匹配与密码错误对外完全同构。
-   * ❗计数保存必须 await：锁定状态在响应前落库（否则两个保存点与成功登录的 delete
-   * 在连接池里并行提交，最后提交者不是逻辑最新状态——锁定丢失、重启后限速失效）。
-   */
-  async function failLogin(logMsg: string, detail: Record<string, unknown>): Promise<never> {
-    guard.fails++
-    if (guard.fails >= LOGIN_LOCK_FAILS) {
-      guard.lockedUntil = Date.now() + LOGIN_LOCK_MS
-      guard.fails = 0
-      log.warn('auth', '连续登录失败触发锁定', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 锁定分钟: LOGIN_LOCK_MS / 60_000 }))
-    }
-    await saveLoginGuard(ip, guard)
-    recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
-    log.warn('auth', logMsg, kv({ ...detail, 累计失败: guard.fails }))
-    throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
-  }
-
-  // 验证前预检（2026-10-21 三轮审查 P1）：错误入口的账号在密码验证之前拒绝——
-  // server 端不执行 scrypt（彻底消除主站对管理员密码的爆破确认通道，哪怕响应
-  // 同构也不再消耗验证算力）。拒绝与密码错误完全同构（failLogin 同出口）；
-  // 未知用户名放行至 verifyLogin 正常 401（不暴露账号存在性）。
-  const pre = loginPrecheck(name, isAdminHost(req.headers.host), roleOfUsername)
-  if (!pre.allowed) {
-    await failLogin('登录入口与账号角色不匹配被拒（验证前预检，密码校验未执行）', {
-      用户: name.slice(0, 64),
-      角色: pre.role === 'superadmin' ? '超管' : '用户',
-      入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
-      ip,
-    })
-  }
-
-  const user = verifyLogin(name, String(body.password ?? ''))
-  // 入口纵深二次校验：预检放行但 verifyLogin 结果角色不匹配时仍拒绝（防
-  // roleOfUsername 与 verifyLogin 的用户名匹配语义漂移），同样走同构 failLogin
-  if (user && !loginEntryPolicy(user.role, isAdminHost(req.headers.host)).ok) {
-    await failLogin('登录入口与账号角色不匹配被拒（对客户端与密码错误同构）', {
-      用户: user.username,
-      角色: user.role === 'superadmin' ? '超管' : '用户',
-      入口: isAdminHost(req.headers.host) ? '管理域名' : '用户域名',
-      ip,
-    })
-  }
-  // failLogin 恒抛出；`?? await` 兼作类型收窄（Promise<never> 不参与控制流分析）
-  const verified: UserRecord = user ?? (await failLogin('登录失败', { 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua) }))
-  // 成功登录清零该 IP 的失败计数（PG 行 + 缓存）
-  await clearLoginGuard(ip)
-  // 用途标记按签发入口（W3-S2）：admin 域名签发 admin 会话，其余入口 user；跨用途使用在 findSession 拒绝
-  const purpose: SessionPurpose = isAdminHost(req.headers.host) ? 'admin' : 'user'
-  const session = await createSession(verified, purpose)
-  startSessionAudit(session, { ip, userAgent: ua })
-  log.ok('auth', '登录成功', kv({
-    用户: verified.username,
-    角色: verified.role === 'superadmin' ? '超管' : '用户',
-    ip,
-    客户端: briefUa(ua),
-  }))
-  reply.header('set-cookie', sessionCookie(session.token))
-  return { user: toPublic(verified) }
-})
-
-app.post('/api/auth/logout', async (req, reply) => {
-  const token = readSessionToken(req.headers.cookie)
-  const session = findSession(token)
-  if (session) {
-    endSessionAudit(session)
-    log.info('auth', '已登出', kv({ 用户: session.username }))
-  }
-  await destroySession(token)
-  reply.header('set-cookie', clearSessionCookie())
-  return { ok: true }
-})
-
-app.get('/api/auth/me', async (req) => {
-  const session = findSession(readSessionToken(req.headers.cookie), sessionPurposeOf(req))
-  if (!session) throw unauthorized()
-  const user = { username: session.username, role: session.role }
-  return { user }
-})
+// 登录/登出/会话查询（W3-S3 提取至共享模块 authRoutes.ts；user-api 恒用户入口：
+// superadmin 在本进程登录被拒——管理认证只在 admin-api 进程，入口=进程）
+const auth = registerAuthRoutes(app, { entryKind: 'user', clientIp })
+const requireSession = auth.requireSession
 
 app.get('/api/health', async () => ({
   ok: true,
@@ -689,89 +537,11 @@ app.post('/api/settings/test', async (req) => {
 // ---- AI 助手（OpenAI 兼容接口代理；API Key 只存服务端） ----
 app.get('/api/ai/status', async () => ({ configured: isAiConfigured(), model: aiModelName() }))
 
-function requireSuperadmin(req: FastifyRequest): SessionRecord {
-  const session = requireSession(req)
-  if (session.role !== 'superadmin') {
-    throw Object.assign(new Error('仅超级管理员可操作'), { statusCode: 403 })
-  }
-  return session
-}
 
-// AI 配置管理（超管）——挂在 /api/admin/ai/* 命名空间：与 admin/routes.ts 的
-// ai/overview 等同族，域名门禁对 /api/admin 前缀整体生效（含编码路径规范化）；
-// 物理位置待双系统拆分时随 admin-api 收口。用户端只留 /ai/status|news|chat。
-app.get('/api/admin/ai/config', async (req) => {
-  requireSuperadmin(req)
-  return { profiles: getAiProfilesMasked() }
-})
-
-app.put('/api/admin/ai/config', async (req) => {
-  const session = requireSuperadmin(req)
-  saveAiProfiles((req.body ?? {}) as Record<string, unknown>, session.username)
-  recordAudit(session, {
-    action: 'settings_update',
-    target: 'ai',
-    detail: `AI 配置档案（${Object.keys(getAiProfilesMasked()).join('、')}）`,
-  })
-  return { ok: true, profiles: getAiProfilesMasked() }
-})
-
-// 删除：?name=xxx 删单个档案（default 不可删）；不带 name 清空全部
-app.delete('/api/admin/ai/config', async (req) => {
-  const session = requireSuperadmin(req)
-  const name = (req.query as { name?: string }).name
-  if (name) {
-    clearAiProfile(name, session.username)
-    recordAudit(session, { action: 'settings_update', target: 'ai', detail: `删除 AI 档案「${name}」` })
-  } else {
-    clearAiConfig(session.username)
-    recordAudit(session, { action: 'settings_update', target: 'ai', detail: '清除全部 AI 配置' })
-  }
-  return { ok: true }
-})
-
-app.post('/api/admin/ai/test', async (req) => {
-  const session = requireSuperadmin(req)
-  const body = (req.body ?? {}) as Record<string, unknown>
-  const baseUrl = String(body.baseUrl ?? '').trim().replace(/\/+$/, '')
-  const apiKey = String(body.apiKey ?? '').trim()
-  const model = String(body.model ?? '').trim()
-  const profileName = (req.query as { name?: string }).name
-  if (!/^https?:\/\//.test(baseUrl) || !apiKey || !model) throw badRequest('请先填写完整的 baseUrl / apiKey / model')
-  const startedAt = Date.now()
-  const result = await testAiConnection({ baseUrl, apiKey: resolveApiKey(apiKey, aiProfileByName(profileName)?.apiKey), model })
-  const host = (() => {
-    try {
-      return new URL(baseUrl).host
-    } catch {
-      return '无效地址'
-    }
-  })()
-  log.info('ai', '连通性测试', kv({
-    操作者: session.username,
-    接口: host,
-    模型: model,
-    结果: result === 'ok' ? '成功' : result,
-    耗时: fmtMs(Date.now() - startedAt),
-  }))
-  return { ok: result === 'ok', message: result === 'ok' ? '连接成功' : result }
-})
+// W3-S3：/api/admin/ai/* 六端点已物理迁入 admin-api（adminApi.ts）——user-api 不注册。
 
 app.get('/api/ai/news', async () => ({ news: await getAiNews() }))
 
-/** 指定档案当前生效的完整系统提示词（内置 + 追加 + 实时快照示例），设置弹窗"❗"查看 */
-app.get('/api/admin/ai/prompt', async (req) => {
-  requireSuperadmin(req)
-  const profile = aiProfileByName((req.query as { name?: string }).name)
-  if (!profile) throw badRequest('档案不存在或未配置完整')
-  return { prompt: buildSystemPrompt(profile) }
-})
-
-/** 指定档案服务的可用模型列表（设置弹窗模型输入框候选） */
-app.get('/api/admin/ai/models', async (req) => {
-  requireSuperadmin(req)
-  return { models: await listAiModels((req.query as { name?: string }).name) }
-})
 
 app.post('/api/ai/chat', async (req, reply) => {
   const session = requireSession(req) // 所有登录用户可用，配置仅超管
@@ -917,25 +687,18 @@ app.delete('/api/ai/memories', async (req) => {
   return { ok: true }
 })
 
-// ---- 管理端路由已全部收口至 admin/routes.ts（registerAdminRoutes：核心域 + agents/evals/models） ----
+// ---- 管理端路由（admin 核心域/agents/evals/models）已整体迁入 admin-api 进程 ----
 
 // ---- 行情数据基础（/api/market/*，只读；采集在 worker 进程，本进程仅入队） ----
 registerMarketRoutes(app, { requireSession })
 
-// ---- 知识库（/api/admin/knowledge/*，超管；multipart 供文件上传） ----
-await app.register(multipart, {
-  limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 20 },
-})
-registerKnowledgeRoutes(app, { requireSuperadmin })
-await refreshCapabilities()
-void probeVectorSupport().catch(() => {})
+// W3-S3：知识库路由与 multipart 上传已物理迁入 admin-api；
+// user-api 不注册任何 /api/admin/*（含 /api/admin/ai/*）——路由物理不存在，非门禁拦截。
 
 // ---- 研究流程（/api/research/runs + SSE、/api/portfolio、/api/event-quotes、/api/predictions） ----
 registerResearchRunRoutes(app, { requireSession })
 registerProductRoutes(app, { requireSession })
 
-// ---- Admin 域（/api/admin/*，超管：核心域 + agents/evaluations/models + 聊天管控 + 会话追踪） ----
-registerAdminRoutes(app, { requireSuperadmin })
 
 // pg-boss 队列：app 侧只入队不消费；DB 不可用/启动失败仅告警，不阻断 app 启动
 await startQueue()
@@ -943,12 +706,12 @@ await startQueue()
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
 app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {
   // 地域封锁兜底：WS 升级请求未必都经过全局 onRequest 钩子（依赖插件版本行为），此处显式再判一次
-  // （管理端域名豁免，与 onRequest 钩子口径一致）
-  if (!isAdminHost(req.headers.host) && isRegionBlocked(clientIp(req))) {
+  if (isRegionBlocked(clientIp(req))) {
     connection.socket.close(4003, 'region_blocked')
     return
   }
-  const session = findSession(readSessionToken(req.headers.cookie), isAdminHost(req.headers.host) ? 'admin' : 'user')
+  // user-api 恒用户入口：只认 purpose='user' 会话（admin 会话在 admin-api 进程）
+  const session = findSession(readSessionToken(req.headers.cookie), 'user')
   if (!session) {
     log.warn('ws', '未登录连接被拒', kv({ ip: clientIp(req), 客户端: briefUa(String(req.headers['user-agent'] ?? '')) }))
     connection.socket.close(4001, 'unauthorized')

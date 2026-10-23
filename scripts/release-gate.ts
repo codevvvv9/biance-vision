@@ -26,6 +26,7 @@ const steps: Step[] = [
   { name: '登录回归（入口同构/计数/锁定，需 PG）', cmd: 'pnpm login:regression', skip: skipDb },
   { name: '知识库集成（需 PG）', cmd: 'pnpm knowledge:smoke', skip: skipDb },
   { name: '知识库权限底座（需 PG）', cmd: 'pnpm knowledge:access-check', skip: skipDb },
+  { name: '双入口切分（W3-S3，21 项，需 PG）', cmd: 'pnpm admin:dual-check', skip: skipDb },
   { name: '研究流程集成（需 PG+行情）', cmd: 'pnpm research:smoke', skip: skipDb },
   { name: 'web 生产构建', cmd: 'pnpm --dir web build' },
 ]
