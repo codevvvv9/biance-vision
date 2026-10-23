@@ -21,17 +21,26 @@
     "spot": {
       "label": "Spot research",
       "hint": "Analyze BTC's current trend, structure and key levels",
-      "examples": ["Is BTC trending or ranging right now?", "Explain the confirmation and invalidation of a second entry"]
+      "examples": [
+        "Is BTC trending or ranging right now?",
+        "Explain the confirmation and invalidation of a second entry"
+      ]
     },
     "perp": {
       "label": "USDT perpetual",
       "hint": "Describe a position or research question; check structure and risk together",
-      "examples": ["Can I keep holding my BTC long perp?", "What confirmations should a pullback second entry wait for?"]
+      "examples": [
+        "Can I keep holding my BTC long perp?",
+        "What confirmations should a pullback second entry wait for?"
+      ]
     },
     "event": {
       "label": "Event contract",
       "hint": "Describe strike, expiry and quote to assess participation conditions",
-      "examples": ["What is BTC's structural bias over the next 10 minutes?", "How do I judge the breakeven win rate of an event contract?"]
+      "examples": [
+        "What is BTC's structural bias over the next 10 minutes?",
+        "How do I judge the breakeven win rate of an event contract?"
+      ]
     }
   },
   "age": {
@@ -296,7 +305,14 @@
     "locateAria": "Locate {{kind}} on the chart",
     "pending": "Pending",
     "confirmedTag": "Confirmed",
-    "confirmedAt": "(confirmed at {{time}})"
+    "confirmedAt": "(confirmed at {{time}})",
+    "viewSource": "View source",
+    "sourcePreview": "Source preview",
+    "sourceUpdated": "Document has been updated; the location may be stale (citation refers to the frozen version)",
+    "sourceUnavailable": "Source unavailable (archived/purged, or no local file)",
+    "sourceLoading": "Loading source…",
+    "sourceDownload": "Download file",
+    "sourceUnsupported": "No inline preview for this format; download to view."
   },
   "form": {
     "positionTitle": "Enter position (copied from the app)",

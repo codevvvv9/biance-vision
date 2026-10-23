@@ -57,6 +57,7 @@
 - 预测：`/api/predictions/*`（创建、查询、到期后确认结算）。
 - 行情：`/api/market/*`（candles/snapshot/funding/open-interest/quality）。
 - Admin：知识库 `/api/admin/knowledge/*`、Agent 版本 `/api/admin/agents/*`、评测 `/api/admin/evaluations/*`。
+- 证据原文（W2 第三批）：`GET /api/research/runs/:id/evidence` 增 `fileUrl/contentHash/docUpdated` 源字段；`GET /api/research/evidence/:id/file` 用户侧只读原文（按当前 access 判权）。
 - 端点与字段契约详见 docs/specs/api-storage.md；请求响应共享 `shared/src/contract/` 的 zod schema。
 
 ## 流程
@@ -94,10 +95,11 @@
 
 - 点击证据：行情类证据定位到中栏 K 线的对应 bar/结构事件；知识类证据打开来源抽屉，定位原文页码/图号（引用冻结字段见 docs/specs/knowledge-rag.md）。
 - 证据列表区分支持/反对两组；反证审查的异议与普通证据同层展示。
+- 查看原文（W2 第三批）：展开证据卡/引用气泡时，源文档当前可读则显「查看原文」→ 只读预览弹窗（PDF iframe 定位冻结页码；HTML iframe 加 sandbox 无 allow-scripts；MD/TXT 文本渲染；DOCX 下载降级）；文档已更新（重发布/归档/清除）时不定位页码并提示「文档已更新，定位可能失效」；受限/已清除如实提示不可用。
 
 ### Admin 页面
 
-- `/admin/knowledge`：文档列表与状态、解析预览、发布、`search-debug` 面板。
+- `/admin/knowledge`：上传队列弹窗（三道校验+串行上传+取消回滚，URL/清单同窗 Tab）、文档卡片栅格与状态、差异轮询、解析日志抽屉、版本历史回滚、清单批量导入弹窗（条目状态/重新同步/单条重试/勾选导入）、解析预览、发布、`search-debug` 面板。
 - `/admin/agents`：版本列表、草稿编辑、发布、回滚、调试运行。
 - `/admin/evals`：数据集管理、触发评测运行、报告查看。
 

@@ -64,6 +64,12 @@ export interface CreateDocumentResult {
   duplicateOf: KnowledgeDocumentRow | null
 }
 
+/** 按 contentHash 查重（上传预检：入队前告知已有文档，避免整文件上传后才发现重复） */
+export async function findDocumentByContentHash(contentHash: string): Promise<KnowledgeDocumentRow | null> {
+  const rows = await db().select().from(knowledgeDocuments).where(eq(knowledgeDocuments.contentHash, contentHash)).limit(1)
+  return rows[0] ?? null
+}
+
 /** 新建文档（状态 uploaded）；contentHash 重复时返回 duplicateOf，不落新行 */
 export async function createDocument(input: CreateDocumentInput): Promise<CreateDocumentResult> {
   const d = db()

@@ -579,7 +579,7 @@
 .kb-side-row input { flex: 1; min-width: 0; }
 .kb-side-msg { margin: 0; font-size: 11.5px; color: var(--cyan); }
 
-/* 默认清单条目列表（ImportZone「查看默认清单」展开区） */
+/* 默认清单条目列表（旧 ImportZone 展开区，W2 第三批起由 ManifestDialog 接管） */
 .kb-manifest-list {
   list-style: none;
   margin: 8px 0 0;
@@ -922,6 +922,52 @@
   background: rgba(16, 24, 42, 0.6); color: var(--text-2); cursor: pointer; margin-right: auto;
 }
 .kb-ver-entry:hover { border-color: rgba(0, 229, 255, 0.4); }
+
+/* ---- W2 第三批：上传队列弹窗 / 清单批量导入弹窗 ---- */
+.admin-head-actions { display: flex; gap: 8px; align-items: center; }
+.kb-upload-modal { width: min(760px, 100%); }
+.kb-dropzone.compact { padding: 18px 14px; }
+.kb-url-pane { display: flex; flex-direction: column; gap: 10px; }
+.kb-url-pane .muted { margin: 0; font-size: 11.5px; }
+.kb-queue-list {
+  list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px;
+  max-height: 260px; overflow: auto; border: 1px solid var(--line-2); border-radius: 8px; padding: 6px;
+}
+.kb-queue-list li {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;
+  background: rgba(14, 20, 36, 0.5); border: 1px solid transparent; font-size: 12px; position: relative;
+}
+.kb-queue-list li.q-invalid, .kb-queue-list li.q-error { border-color: rgba(255, 77, 106, 0.35); }
+.kb-queue-list li.q-duplicate { border-color: rgba(255, 176, 32, 0.35); }
+.kb-queue-list li.q-done { border-color: rgba(52, 208, 138, 0.3); }
+.kb-queue-size { flex-shrink: 0; color: var(--text-3); font-size: 11px; }
+.kb-queue-list li.q-done .kb-upload-state { color: var(--up); }
+.kb-queue-list li.q-error .kb-upload-state, .kb-queue-list li.q-invalid .kb-upload-state { color: #ff8a9a; }
+.kb-queue-list li.q-duplicate .kb-upload-state { color: var(--amber); }
+.kb-queue-remove {
+  flex-shrink: 0; font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: var(--text-3); cursor: pointer;
+}
+.kb-queue-remove:hover { color: #ff8a9a; border-color: rgba(255, 77, 106, 0.4); }
+.kb-queue-progress {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; border-radius: 0 0 6px 6px;
+  background: rgba(255, 255, 255, 0.06); overflow: hidden;
+}
+.kb-queue-progress i { display: block; height: 100%; background: var(--cyan); transition: width 0.2s ease; }
+.kb-upload-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px;
+  border-top: 1px solid var(--line-2); padding-top: 10px;
+}
+.kb-manifest-modal { width: min(860px, 100%); }
+.kb-manifest-table td:first-child { font-family: inherit; }
+.kb-manifest-cell-title { min-width: 220px; }
+.kb-manifest-cell-title .kb-manifest-title { display: block; color: var(--text-1); }
+.kb-manifest-cell-title .kb-manifest-meta {
+  display: block; color: var(--text-3); font-size: 10.5px; max-width: 320px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kb-manifest-cell-err { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.kb-row-disabled td { opacity: 0.5; }
 
 
 /* Agent 能力卡（AdminAgentsPage）：开关 + 状态灯 + 启用态视觉差异 */

@@ -17,9 +17,14 @@ import { enqueueResearchRun } from './jobs.js'
 import { createRun, getRunForUser, getSteps, listEvidence, listRuns, requestCancel, subscribeRun } from './store.js'
 import { loadSnapshotPack } from '../../services/marketSnapshot.js'
 import { handleResearchChat } from './chat.js'
-import { listRunEventsAfter } from './store.js'
+import { listRunEventsAfter, getEvidenceItem } from './store.js'
 import { createConversation, getConversationForUser, listConversations, listMessages, patchContext, postMessage } from './conversation.js'
 import { assertChatAllowed, recordChatMessage } from '../../chatPolicy.js'
+import { accessCtxFromSession, canSeeAccess } from '../../knowledge/access.js'
+import { getDocument } from '../../knowledge/store.js'
+import { getBlobStore } from '../../knowledge/blobstore.js'
+import { contentTypeForFileName } from '../../knowledge/fileType.js'
+import { projectEvidenceSource } from './evidenceSource.js'
 
 interface RunRouteDeps {
   requireSession: (req: FastifyRequest) => SessionRecord
@@ -357,18 +362,29 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
           .orderBy(structureEvents.atTime)
       : []
     // docTitle 解析（论断引用定位）：knowledge_chunk 的 docVersionId 形如 `${docId}#${v}`
+    // W2 流程 7：同时取版本/状态/access/blobKey 供证据源投影（fileUrl/contentHash/docUpdated）
     const titles = new Map<string, string>()
+    const docRows = new Map<string, { id: string; title: string; version: number; status: string; access: string; blobKey: string | null }>()
     for (const e of evidence) {
       const docId = e.docVersionId?.split('#')[0]
       if (docId && !titles.has(docId)) {
         const rows = await getDb()!
-          .select({ title: knowledgeDocuments.title })
+          .select({
+            id: knowledgeDocuments.id,
+            title: knowledgeDocuments.title,
+            version: knowledgeDocuments.version,
+            status: knowledgeDocuments.status,
+            access: knowledgeDocuments.access,
+            blobKey: knowledgeDocuments.blobKey,
+          })
           .from(knowledgeDocuments)
           .where(eq(knowledgeDocuments.id, docId))
           .limit(1)
         titles.set(docId, rows[0]?.title ?? '')
+        if (rows[0] !== undefined) docRows.set(docId, rows[0])
       }
     }
+    const viewer = accessCtxFromSession(session)
     return {
       evidence: evidence.map((e) => ({
         id: e.id,
@@ -380,9 +396,45 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
         figureId: e.figureId,
         sourceTier: e.sourceTier,
         text: e.text,
+        ...projectEvidenceSource(e, docRows.get(e.docVersionId?.split('#')[0] ?? ''), viewer),
       })),
       structures,
     }
+  })
+
+  // 用户侧原文读取（W2 流程 7）：冻结证据 → 源文档当前文件；按当前 access 判权
+  // （历史快照三阶段语义第三阶段）；受限 403、已清除/无文件 404；HTML 加 CSP sandbox
+  // 隔离脚本注入面（前端 iframe 再叠 sandbox 属性，双层防线）
+  app.get('/api/research/evidence/:id/file', async (req, reply) => {
+    const session = deps.requireSession(req)
+    if (!ensureStorage(reply)) return reply
+    const { id } = req.params as { id: string }
+    const evidence = await getEvidenceItem(id)
+    if (!evidence) return reply.code(404).send({ code: 'not_found', message: '证据不存在' })
+    const run = await getRunForUser(evidence.runId, session.username)
+    if (!run) return reply.code(404).send({ code: 'not_found', message: '研究运行不存在' })
+    if (evidence.kind !== 'knowledge_chunk' || evidence.docVersionId === null) {
+      return reply.code(404).send({ code: 'no_source_file', message: '该证据没有本地原文（规则卡/市场数据/网页）' })
+    }
+    const doc = await getDocument(evidence.docVersionId.split('#')[0])
+    if (!doc || doc.status === 'archived') {
+      return reply.code(404).send({ code: 'source_removed', message: '源文档已归档或清除，原文不可用' })
+    }
+    if (!canSeeAccess(accessCtxFromSession(session), doc.access)) {
+      return reply.code(403).send({ code: 'access_restricted', message: '该资料的访问级别限制了原文查看' })
+    }
+    if (doc.blobKey === null || doc.blobKey === '') {
+      return reply.code(404).send({ code: 'no_source_file', message: '源文档没有本地文件（URL/清单导入）' })
+    }
+    const buf = await getBlobStore().get(doc.blobKey)
+    if (buf === null) return reply.code(404).send({ code: 'not_found', message: '原始文件已丢失（blob 缺失）' })
+    const ct = contentTypeForFileName(doc.fileName)
+    reply.header('content-type', ct)
+    reply.header('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.fileName || doc.title)}`)
+    // nosniff 防 MIME 嗅探；HTML 再加 CSP sandbox（禁脚本/表单——服务端白名单防线）
+    reply.header('x-content-type-options', 'nosniff')
+    if (ct.startsWith('text/html')) reply.header('content-security-policy', 'sandbox')
+    return reply.send(buf)
   })
 
   app.post('/api/research/runs/:id/cancel', async (req, reply) => {

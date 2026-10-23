@@ -35,6 +35,7 @@ import {
   updateRuleCardDraft,
 } from './ruleCards.js'
 import {
+  findDocumentByContentHash,
   getDocument,
   getKnowledgeVersion,
   listChunksOfVersion,
@@ -46,6 +47,7 @@ import {
   workingVersionId,
 } from './store.js'
 import { getBlobStore } from './blobstore.js'
+import { contentTypeForFileName } from './fileType.js'
 import { vectorStatus } from './vector.js'
 
 interface KnowledgeRouteDeps {
@@ -368,6 +370,59 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
     return { summary, failures, entries: await listManifestEntries() }
   })
 
+  // ---- W2 第三批：清单条目状态（ManifestDialog 数据源，修 G1 断链半边） ----
+  const manifestEntryDto = (r: Awaited<ReturnType<typeof listManifestEntries>>[number]): Record<string, unknown> => ({
+    id: r.id,
+    url: r.url,
+    type: r.type,
+    title: r.title,
+    topics: r.topics,
+    status: r.status,
+    docId: r.docId,
+    lastError: r.lastError,
+    enabled: r.enabled,
+    access: r.access,
+    sourceTier: r.sourceTier,
+    importMethod: r.importMethod,
+    notes: r.notes,
+    updatedAt: r.updatedAt.getTime(),
+  })
+
+  app.get('/api/admin/knowledge/manifest-entries', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    return { entries: (await listManifestEntries()).map(manifestEntryDto) }
+  })
+
+  // 从默认清单重新同步（只 upsert 条目入库，不抓取；抓取仍走 import-manifest）
+  app.post('/api/admin/knowledge/manifest-entries/sync', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = z.object({ entries: z.array(ManifestEntrySchema).min(1).max(200) }).safeParse(req.body ?? {})
+    if (!body.success) return badRequest(reply, body.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('；'))
+    const count = await upsertManifestEntries(body.data.entries)
+    recordAudit(session, {
+      action: 'knowledge_import',
+      target: 'manifest',
+      detail: `从默认清单重新同步 ${count} 条（仅入库不抓取）`,
+    })
+    return { synced: count, entries: (await listManifestEntries()).map(manifestEntryDto) }
+  })
+
+  // ---- W2 第三批：上传预检（三道校验的第三道：contentHash 服务端查重） ----
+  app.post('/api/admin/knowledge/documents/precheck', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = z.object({ contentHash: z.string().length(64) }).safeParse(req.body ?? {})
+    if (!body.success) return badRequest(reply, 'contentHash 必填（sha256 hex，64 字符）')
+    const existing = await findDocumentByContentHash(body.data.contentHash)
+    return {
+      duplicate: existing !== null,
+      existingId: existing?.id ?? null,
+      existingTitle: existing?.title ?? null,
+    }
+  })
+
   // ---- 文档列表 / 预览 ----
   app.get('/api/admin/knowledge/documents', async (req, reply) => {
     deps.requireSuperadmin(req)
@@ -414,17 +469,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance, deps: KnowledgeRou
       return reply.code(404).send({ code: 'not_found', message: '原始文件不存在（URL/manifest 导入无本地文件）' })
     const buf = await getBlobStore().get(doc.blobKey)
     if (buf === null) return reply.code(404).send({ code: 'not_found', message: '原始文件已丢失（blob 缺失）' })
-    const ext = (doc.fileName.split('.').pop() ?? '').toLowerCase()
-    const ct: Record<string, string> = {
-      pdf: 'application/pdf',
-      html: 'text/html; charset=utf-8',
-      htm: 'text/html; charset=utf-8',
-      txt: 'text/plain; charset=utf-8',
-      md: 'text/markdown; charset=utf-8',
-      markdown: 'text/markdown; charset=utf-8',
-      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    }
-    reply.header('content-type', ct[ext] ?? 'application/octet-stream')
+    reply.header('content-type', contentTypeForFileName(doc.fileName))
     reply.header('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.fileName || doc.title)}`)
     return reply.send(buf)
   })

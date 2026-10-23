@@ -10,6 +10,8 @@
  * 4) 短词召回：「H2 是什么」经 terms[] GIN 命中（不依赖向量）
  * 5) 引用定位：GET chunk 语义（原文 + 邻接）；重解析后旧版本引用不变（不可变切块）
  * 6) contentHash 重复导入 → duplicate；pgvector/embedding 缺省时显式跳过（parseMeta 记录）
+ * 11) W2 第三批：上传预检（findDocumentByContentHash）/ 清单条目状态（sync 入库+状态保留）/
+ *     证据源投影（fileUrl/docUpdated 双侧：公开/受限/重发布/清除/归档/无文件/规则卡）
  *
  * 每次运行清理本脚本创建的 smoke-* 文档与知识版本，可重复执行。
  * 不依赖 research-py（用 MD 原生通道）；不依赖外部网络。
@@ -336,12 +338,73 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
   check('W2 版本历史可列出（createdAt 为 Date）', versions.every((v) => v.createdAt instanceof Date), `n=${versions.length}`)
 }
 
+// ---- 11) W2 第三批：上传预检 / 清单条目状态 / 证据源投影（用户侧原文） ----
+{
+  const { findDocumentByContentHash, upsertManifestEntries, listManifestEntries, setManifestEntryStatus } = await import(
+    '../server/src/knowledge/store.js'
+  )
+
+  // 上传预检（UploadDialog 第三道校验的存储层）
+  const docRow = await getDocument(ingested.docId)
+  const hit = await findDocumentByContentHash(docRow?.contentHash ?? '')
+  check('W3 预检：已知 contentHash 命中', hit?.id === ingested.docId, hit?.title ?? '未命中')
+  const miss = await findDocumentByContentHash('0'.repeat(64))
+  check('W3 预检：未知 contentHash 不命中', miss === null)
+
+  // 清单条目（ManifestDialog 数据源）：sync 入库 → 状态/lastError 落库 → 重新同步保留状态
+  const entry = {
+    id: 'smoke-manifest-1',
+    url: 'https://example.com/brooks-glossary',
+    type: 'official_glossary' as const,
+    title: 'smoke 清单条目',
+    topics: ['h2'],
+    access: 'public' as const,
+    sourceTier: 'official' as const,
+    importMethod: 'url_fetch' as const,
+    enabled: true,
+  }
+  await upsertManifestEntries([entry])
+  await setManifestEntryStatus(entry.id, 'failed', { lastError: 'smoke 模拟抓取失败' })
+  const row1 = (await listManifestEntries()).find((r) => r.id === entry.id)
+  check('W3 清单条目：入库 + 状态与 lastError 可读', row1?.status === 'failed' && row1?.lastError === 'smoke 模拟抓取失败')
+  await upsertManifestEntries([{ ...entry, title: 'smoke 清单条目 v2' }])
+  const row2 = (await listManifestEntries()).find((r) => r.id === entry.id)
+  check('W3 清单条目：重新同步覆盖字段、导入状态保留', row2?.title === 'smoke 清单条目 v2' && row2?.status === 'failed')
+
+  // 证据源投影（用户侧原文，纯函数双侧断言）
+  const { projectEvidenceSource } = await import('../server/src/research/runs/evidenceSource.js')
+  const { PUBLIC_VIEWER } = await import('../server/src/knowledge/access.js')
+  const ev = { id: 'ev-smoke-1', kind: 'knowledge_chunk' as const, docVersionId: `${ingested.docId}#1`, contentHash: 'chunkhash' }
+  const base = { id: docRow!.id, version: docRow!.version, status: docRow!.status, access: docRow!.access, blobKey: docRow!.blobKey }
+  const p1 = projectEvidenceSource(ev, base, PUBLIC_VIEWER)
+  check(
+    'W3 证据源：公开文档普通用户可读（fileUrl+docId+指纹透传）',
+    p1.fileUrl === '/api/research/evidence/ev-smoke-1/file' && p1.docId === ingested.docId && p1.contentHash === 'chunkhash' && p1.docUpdated === false,
+    JSON.stringify(p1),
+  )
+  const pUser = projectEvidenceSource(ev, { ...base, access: 'purchase' }, PUBLIC_VIEWER)
+  const pAdmin = projectEvidenceSource(ev, { ...base, access: 'purchase' }, ADMIN_VIEWER)
+  check('W3 证据源：受限文档普通用户 fileUrl=null（方案甲）', pUser.fileUrl === null, JSON.stringify(pUser))
+  check('W3 证据源：受限文档超管仍可读（双侧）', pAdmin.fileUrl !== null)
+  const pBump = projectEvidenceSource(ev, { ...base, version: base.version + 1 }, PUBLIC_VIEWER)
+  check('W3 证据源：文档重发布后 docUpdated=true（不定位提示失效）', pBump.docUpdated === true && pBump.fileUrl !== null)
+  const pGone = projectEvidenceSource(ev, null, ADMIN_VIEWER)
+  check('W3 证据源：文档已清除 fileUrl=null + docUpdated=true', pGone.fileUrl === null && pGone.docUpdated === true)
+  const pArchived = projectEvidenceSource(ev, { ...base, status: 'archived' }, ADMIN_VIEWER)
+  check('W3 证据源：归档文档 fileUrl=null + docUpdated=true', pArchived.fileUrl === null && pArchived.docUpdated === true)
+  const pNoBlob = projectEvidenceSource(ev, { ...base, blobKey: null }, PUBLIC_VIEWER)
+  check('W3 证据源：URL 导入无本地文件 fileUrl=null', pNoBlob.fileUrl === null)
+  const pRule = projectEvidenceSource({ id: 'ev2', kind: 'rule_card', docVersionId: 'rulecard:x#v1', contentHash: null }, null, ADMIN_VIEWER)
+  check('W3 证据源：规则卡证据无原文入口', pRule.fileUrl === null && pRule.docUpdated === false && pRule.docId === null)
+}
+
 // ---- 清理 ----
 await db.execute(sql`delete from knowledge_chunks where doc_id in (select id from knowledge_documents where title like 'smoke-%')`)
 await db.execute(sql`delete from knowledge_documents where title like 'smoke-%'`)
 await db.execute(sql`delete from knowledge_versions where note = 'knowledge-smoke'`)
 await db.execute(sql`delete from rule_cards where created_by = 'knowledge-smoke'`)
 await db.execute(sql`delete from case_windows where created_by = 'knowledge-smoke'`)
+await db.execute(sql`delete from knowledge_manifest_entries where id like 'smoke-%'`)
 
 console.log(failures === 0 ? '\n全部通过 ✔' : `\n失败 ${failures} 项 ✖`)
 process.exit(failures === 0 ? 0 : 1)

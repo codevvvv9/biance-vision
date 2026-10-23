@@ -11,6 +11,8 @@
 
 > **W2 落地调整（2026-10-23，第二批，按证据收敛）**：解析事件**不建独立表**——W1-B 已将 research-py 阶段事件存 `parseMeta.events`（真实数据在库），W2 第二批补 Node 侧 stage 打点（enqueued/chunking/embedding/completed/failed）与 `runNo` 轮次号后直接作为 `GET /documents/:id/events` 数据源（单轮=最近一轮、覆盖语义、上限 200 条）；worker 心跳复用 `app_settings` KV（30s 上报、90s 失联阈值），不建 `knowledge_worker_heartbeat` 表。UI 方案 §4.3 原表设计作废，其余语义（失败下钻/黄条/轮次展示）不变。
 
+> **W2 第三批（2026-10-23，队列上传/清单状态/用户侧原文）**：① 上传改队列对话框（UploadDialog，替代 ImportZone）——入队三道校验（格式/大小/name+size 队列内重复）+ `POST /documents/precheck` contentHash 服务端预检；串行上传（XHR 进度）；「取消」= abort + purge 本次已新建文档（回滚语义）。② `GET /manifest-entries`（DB 行投影含 status/lastError/docId）+ `POST /manifest-entries/sync`（默认清单 upsert 入库不抓取，导入状态保留）；ManifestDialog 勾选导入/单条重试（修 G1）。③ `GET /api/research/runs/:id/evidence` 只增字段 `docId/contentHash/fileUrl/docUpdated`（`EvidenceSourceSchema`）——fileUrl 指向新端点 `GET /api/research/evidence/:id/file`（用户读自己 run 的冻结证据→源文档当前文件；按当前 access 判权：受限 403、归档/清除 404、无本地文件 404；HTML 响应带 CSP sandbox + nosniff，前端 iframe 再叠 sandbox 无 allow-scripts 双层防线）；docUpdated=冻结版本号≠当前 version/归档/清除 → 前端不定位页码并提示「文档已更新，定位可能失效」（M6 可信降级）。投影纯函数 `server/src/research/runs/evidenceSource.ts`（smoke 双侧断言：公开/受限/重发布/清除/归档/无文件/规则卡）。
+
 ## 实现状态（2026-10-01）
 
 已实现并验证（`pnpm knowledge:smoke` 28 项全绿 + HTTP 端到端：上传→worker 解析→发布→search-debug）：
@@ -54,7 +56,7 @@
 - 表 `knowledge_versions`：发布快照，不可变；Agent 版本绑定 `knowledgeVersion` 与检索策略（见 `docs/specs/admin-security.md`）。
 - 表 `knowledge_manifest_entries`：批量导入清单条目（对齐 `docs/references/knowledge-source-manifest.json` 的字段语义）。
 - 解析产物与原始文件存 MinIO，元数据落 PG。
-- API `/api/admin/knowledge/*`：`POST /documents`（上传，含 sourceTier/access）、`POST /documents/import-url`、`POST /documents/import-manifest`、`POST /documents/import-parsed`（离线通道）、`GET /documents`、`GET /documents/statuses?ids=`（差异轮询轻量端点：id/status/errorCode/ageMs + worker 心跳投影）、`GET /documents/:id/events`（解析日志：单轮 stage 时间线）、`GET /documents/:id/preview`、`POST /documents/:id/reparse`、`POST /documents/:id/publish`、`DELETE /documents/:id?purge=`（两段式删除）、`POST /documents/batch`（批量 publish/reparse/delete，部分失败汇报）、`GET /versions`、`GET /versions/current`、`POST /versions/:id/restore`（旧集合发布新版本）、`POST /cases/:id/unpublish`、`GET /search-debug?query=`（各阶段打点）、`GET /chunks/:id`（引用定位原文）。契约见 `shared/src/contract/knowledge.ts`。
+- API `/api/admin/knowledge/*`：`POST /documents`（上传，含 sourceTier/access）、`POST /documents/precheck`（W2 第三批：contentHash 上传前查重）、`GET /manifest-entries` + `POST /manifest-entries/sync`（W2 第三批：清单条目状态/默认清单重新同步，ManifestDialog 数据源）、`POST /documents/import-url`、`POST /documents/import-manifest`、`POST /documents/import-parsed`（离线通道）、`GET /documents`、`GET /documents/statuses?ids=`（差异轮询轻量端点：id/status/errorCode/ageMs + worker 心跳投影）、`GET /documents/:id/events`（解析日志：单轮 stage 时间线）、`GET /documents/:id/preview`、`POST /documents/:id/reparse`、`POST /documents/:id/publish`、`DELETE /documents/:id?purge=`（两段式删除）、`POST /documents/batch`（批量 publish/reparse/delete，部分失败汇报）、`GET /versions`、`GET /versions/current`、`POST /versions/:id/restore`（旧集合发布新版本）、`POST /cases/:id/unpublish`、`GET /search-debug?query=`（各阶段打点）、`GET /chunks/:id`（引用定位原文）。契约见 `shared/src/contract/knowledge.ts`。
 - 知识后端：`KnowledgeStore` 接口（upsertChunks/searchHybrid/fetchCitation），首版 pgvector 实现。
 
 ## 流程

@@ -1,7 +1,8 @@
 /**
  * /admin/knowledge 知识库管理（超管）：
- * 导入（拖拽多文件 / URL / manifest）→ 文档卡片栅格（状态机流转）→ 预览抽屉（分块 md / 原文原生渲染）
- * → 解析日志抽屉（W2：stage 时间线失败下钻）→ 检索调试 → 规则卡 / 案例窗。
+ * 上传队列弹窗（W2 第三批：三道校验/串行/放弃回滚；URL/清单同窗 Tab）→ 文档卡片栅格
+ * （状态机流转）→ 预览抽屉（分块 md / 原文原生渲染）→ 解析日志抽屉（stage 时间线失败下钻）
+ * → 检索调试 → 规则卡 / 案例窗 → 版本历史弹窗 + 清单批量导入弹窗（条目状态/重试/勾选导入）。
  * W2 第二批：3s 全量轮询替换为差异轮询（useDocPolling——2s 轻量 statuses，
  * 状态翻转才全量刷新，全终态自动停；worker 心跳缺失时顶部黄条）。
  */
@@ -10,11 +11,12 @@ import { api } from '../api'
 import type { KnowledgeDocument } from 'biance-vision-brooks'
 import CasesPanel from './knowledge/CasesPanel'
 import DocGrid from './knowledge/DocGrid'
-import ImportZone from './knowledge/ImportZone'
+import ManifestDialog from './knowledge/ManifestDialog'
 import ParseLogDrawer from './knowledge/ParseLogDrawer'
 import PreviewDrawer from './knowledge/PreviewDrawer'
 import RuleCardsPanel from './knowledge/RuleCardsPanel'
 import SearchDebugPanel from './knowledge/SearchDebugPanel'
+import UploadDialog from './knowledge/UploadDialog'
 import VersionHistoryDialog from './knowledge/VersionHistoryDialog'
 import { useDocPolling } from './knowledge/hooks/useDocPolling'
 
@@ -25,6 +27,8 @@ export default function AdminKnowledgePage(): JSX.Element {
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [logsId, setLogsId] = useState<string | null>(null)
   const [showVersions, setShowVersions] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [showManifest, setShowManifest] = useState(false)
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -116,6 +120,10 @@ export default function AdminKnowledgePage(): JSX.Element {
             ))}
           </div>
         </div>
+        <div className="admin-head-actions">
+          <button className="btn btn-primary" onClick={() => setShowUpload(true)}>+ 上传资料</button>
+          <button className="btn" onClick={() => setShowManifest(true)}>清单导入</button>
+        </div>
       </div>
       {error !== '' && <p className="err-text">{error}</p>}
       {workerDead && (
@@ -123,8 +131,6 @@ export default function AdminKnowledgePage(): JSX.Element {
           解析队列不可用：worker 未运行（心跳缺失）。新上传的文档会停留在「待解析」，请启动 worker 后自动恢复。
         </div>
       )}
-
-      <ImportZone onDone={() => { void refresh(); refreshSoon() }} />
 
       <DocGrid
         docs={shown}
@@ -153,6 +159,28 @@ export default function AdminKnowledgePage(): JSX.Element {
           onRestored={() => {
             setError('已切回旧版本（以旧集合生成了新版本）')
             void refresh()
+          }}
+        />
+      )}
+      {showUpload && (
+        <UploadDialog
+          onClose={() => setShowUpload(false)}
+          onDone={() => {
+            void refresh()
+            refreshSoon()
+          }}
+          onOpenManifest={() => {
+            setShowUpload(false)
+            setShowManifest(true)
+          }}
+        />
+      )}
+      {showManifest && (
+        <ManifestDialog
+          onClose={() => setShowManifest(false)}
+          onImported={() => {
+            void refresh()
+            refreshSoon()
           }}
         />
       )}
