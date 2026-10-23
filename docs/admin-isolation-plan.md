@@ -417,9 +417,18 @@ pnpm workspace
   的进程内缓存刷新机制先定义再实施——仅给 admin 挂配置卷会让其他进程读不到新配置）；
   会话增加**用途标记**（user/admin），服务端拒绝跨用途使用；登录限速计数入 PG。
   实施细节：① users/sessions 真源切 PG（auth_sessions 表 token 存 sha256；sessions.json 不迁移不回读=存量全失效要求重登；users.json 仅备份，「JSON 优先合并回写」已删；PG 不可用=登录/管理认证拒绝 fail-closed；用户缓存 60s 周期同步为双进程预备；worker 启动补 initUsers）；② 登录限速 login_guards 表（❗计数保存必须 await——fire-and-forget 并发 upsert 与成功登录的 delete 在连接池并行提交会丢锁定，实测复现并修复）；③ 迁移分离：dbMigrate.ts 独立入口 + compose migrate 一次性容器（app/worker BV_AUTO_MIGRATE=0 + depends_on completed_successfully；本地/脚本缺省仍自动迁移）；④ AI 配置跨进程契约=共享卷+mtime 检测重载+版本号自增（syncStoreFromDisk，解析前必查）。断言：登录回归 25 项（P 组 11 项新增：用途标记双向拒绝/限速重启持久/fail-closed 503）；admin:gate-check 35 顱；release:gate 十步全绿。
-- **S3 双进程切流**：index.ts 移除全部管理注册（含 /api/admin/ai/* 物理收口到 admin 路由模块）；
+- **S3 双进程切流**（✓ 2026-10-23 implemented）：index.ts 移除全部管理注册（含 /api/admin/ai/* 物理收口到 admin 路由模块）；
   新增 admin-api 入口（不注册用户路由）；compose 双容器（127.0.0.1:3200/3201）；
   Caddy admin 域名改指 3201；ADMIN_HOSTS 门禁退役（路由物理不存在）。
+  实施细节：index.ts 登录块提取共享 authRoutes.ts（❗入口语义改为进程级 entryKind——user-api
+  恒拒超管、admin-api 恒拒普通账号，不再依赖 ADMIN_HOSTS；❗双进程 clientIp 必须共享同一实现
+  「XFF 末段+x-real-ip+req.ip」——口径漂移=限速计数在 PG 行上分裂，实测踩坑；❗loginGuard
+  读路径改为每次直查 PG——双进程内存缓存互不可见会漏判锁定）；adminApi.ts 新入口（登录+管理
+  路由+知识库+/api/admin/ai/* 六端点迁入+dist-admin 托管+根 302+startQueue 入队）；
+  user-api /admin* 与 /api/admin/* 一律 404（preHandler 短路，登录与否同态）；compose
+  admin-api 服务（127.0.0.1:3201）+app 端口收回环。断言：双入口自测 21 项（D 组：管理 API
+  在 user-api 404/admin-api 200/登录入口分离/会话用途隔离）入 release:gate；登录回归 25 项
+  改双进程架构。
 - **S4 数据库分权收尾**：user-api 专用 DB 账号表级最小权限；管理配置卷只挂 admin 容器（S2 已保证其他进程不依赖该卷）。
 
 ### 3.3 已知设计难点（实施前必须想清楚）
@@ -446,8 +455,8 @@ admin-api 容器为纯 Node 进程，参照 app 实测 ~60MB；当前发版后�
 ### 3.5 验收清单
 
 - [ ] 主域名 dist 产物无任何 admin chunk 与 AiSettingsModal（构建产物清单核查）
-- [ ] user-api 进程 `GET /api/admin/users` 返回 404（路由物理不存在，非门禁拦截）
-- [ ] user-api 进程源码 grep 无 registerAdminRoutes/registerKnowledgeListeners 引用
+- [x] user-api 进程 `GET /api/admin/users` 返回 404（路由物理不存在，非门禁拦截；D3 断言）
+- [x] user-api 进程源码 grep 无 registerAdminRoutes/registerKnowledgeListeners 引用
 - [ ] admin 域名（Basic Auth → 仅超管登录 → 六页 + AI 设置）全功能冒烟，含知识库上传→解析→发布
 - [ ] worker 队列跨端正常：admin 域名上传文档 → worker 消费 → 状态回读
 - [ ] 主站超管账号登录被拒（提示走管理域名）；管理域名普通账号登录被拒

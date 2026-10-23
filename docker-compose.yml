@@ -41,7 +41,8 @@ services:
     container_name: biance-vision-app
     restart: unless-stopped
     ports:
-      - "3200:3200"
+      # W3-S3 收回环：公网入口只剩 Caddy 80/443（app=主域名，admin-api=管理域名）
+      - "127.0.0.1:3200:3200"
     environment:
       TZ: Asia/Shanghai # 日志时间戳用北京时间（容器默认 UTC）
       DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
@@ -52,6 +53,31 @@ services:
       MINIO_BUCKET: biance-knowledge
       BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
     # JSON 镜像 + seed-users.json + secrets.json 放宿主机这份目录，容器重建数据不丢
+    volumes:
+      - ./server/data:/app/server/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # 管理 API 独立进程（W3-S3）：只注册管理能力（登录/知识库/agents/evals/AI 配置），
+  # 不含任何用户路由；Caddy 管理域名反代 127.0.0.1:3201。与 app 同镜像不同入口。
+  admin-api:
+    image: biance-vision:latest
+    container_name: biance-vision-admin-api
+    restart: unless-stopped
+    command: ["node", "server/dist/adminApi.js"]
+    ports:
+      - "127.0.0.1:3201:3200"
+    environment:
+      TZ: Asia/Shanghai
+      DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: biance_minio
+      MINIO_SECRET_KEY: biance_minio_secret
+      MINIO_BUCKET: biance-knowledge
+      BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
     volumes:
       - ./server/data:/app/server/data
     depends_on:

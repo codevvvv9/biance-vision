@@ -45,9 +45,10 @@ type PostgresFactory = (
 const nodeRequire = createRequire(new URL('../server/package.json', import.meta.url))
 const postgres = nodeRequire('postgres') as PostgresFactory
 
-const PORT = 3201
-const ADMIN_HOST = 'login-regression.test'
-const MAIN_HOST = 'www.main.test'
+const PORT = 3201 // user-api（W3-S3：入口=进程，主站语义）
+const ADMIN_PORT = 3202 // admin-api（管理语义）
+const ADMIN_HOST = 'login-regression.test' // 语义标签：ADMIN_HOST → admin-api 进程
+const MAIN_HOST = 'www.main.test' // 语义标签：MAIN_HOST → user-api 进程
 const TEST_DB = 'bv_login_regression'
 const SERVER_DIR = new URL('../server/', import.meta.url).pathname
 
@@ -72,7 +73,7 @@ function login(host: string, username: string, password: string, xff?: string): 
     const req = request(
       {
         host: '127.0.0.1',
-        port: PORT,
+        port: host === ADMIN_HOST ? ADMIN_PORT : PORT,
         method: 'POST',
         path: '/api/auth/login',
         headers: {
@@ -105,7 +106,7 @@ function getWithCookie(host: string, getPath: string, cookie: string | undefined
     const req = request(
       {
         host: '127.0.0.1',
-        port: PORT,
+        port: host === ADMIN_HOST ? ADMIN_PORT : PORT,
         method: 'GET',
         path: getPath,
         headers: {
@@ -142,8 +143,8 @@ function baseDatabaseUrl(): URL {
   return new URL(url ?? 'postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision')
 }
 
-function startServer(overrides: Record<string, string>): { child: ChildProcess; log: string[] } {
-  const child = spawn('npx', ['tsx', 'src/index.ts'], {
+function startServer(overrides: Record<string, string>, entry = 'src/index.ts'): { child: ChildProcess; log: string[] } {
+  const child = spawn('npx', ['tsx', entry], {
     cwd: SERVER_DIR,
     env: { ...process.env, ...overrides },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -171,11 +172,11 @@ async function stopServer(child: ChildProcess): Promise<void> {
   })
 }
 
-async function waitForHealth(timeoutMs: number): Promise<boolean> {
+async function waitForHealth(timeoutMs: number, port = PORT): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${PORT}/api/health`, { signal: AbortSignal.timeout(1500) })
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) })
       if (res.ok) return true
     } catch {
       // 启动中，继续等
@@ -248,18 +249,31 @@ try {
   )
   testUrl = await recreateTestDb(base)
 
+  // W3-S3 双进程：user-api 先行（跑迁移），admin-api 以 BV_AUTO_MIGRATE=0 跟进
+  let adminProc: { child: ChildProcess; log: string[] } | null = null
   const { child, log: serverLog } = startServer({
     PORT: String(PORT),
-    ADMIN_HOSTS: ADMIN_HOST,
     LOGIN_MAX_PER_WINDOW: '100',
     LOGIN_LOCK_FAILS: '3',
     BV_DATA_DIR: dataDir,
     DATABASE_URL: testUrl.toString(),
   })
-
   try {
     if (!(await waitForHealth(30_000))) {
-      throw new Error(`server 子进程 30s 内未就绪，启动日志尾部：\n${serverLog.slice(-10).join('\n')}`)
+      throw new Error(`user-api 30s 内未就绪，启动日志尾部：\n${serverLog.slice(-10).join('\n')}`)
+    }
+    // user-api（迁移）就绪后再起 admin-api——与部署顺序一致（migrate 先行）
+    const admin = startServer({
+      PORT: String(ADMIN_PORT),
+      LOGIN_MAX_PER_WINDOW: '100',
+      LOGIN_LOCK_FAILS: '3',
+      BV_DATA_DIR: dataDir,
+      DATABASE_URL: testUrl.toString(),
+      BV_AUTO_MIGRATE: '0',
+    }, 'src/adminApi.ts')
+    adminProc = admin
+    if (!(await waitForHealth(30_000, ADMIN_PORT))) {
+      throw new Error(`admin-api 30s 内未就绪，启动日志尾部：\n${admin.log.slice(-10).join('\n')}`)
     }
     check('R0 server 连接独立测试库（未降级 JSON 存储）', serverLog.join('\n').includes(TEST_DB), true)
 
@@ -289,15 +303,16 @@ try {
     check('R8 锁定期内管理域名正确密码同样 429（按 IP 锁定，不分入口/密码）', r8.status, 429)
   } finally {
     await stopServer(child)
+    if (adminProc !== null) await stopServer(adminProc.child)
   }
 
   // ---- R4b：验证前预检生效的日志证据（serverLog 于 stopServer 后完整；
   //      「验证前预检，密码校验未执行」= 错误入口在 scrypt 之前被拒的直接证据，
   //      主站超管正确密码（R4）全程未产生第二次登录成功）----
   {
-    const fullLog = serverLog.join('\n')
+    const fullLog = serverLog.join('\n') + (adminProc?.log.join('\n') ?? '')
     check('R4b 预检路径生效（错误入口在密码校验之前拒绝）', fullLog.includes('验证前预检，密码校验未执行'), true)
-    check('R4b 全程仅一次登录成功（R1 管理域；主站正确密码未成功）', fullLog.split('登录成功').length - 1, 1)
+    check('R4b 全程仅一次登录成功（R1 admin-api；主站正确密码未成功）', fullLog.split('登录成功').length - 1, 1)
   }
 
   // ---- P 组（W3-S2 存储收敛）：会话用途标记 / 限速 PG 持久化 / 认证 fail-closed ----
@@ -306,14 +321,23 @@ try {
     // 新起一个 server（同测试库）后该 IP 仍应被锁（旧实现为进程内计数，重启即清→本断言针住跥代）
     const s2 = startServer({
       PORT: String(PORT),
-      ADMIN_HOSTS: ADMIN_HOST,
       LOGIN_MAX_PER_WINDOW: '100',
       LOGIN_LOCK_FAILS: '3',
       BV_DATA_DIR: dataDir,
       DATABASE_URL: testUrl.toString(),
     })
+    let s2a: { child: ChildProcess; log: string[] } | null = null
     try {
-      if (!(await waitForHealth(30_000))) throw new Error(`P 组 server 未就绪：${s2.log.slice(-8).join('\n')}`)
+      if (!(await waitForHealth(30_000))) throw new Error(`P 组 user-api 未就绪：${s2.log.slice(-8).join('\n')}`)
+      s2a = startServer({
+        PORT: String(ADMIN_PORT),
+        LOGIN_MAX_PER_WINDOW: '100',
+        LOGIN_LOCK_FAILS: '3',
+        BV_DATA_DIR: dataDir,
+        DATABASE_URL: testUrl.toString(),
+        BV_AUTO_MIGRATE: '0',
+      }, 'src/adminApi.ts')
+      if (!(await waitForHealth(30_000, ADMIN_PORT))) throw new Error(`P 组 admin-api 未就绪：${s2a.log.slice(-8).join('\n')}`)
       const p4 = await login(MAIN_HOST, adminUser, 'still-wrong')
       check('P4 限速锁定跨进程重启仍生效（PG 持久化）', p4.status, 429)
 
@@ -338,22 +362,33 @@ try {
       check('P2c user 会话在管理入口被拒（跨用途）', meUserCross.status, 401)
     } finally {
       await stopServer(s2.child)
+      if (s2a !== null) await stopServer(s2a.child)
     }
 
     // P5 认证 fail-closed：DATABASE_URL 指向死端口 → 登录 503（不降级 JSON 判权）
     const s3 = startServer({
       PORT: String(PORT),
-      ADMIN_HOSTS: ADMIN_HOST,
       BV_DATA_DIR: dataDir,
       DATABASE_URL: 'postgresql://biance_app:biance_app@127.0.0.1:1/biance_vision',
     })
+    let s3a: { child: ChildProcess; log: string[] } | null = null
     try {
-      if (!(await waitForHealth(30_000))) throw new Error(`P5 server 未就绪：${s3.log.slice(-8).join('\n')}`)
+      if (!(await waitForHealth(30_000))) throw new Error(`P5 user-api 未就绪：${s3.log.slice(-8).join('\n')}`)
+      s3a = startServer({
+        PORT: String(ADMIN_PORT),
+        BV_DATA_DIR: dataDir,
+        DATABASE_URL: 'postgresql://biance_app:biance_app@127.0.0.1:1/biance_vision',
+        BV_AUTO_MIGRATE: '0',
+      }, 'src/adminApi.ts')
+      if (!(await waitForHealth(30_000, ADMIN_PORT))) throw new Error(`P5 admin-api 未就绪：${s3a.log.slice(-8).join('\n')}`)
       const p5 = await login(MAIN_HOST, normalUser, normalPass, '10.99.1.8')
-      check('P5 PG 不可用时登录被拒 503（fail-closed）', p5.status, 503)
-      check('P5 fail-closed 日志证据', s3.log.join('\n').includes('fail-closed'), true)
+      check('P5 PG 不可用时登录被拒 503（fail-closed，user-api）', p5.status, 503)
+      const p5a = await login(ADMIN_HOST, adminUser, adminPass, '10.99.1.9')
+      check('P5 admin-api 同样 fail-closed 503', p5a.status, 503)
+      check('P5 fail-closed 日志证据', s3.log.join('\n').includes('fail-closed') || (s3a?.log.join('\n').includes('fail-closed') ?? false), true)
     } finally {
       await stopServer(s3.child)
+      if (s3a !== null) await stopServer(s3a.child)
     }
   }
 

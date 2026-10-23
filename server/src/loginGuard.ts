@@ -12,7 +12,6 @@ import { loginGuards } from './models.js'
 
 export const LOGIN_WINDOW_MS = 60_000
 export const LOGIN_LOCK_MS = 15 * 60_000
-const GUARD_MAX_KEYS = 20_000
 
 export interface LoginGuard {
   winStart: number
@@ -21,43 +20,30 @@ export interface LoginGuard {
   lockedUntil: number
 }
 
-const cache = new Map<string, LoginGuard>()
-
 const fresh = (): LoginGuard => ({ winStart: Date.now(), winCount: 0, fails: 0, lockedUntil: 0 })
 
-/** 读：内存缓存 → PG → 空记录（不写库） */
+/**
+ * 读：每次直查 PG（W3-S3 双进程修订——user-api/admin-api 各自的内存缓存互不可见，
+ * 读缓存会用陈旧计数漏判锁定；登录低频，一往返可接受）。无行返回空记录（不写库）。
+ */
 export async function loginGuardOf(ip: string): Promise<LoginGuard> {
-  const hit = cache.get(ip)
-  if (hit) return hit
   const conn = getDb()
   if (conn !== null && isDbAvailable()) {
     const rows = await conn.select().from(loginGuards).where(eq(loginGuards.ip, ip)).limit(1)
     if (rows.length > 0) {
-      const g: LoginGuard = {
+      return {
         winStart: rows[0].winStart,
         winCount: rows[0].winCount,
         fails: rows[0].fails,
         lockedUntil: rows[0].lockedUntil,
       }
-      cache.set(ip, g)
-      return g
     }
   }
-  // 防内存膨胀：超限时先清一遍完全过期的条目
-  if (cache.size >= GUARD_MAX_KEYS) {
-    const now = Date.now()
-    for (const [k, v] of cache) {
-      if (v.lockedUntil < now && v.winStart + LOGIN_WINDOW_MS < now) cache.delete(k)
-    }
-  }
-  const g = fresh()
-  cache.set(ip, g)
-  return g
+  return fresh()
 }
 
-/** 写：upsert PG + 更新缓存；PG 失败仅告警（登录本身已 fail-closed，计数尽力而为） */
+/** 写：upsert PG；PG 失败仅告警（登录本身已 fail-closed，计数尽力而为） */
 export async function saveLoginGuard(ip: string, g: LoginGuard): Promise<void> {
-  cache.set(ip, g)
   const conn = getDb()
   if (conn === null || !isDbAvailable()) return
   await conn
@@ -68,13 +54,12 @@ export async function saveLoginGuard(ip: string, g: LoginGuard): Promise<void> {
       set: { winStart: g.winStart, winCount: g.winCount, fails: g.fails, lockedUntil: g.lockedUntil },
     })
     .catch(() => {
-      /* 计数写失败不阻断登录判定路径（读缓存仍有效） */
+      /* 计数写失败不阻断登录判定路径 */
     })
 }
 
-/** 成功登录清零（删 PG 行 + 缓存） */
+/** 成功登录清零（删 PG 行） */
 export async function clearLoginGuard(ip: string): Promise<void> {
-  cache.delete(ip)
   const conn = getDb()
   if (conn === null || !isDbAvailable()) return
   await conn.delete(loginGuards).where(eq(loginGuards.ip, ip)).catch(() => {})
