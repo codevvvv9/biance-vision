@@ -155,7 +155,7 @@
 
 ## 管理端组件化迁移（独立前端）
 
-状态：`implemented`（独立基础设施与五个领域页面迁移中；W4 管理首页整合待其合并。验收记录见 docs/admin-ui/implementation.md，完整状态尚非 verified）。
+状态：`implemented`（独立基础设施与五个领域页面已实现并完成本地受控验收；W4 管理首页整合待其合并。验收记录见 docs/admin-ui/implementation.md，完整状态尚非 verified）。
 
 - 管理端使用独立主题、样式入口和数据路由；路由/菜单/标题共享注册模型，basename 派生自 Vite BASE_URL。
 - 侧栏桌面 240/64px，<768px 使用抽屉导航；登录保持深链，退出回登录，未保存表单有放弃确认。

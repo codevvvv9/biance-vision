@@ -5,7 +5,7 @@ import { ErrorBoundary, AuthProvider } from '@biance/shared-ui'
 import { createAdminRouter } from './admin'
 import { AdminTheme } from './admin/app/Theme'
 import './i18n'
-import './styles/base.css'
+import './styles/tokens.css'
 import './admin/ui/document.css'
 const root = document.getElementById('root')
 if (!root) throw new Error('#root is required')

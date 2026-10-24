@@ -1,89 +1,174 @@
-import type { CSSProperties } from 'react'
-/**
- * 案例窗（可见上下文与未来结果分列存储防泄漏；检索只返回可见字段）。
- */
-import { useCallback, useEffect, useState } from 'react'
-import { api } from '../../api'
-
-interface CaseWindow {
-  id: string
-  symbol: string
-  interval: string
-  atTime: number
-  published: boolean
-  annotation: string
-  visibleContext: { regime?: string; alwaysIn?: string }
-}
-
-export default function CasesPanel({ onError }: { onError: (msg: string) => void }): JSX.Element {
-  const [cases, setCases] = useState<CaseWindow[]>([])
-  const [symbol, setSymbol] = useState('BTCUSDT')
-  const [interval, setIntervalStr] = useState('15m')
-  const [annotation, setAnnotation] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const refresh = useCallback(async (): Promise<void> => {
+import { overlayContainer } from "../ui/overlays";
+import { useState } from "react";
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
+import {
+  loadCases,
+  buildCase,
+  publishCase,
+  type CaseWindow,
+} from "../features/knowledge/contentApi";
+import { useResource } from "../ui/resource";
+import { useDirtyForm } from "../ui/forms";
+import { useAdminText } from "../ui/text";
+import { Feedback } from "../ui/feedback";
+import styles from "../ui/admin.module.css";
+export default function CasesPanel({
+  onError,
+}: {
+  onError: (message: string) => void;
+}): JSX.Element {
+  const text = useAdminText();
+  const { modal } = App.useApp();
+  const resource = useResource(loadCases);
+  const [symbol, setSymbol] = useState("BTCUSDT"),
+    [interval, setIntervalValue] = useState("15m"),
+    [annotation, setAnnotation] = useState("");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  useDirtyForm(
+    Boolean(annotation) || symbol !== "BTCUSDT" || interval !== "15m",
+  );
+  const build = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
     try {
-      const r = await api<{ cases: CaseWindow[] }>('/admin/knowledge/cases?all=1')
-      setCases(r.cases)
+      await buildCase({ symbol, interval, annotation });
+      setAnnotation("");
+      setSymbol("BTCUSDT");
+      setIntervalValue("15m");
+      await resource.reload();
     } catch (e) {
-      onError((e as Error).message)
-    }
-  }, [onError])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  const build = async (): Promise<void> => {
-    setBusy(true)
-    try {
-      await api('/admin/knowledge/cases', {
-        method: 'POST',
-        body: { symbol, marketType: 'usdm_perp', interval, annotation },
-      })
-      await refresh()
-    } catch (e) {
-      onError((e as Error).message)
+      setError((e as Error).message);
+      onError((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
-
+  };
+  const publish = async (item: CaseWindow) => {
+    if (
+      busy ||
+      !(await modal.confirm({
+        getContainer: overlayContainer,
+        title: `${text("publish")} · ${item.symbol}`,
+        content: text("caseVisibilityHint"),
+        okText: text("confirm"),
+        cancelText: text("cancel"),
+      }))
+    )
+      return;
+    setBusy(true);
+    try {
+      await publishCase(item.id);
+      await resource.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <div className="panel fx-in" style={{ '--fx-i': 5 } as CSSProperties}>
-      <h4>案例窗（可见上下文与未来结果分列；检索只返回可见字段）</h4>
-      <div className="admin-row">
-        <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="交易对" />
-        <select value={interval} onChange={(e) => setIntervalStr(e.target.value)}>
-          <option value="5m">5m</option>
-          <option value="15m">15m</option>
-          <option value="1h">1h</option>
-          <option value="4h">4h</option>
-        </select>
-        <input value={annotation} onChange={(e) => setAnnotation(e.target.value)} placeholder="人工结构标注，如：多头回调 H2 二次进场" />
-        <button className="btn btn-primary" disabled={busy} onClick={() => void build()}>{busy ? '构建中…' : '构建案例窗'}</button>
+    <Card>
+      <div className={styles.stack}>
+        <Feedback error={error || resource.error} />
+        <Typography.Paragraph type="secondary">
+          {text("caseVisibilityHint")}
+        </Typography.Paragraph>
+        <Form layout="vertical">
+          <div className={styles.grid}>
+            <Form.Item label={text("symbol")}>
+              <Input
+                aria-label={text("symbol")}
+                value={symbol}
+                onChange={(event) =>
+                  setSymbol(event.target.value.toUpperCase())
+                }
+              />
+            </Form.Item>
+            <Form.Item label={text("interval")}>
+              <Select
+                aria-label={text("interval")}
+                value={interval}
+                onChange={setIntervalValue}
+                options={["5m", "15m", "1h", "4h"].map((value) => ({
+                  value,
+                  label: value,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item label={text("annotation")}>
+              <Input
+                aria-label={text("annotation")}
+                value={annotation}
+                onChange={(event) => setAnnotation(event.target.value)}
+              />
+            </Form.Item>
+          </div>
+          <Button
+            type="primary"
+            loading={busy}
+            disabled={!symbol}
+            onClick={() => void build()}
+          >
+            {text("buildCase")}
+          </Button>
+        </Form>
+        <Table<CaseWindow>
+          rowKey="id"
+          loading={resource.loading || busy}
+          dataSource={resource.data?.cases ?? []}
+          scroll={{ x: 700 }}
+          columns={[
+            {
+              title: text("symbol"),
+              render: (_, item) => `${item.symbol} ${item.interval}`,
+            },
+            {
+              title: text("decisionTime"),
+              dataIndex: "atTime",
+              render: (value) => new Date(value).toLocaleString(),
+            },
+            {
+              title: text("status"),
+              dataIndex: "published",
+              render: (value) => (
+                <Tag color={value ? "success" : undefined}>
+                  {text(value ? "published" : "draft")}
+                </Tag>
+              ),
+            },
+            {
+              title: text("structure"),
+              render: (_, item) => (
+                <Space>
+                  {item.visibleContext.regime ?? "—"}{" "}
+                  {item.visibleContext.alwaysIn ?? ""}
+                </Space>
+              ),
+            },
+            {
+              title: text("actions"),
+              render: (_, item) =>
+                !item.published && (
+                  <Button size="small" onClick={() => void publish(item)}>
+                    {text("publish")}
+                  </Button>
+                ),
+            },
+          ]}
+        />
       </div>
-      <table className="mini-table">
-        <thead><tr><th>序列</th><th>决策时</th><th>状态</th><th>决策时结构</th><th>操作</th></tr></thead>
-        <tbody>
-          {cases.map((c) => (
-            <tr key={c.id}>
-              <td>{c.symbol} {c.interval}</td>
-              <td>{new Date(c.atTime).toLocaleString()}</td>
-              <td>{c.published ? '已发布' : '待审核'}</td>
-              <td>{c.visibleContext.regime ?? '-'} / {c.visibleContext.alwaysIn ?? '-'}</td>
-              <td className="actions">
-                {!c.published && (
-                  <button className="btn-primary" onClick={() => void api(`/admin/knowledge/cases/${c.id}/publish`, { method: 'POST' }).then(() => refresh()).catch((e: Error) => onError(e.message))}>
-                    发布
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+    </Card>
+  );
 }

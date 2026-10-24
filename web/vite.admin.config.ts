@@ -1,7 +1,7 @@
 import { buildIsolation } from './build-isolation'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 
 /**
@@ -13,12 +13,26 @@ import react from '@vitejs/plugin-react'
 const adminApiTarget = process.env.BV_ADMIN_API_TARGET
 const adminWebPort = Number(process.env.BV_ADMIN_WEB_PORT || 17844)
 
+/** Fail closed before proxying to a misconfigured user-api, including preview. */
+function validateAdminProxy(middlewares: Connect.Server): void {
+  if (!adminApiTarget) return
+  middlewares.use((req, res, next) => {
+    if (!req.url?.startsWith('/api/')) { next(); return }
+    void fetch(new URL('/api/health', adminApiTarget), { signal: AbortSignal.timeout(3000) }).then(async response => {
+      const health = await response.json() as { entry?: string }
+      if (!response.ok || health.entry !== 'admin-api') throw new Error('Expected health.entry=admin-api')
+      next()
+    }).catch(() => { res.statusCode = 502; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ message: 'Configured admin-api is unavailable or has the wrong entry.' })) })
+  })
+}
+
 const webDir = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   plugins: [buildIsolation('admin'), react(), {
     name: 'admin-html-fallback',
     configureServer(server) {
+      validateAdminProxy(server.middlewares)
       // Multi-page Vite otherwise falls back to the user index.html.
       server.middlewares.use((req, _res, next) => {
         const url = new URL(req.url ?? '/', 'http://localhost')
@@ -33,6 +47,7 @@ export default defineConfig({
       }).catch(() => server.config.logger.warn('admin-api health check unavailable; start the configured admin-api.'))
     },
     configurePreviewServer(server) {
+      validateAdminProxy(server.middlewares)
       server.middlewares.use((req, _res, next) => {
         const url = new URL(req.url ?? '/', 'http://localhost')
         const base = server.config.base.replace(/\/$/, '')
@@ -46,7 +61,7 @@ export default defineConfig({
     alias: { '@biance/shared-ui': path.resolve(webDir, '../packages/shared-ui/src') },
   },
   define: {
-    // 独立 admin 入口标记（AdminLayout 据此隐藏「返回主站」等嵌入态元素）
+    // 保留现有构建标记契约；路由部署前缀只读取 BASE_URL。
     'import.meta.env.ADMIN_ENTRY': '"1"',
   },
   build: {
