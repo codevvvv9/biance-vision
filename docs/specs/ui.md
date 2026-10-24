@@ -155,7 +155,7 @@
 
 ## 官网获客与终端入口（2026-10-24）
 
-状态：`implemented`，本地受控 API 浏览器回归通过，真实开通用户/研究 worker 联调与五人试用仍待执行。
+状态：`implemented`，本地受控 API 浏览器回归与真实隔离环境开通/研究 worker 联调通过，v0.17.3 生产只读验收通过；五人试用仍待执行。
 
 - 用户域名共用：`/en`、`/zh` 为公开官网，`/dashboard` 为原大盘，`/research` 保留双 UI。跨官网用普通链接，同一终端内部继续 React Router；独立管理域名保留。
 - 新访客主入口查看无需账号的教学演示；联系页解释人工确认与开通流程，已有账号始终能直接登录。官网入口不随会话变化，不把联系点击当申请完成。
@@ -166,7 +166,7 @@
 - 官网演示保留三个案例的可展开完整文字，移动端或无 JavaScript 也能读取；支持键盘切换案例与减少动效偏好。
 ## 管理端组件化迁移（独立前端）
 
-状态：`implemented`（独立基础设施与五个领域页面已实现并完成本地受控验收；W4 管理首页整合待其合并。验收记录见 docs/admin-ui/implementation.md，完整状态尚非 verified）。
+状态：`verified`（v0.17.3 完成独立基础设施、五个领域页面和 W4 管理首页整合；通过完整 release gate、隔离环境真实业务联调及生产只读浏览器验收。用户试用不在此状态的证明范围内，验收边界见 docs/admin-ui/implementation.md）。
 
 - 管理端使用独立主题、样式入口和数据路由；路由/菜单/标题共享注册模型，basename 派生自 Vite BASE_URL。
 - 侧栏桌面 240/64px，<768px 使用抽屉导航；登录保持深链，退出回登录，未保存表单有放弃确认。
@@ -177,4 +177,4 @@
 
 ## Integrated admin and W4 release (2026-10-24)
 
-Status: implemented; release verification in progress. The admin homepage now uses Ant Design users/audit/website views with `view` query state, scoped provisioning and allowance/reset dialogs, dirty-form protection and the canonical W4 brand asset. The frozen legacy CSS boundary is removed. The five existing domain migrations are retained. See docs/releases/v0.17.2-integration.md for integration boundaries and verification.
+Status: verified for the documented automated, isolated integration and production read-only checks in v0.17.3. Customer trials remain pending. The admin homepage now uses Ant Design users/audit/website views with `view` query state, scoped provisioning and allowance/reset dialogs, dirty-form protection and the canonical W4 brand asset. The frozen legacy CSS boundary is removed. The five existing domain migrations are retained. See docs/releases/v0.17.3-integration.md for integration boundaries and verification.
