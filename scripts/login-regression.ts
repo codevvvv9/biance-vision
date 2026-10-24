@@ -249,7 +249,22 @@ try {
   )
   testUrl = await recreateTestDb(base)
 
-  // W3-S3 双进程：user-api 先行（跑迁移），admin-api 以 BV_AUTO_MIGRATE=0 跟进
+  // W3-S4 部署序预跑：owner 迁移 + 内置账号种子（种子已移入 migrate 容器语义）
+  {
+    const prev = process.env.DATABASE_URL
+    process.env.DATABASE_URL = testUrl.toString()
+    const { initDb } = await import('../server/src/db.js')
+    const migrated = await initDb({ migrate: true })
+    if (!migrated) throw new Error('测试库迁移失败')
+    const prevData = process.env.BV_DATA_DIR
+    process.env.BV_DATA_DIR = dataDir
+    const { initUsers } = await import('../server/src/users.js')
+    await initUsers({ seed: true })
+    process.env.DATABASE_URL = prev
+    process.env.BV_DATA_DIR = prevData
+  }
+
+  // W3-S3 双进程：user-api/admin-api 均以 BV_AUTO_MIGRATE=0 起（迁移已预跑）
   let adminProc: { child: ChildProcess; log: string[] } | null = null
   const { child, log: serverLog } = startServer({
     PORT: String(PORT),
@@ -257,6 +272,7 @@ try {
     LOGIN_LOCK_FAILS: '3',
     BV_DATA_DIR: dataDir,
     DATABASE_URL: testUrl.toString(),
+    BV_AUTO_MIGRATE: '0',
   })
   try {
     if (!(await waitForHealth(30_000))) {
@@ -370,6 +386,7 @@ try {
       PORT: String(PORT),
       BV_DATA_DIR: dataDir,
       DATABASE_URL: 'postgresql://biance_app:biance_app@127.0.0.1:1/biance_vision',
+      BV_AUTO_MIGRATE: '0',
     })
     let s3a: { child: ChildProcess; log: string[] } | null = null
     try {

@@ -429,7 +429,15 @@ pnpm workspace
   admin-api 服务（127.0.0.1:3201）+app 端口收回环。断言：双入口自测 21 项（D 组：管理 API
   在 user-api 404/admin-api 200/登录入口分离/会话用途隔离）入 release:gate；登录回归 25 项
   改双进程架构。
-- **S4 数据库分权收尾**：user-api 专用 DB 账号表级最小权限；管理配置卷只挂 admin 容器（S2 已保证其他进程不依赖该卷）。
+- **S4 数据库分权收尾**（✓ 2026-10-24 implemented）：user-api 专用 DB 账号表级最小权限；管理配置卷只挂 admin 容器（S2 已保证其他进程不依赖该卷）。
+  实施细节：biance_user 最小权限账号（server/src/dbGrants.ts 白名单——RW 27 表/RO 9 表/纯管理 4 表
+  零权限；❗新增表必须同步归类，双向断言钉住）；DCL 由 migrate 容器执行（超管连接仅存在于该进程，
+  密码经 BV_DB_USER_PASSWORD 同源注入 app 与 migrate，轮换=改 env 重跑 migrate）；内置账号种子
+  移入 migrate 容器（app/admin-api/worker 只加载不种子——user-api 连 users 写权限都没有，种子
+  路径物理不可达）；admin-api/worker/migrate 继续用 owner 账号。管理配置文件（ai-config.json/
+  secrets.json/users.json）写路径经 S2/S3 已收口在 admin-api 进程，共享卷按 S2「共享存储+版本号」
+  契约保留（其他进程只读）。断言：db:grants-check 12 项（users INSERT 被拒/白名单 RW 放行/
+  管理表全拒/密码轮换生效）入 release:gate；dual-check 的 user-api 改以 biance_user 真跑。
 
 ### 3.3 已知设计难点（实施前必须想清楚）
 
@@ -461,7 +469,7 @@ admin-api 容器为纯 Node 进程，参照 app 实测 ~60MB；当前发版后�
 - [ ] worker 队列跨端正常：admin 域名上传文档 → worker 消费 → 状态回读
 - [ ] 主站超管账号登录被拒（提示走管理域名）；管理域名普通账号登录被拒
 - [x] 登录限速跨域名合并计数（admin 域连败后主站同 IP 也受限）且重启不丢（PG 持久化；回归 P4 断言钉住）
-- [ ] user-api 数据库账号无管理表写权限（直连尝试写 users 表被拒）
+- [x] user-api 数据库账号无管理表写权限（直连尝试写 users 表被拒；G6 断言 42501）
 - [ ] 回滚演练（v2）：按 §3.3 回滚条款执行——保存配置/数据备份、切流→验证→切回全程演练，DB 迁移兼容范围核对；不只是退 BV_VERSION
 - [x] 会话用途标记生效：user/admin 会话跨入口一律 401（回归 P1/P2 双向断言；服务端 findSession 校验）
 

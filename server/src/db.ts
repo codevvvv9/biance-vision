@@ -45,6 +45,11 @@ loadDotEnv('.env')
 export const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://biance_app:biance_app@127.0.0.1:5434/biance_vision'
 
+/** 连接串（W3-S4：dbMigrate 的 DCL 原生连接复用同源解析） */
+export function databaseUrl(): string {
+  return DATABASE_URL
+}
+
 export const HISTORY_KEEP = 200
 export const AUDIT_KEEP = 1000
 
