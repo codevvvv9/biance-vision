@@ -383,6 +383,18 @@ try {
       check('P2b user 会话在用户入口有效', meUserOk.status, 200)
       const meUserCross = await getWithCookie(ADMIN_HOST, '/api/auth/me', userCookie, xff)
       check('P2c user 会话在管理入口被拒（跨用途）', meUserCross.status, 401)
+      const allowance = await getWithCookie(MAIN_HOST, '/api/users/me/ai-access', userCookie, xff)
+      check('P2d real user entry exposes persistent AI allowance', allowance.status, 200)
+      const { getDb, sql } = await import('../server/src/db.js')
+      const access = JSON.stringify({ version: 1, generation: 'w4-http-regression', totalLimit: 0, used: 0, dailyLimit: null, dailyDate: '', dailyUsed: 0, requestsPerMinute: 6, windowAt: 0, windowUsed: 0, profileName: 'default' })
+      await getDb()!.execute(sql`INSERT INTO app_settings (key, value) VALUES (${`ai_access:${normalUser}`}, ${access}::jsonb)`)
+      const exhausted = await fetch(`http://127.0.0.1:${PORT}/api/research/runs`, { method: 'POST', headers: { cookie: userCookie, 'content-type': 'application/json', 'x-forwarded-for': xff }, body: '{}' })
+      check('P2e zero allowance blocks the actual research handler', exhausted.status, 403)
+      check('P2f actual handler returns the allowance denial code', (await exhausted.json() as { code?: string }).code, 'ai_access_exhausted')
+      await getDb()!.execute(sql`DELETE FROM auth_sessions WHERE username = ${normalUser}`)
+      const revoked = await getWithCookie(MAIN_HOST, '/api/portfolio', userCookie, xff)
+      check('P2g revoked PG session cannot access a cached business route', revoked.status, 401)
+
     } finally {
       await stopServer(s2.child)
       if (s2a !== null) await stopServer(s2a.child)

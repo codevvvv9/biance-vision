@@ -31,3 +31,9 @@ website/playwright-report
 **/.env
 **/.env.local
 **/.env.production
+
+web/dist-admin
+web/test-results
+web/playwright-report
+docs/user-manual*.md
+docs/admin-manual*.md

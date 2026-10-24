@@ -77,6 +77,7 @@ import { startQueue } from './queue.js'
 import { clientIpOf, registerAuthRoutes, unauthorized } from './authRoutes.js'
 
 const clientIp = clientIpOf
+import { registerAiAccessGuard } from './aiAccess.js'
 import { registerMarketRoutes } from './market/routes.js'
 import { currentBlobStoreKind } from './knowledge/blobstore.js'
 import { registerProductRoutes } from './research/productRoutes.js'
@@ -276,15 +277,15 @@ await app.register(fastifyWs)
 // ---------------------------------------------------------------------------
 const webDistExists = fs.existsSync(WEB_DIST)
 if (webDistExists) {
-  await app.register(fastifyStatic, { root: path.resolve(WEB_DIST) })
+  await app.register(fastifyStatic, { root: path.resolve(WEB_DIST, 'assets'), prefix: '/assets/' })
   log.info('server', `托管前端静态资源：${WEB_DIST}（user-api；管理端见 admin-api 进程）`)
 }
-// SPA 回退：dist 存在时非 /api、非 /admin 的 GET 回用户端 index.html；
+// SPA 回退仅限显式终端页面；官网与未知页面由 Caddy/Next 处理。
 // /admin* 与 dist 缺失（开发模式）一律 404——不回退 SPA、不留 /admin* 空门
 app.setNotFoundHandler((req, reply) => {
   const p = req.url.split('?')[0]
-  if (webDistExists && req.method === 'GET' && !p.startsWith('/api/') && !p.startsWith('/admin')) {
-    return reply.sendFile('index.html')
+  if (webDistExists && req.method === 'GET' && ['/dashboard', '/research', '/brooks', '/movers', '/alerts', '/login', '/register'].includes(p)) {
+    return reply.sendFile('index.html', path.resolve(WEB_DIST))
   }
   reply.code(404).send({ message: 'Not Found' })
 })
@@ -309,7 +310,7 @@ app.addHook('preHandler', async (req, reply) => {
   }
   if (url === '/api/health' || url.startsWith('/api/auth/')) return
   try {
-    requireSession(req)
+    await auth.requireLiveSession(req)
   } catch (err) {
     const e = err as { statusCode?: number }
     reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
@@ -329,7 +330,7 @@ app.addHook('onResponse', (req, reply, done) => {
       用户: user,
       ip: clientIp(req),
       客户端: briefUa(String(req.headers['user-agent'] ?? '')),
-      提交数据: req.body !== undefined ? bodyForLog(req.body) : undefined,
+      提交数据: req.body !== undefined && !/^\/api\/(ai|research|conversations|translate)(?:\/|$)/.test(url) ? bodyForLog(req.body) : undefined,
     }))
   }
   done()
@@ -403,6 +404,8 @@ function bodyForLog(body: unknown): string {
 // superadmin 在本进程登录被拒——管理认证只在 admin-api 进程，入口=进程）
 const auth = registerAuthRoutes(app, { entryKind: 'user', clientIp })
 const requireSession = auth.requireSession
+// Global metering runs before model handlers, after live session validation.
+registerAiAccessGuard(app, { requireSession })
 
 app.get('/api/health', async () => ({
   ok: true,

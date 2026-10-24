@@ -57,3 +57,6 @@ docs/admin-manual*.md
 # Browser test artifacts
 web/test-results/
 web/playwright-report/
+
+# AppleDouble metadata is not application source.
+._*

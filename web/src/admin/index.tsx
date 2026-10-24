@@ -17,7 +17,6 @@ import AdminShell from "./AdminLayout";
 const AiSettingsModal = lazy(() => import("./AiSettingsModal"));
 import { DirtyForms, useConfirmDiscard } from "./ui/forms";
 import { useAdminText } from "./ui/text";
-import { LegacyBoundary } from "./ui/LegacyBoundary";
 function AdminFrame(): JSX.Element {
   const { user, logout } = useAuth();
   const { t } = useTranslation("admin");
@@ -117,13 +116,7 @@ export function createAdminRouter() {
                 lazy: async () => {
                   const { default: Page } = await route.load();
                   return {
-                    Component: route.legacy
-                      ? () => (
-                          <LegacyBoundary>
-                            <Page />
-                          </LegacyBoundary>
-                        )
-                      : Page,
+                    Component: Page,
                   };
                 },
               })),

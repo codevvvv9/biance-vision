@@ -173,3 +173,8 @@
 - 页内业务标签写入 view 查询参数。资料默认表格，其他领域按各自操作组织标签与弹层。
 - 知识库 W2 的上传校验、串行队列、取消回滚、差异轮询、日志/预览/版本恢复保留；完整统计不随过滤结果重算。
 - Ant Design 仅进入管理构建，实际模块图隔离与受控浏览器回归纳入 CI；不以构建通过代替浏览器验收。
+
+
+## Integrated admin and W4 release (2026-10-24)
+
+Status: implemented; release verification in progress. The admin homepage now uses Ant Design users/audit/website views with `view` query state, scoped provisioning and allowance/reset dialogs, dirty-form protection and the canonical W4 brand asset. The frozen legacy CSS boundary is removed. The five existing domain migrations are retained. See docs/releases/v0.17.2-integration.md for integration boundaries and verification.

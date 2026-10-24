@@ -4,7 +4,6 @@ interface RouteMeta {
   labelKey: string;
   hintKey: string;
   icon: JSX.Element;
-  legacy?: boolean;
   load: () => Promise<{ default: ComponentType }>;
 }
 export type AdminRouteDef = RouteMeta &
@@ -131,7 +130,6 @@ function PromptIcon(): JSX.Element {
 export const ADMIN_ROUTES: AdminRouteDef[] = [
   {
     id: "panel",
-    legacy: true,
     index: true,
     labelKey: "menu.panel",
     hintKey: "menu.panelHint",
