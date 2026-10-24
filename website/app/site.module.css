@@ -464,7 +464,6 @@
 
 .site :global(.article-byline) { display:flex; flex-wrap:wrap; gap:10px 24px; margin:25px 0 10px; color:var(--muted); font-size:13px; }
 .site :global(.article-byline a) { color:var(--mint); }
-.site :global(.article-header .editorial-note) { font-size:12px; line-height:1.8; max-width:780px; color:var(--muted); }
 .site :global(.article-body > h2) { margin-top:44px; scroll-margin-top:110px; }
 .site :global(.article-body > h2:first-child) { margin-top:0; }
 .site :global(.article-body p) { overflow-wrap:anywhere; }

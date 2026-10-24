@@ -244,7 +244,7 @@
     "synthesisLlm": "Model synthesis (constrained citations)",
     "synthesisLlmDegraded": "Model synthesis (some sentences removed by validation)",
     "synthesisCode": "Code assembly",
-    "probUnavailable": "Probability: unavailable ({{code}}; never fabricated by AI)",
+    "probUnavailable": "Probability: unavailable ({{code}}; no unfounded estimate is shown)",
     "probLine": "Model {{version}}: P(above strike) = {{up}}%{{tie}}",
     "probTie": ", tie {{pct}}%",
     "probTieUnknown": " (tie precision unknown)",
