@@ -1,0 +1,9 @@
+.admin-provision-grid, .admin-website-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-block: 22px; }
+.admin-provision-grid label, .admin-website-form label, .admin-delivery label { display: flex; flex-direction: column; gap: 8px; color: var(--text-1, #c4cddc); font-size: 12px; }
+.admin-provision-grid input, .admin-provision-grid select, .admin-website-form input, .admin-delivery input { background: var(--bg-1, #111a27); border: 1px solid var(--border, #2a3749); border-radius: 6px; color: inherit; padding: 10px; min-width: 0; }
+.admin-website-form > button { align-self: end; }
+.admin-provision-profile p, .admin-provision > .muted, .admin-website-settings > .muted { font-size: 12px; line-height: 1.7; }
+.admin-delivery { border: 1px solid var(--cyan, #00e5ff); border-radius: 8px; background: var(--bg-1, #0c1520); padding: 22px; margin-top: 22px; display: grid; gap: 15px; }
+.admin-delivery > div { display: flex; gap: 12px; flex-wrap: wrap; }
+.admin-delivery p { font-size: 12px; }
+@media (max-width: 850px) { .admin-provision-grid, .admin-website-form { grid-template-columns: 1fr; } }

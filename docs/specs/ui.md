@@ -151,3 +151,16 @@
 
 - 仓库内：`web/src/styles/`（token 在 `base.css`，`.panel`/按钮在 `components.css`）、`web/src/components/Header.tsx`（TABS）、`web/src/brooks/BrooksChart.tsx` 与 `web/src/brooks/indicator.ts`（研究/复盘共用图表与指标层）、`web/src/research/`（ResearchPage + useResearchRun/useResearchConversation/useResearchCandles + RunBubble/PositionConfirmCard）、`web/src/ai/`（AiAssistant FAB + AiChat + AiContext）、`web/src/pages/AdminPage.tsx`、docs/specs/api-storage.md、docs/specs/perpetual.md、docs/specs/event-contracts.md、docs/specs/knowledge-rag.md。
 - 交互模式参考（模式研究，非完整审计；核验日期 2026-09-30 / 2026-10-09，详见 docs/references/financial-agent-patterns.md §2）：[FinRobot](https://github.com/AI4Finance-Foundation/FinRobot)（数据与结论并排）、[AlphaSense](https://developer.alpha-sense.com/agent-api/response-parsing)（引用定位来源片段）、[Fiscal.ai](https://docs.fiscal.ai/docs/guides/mcp-skills)（数值可追溯到原始资料）、[Perplexity 官方开发文档](https://docs.perplexity.ai/)（回答内建引用）、[Bloomberg Terminal 公开入门指南](https://guides.library.yale.edu/Bloomberg/Bloomberg_Basics)（多面板多任务）、[OpenBB Workspace Copilot 文档](https://docs.openbb.co/workspace/analysts/ai-features/copilot-basics)（仪表盘 + AI 侧栏）、[Daloopa](https://daloopa.com/benefits/deepest-dataset)（数值单击溯源原文）、[LangGraph Streaming](https://docs.langchain.com/oss/python/langgraph/streaming) 与 [LangGraph Interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)（流式步骤与人在回路确认）、[Kalshi](https://kalshi.com/learn)（概率作为一等展示对象）。
+
+
+## 官网获客与终端入口（2026-10-24）
+
+状态：`implemented`，本地受控 API 浏览器回归通过，真实开通用户/研究 worker 联调与五人试用仍待执行。
+
+- 用户域名共用：`/en`、`/zh` 为公开官网，`/dashboard` 为原大盘，`/research` 保留双 UI。跨官网用普通链接，同一终端内部继续 React Router；独立管理域名保留。
+- 新访客主入口查看无需账号的教学演示；联系页解释人工确认与开通流程，已有账号始终能直接登录。官网入口不随会话变化，不把联系点击当申请完成。
+- 登录默认进入 `/research?ui=dev`；旧根返回目标映射 `/dashboard`，有效研究深链保留，拒绝外站、协议相对、反斜杠与控制字符。登录失败保留输入、返回目标与有效草稿；联系绕行返回目标在同标签页短时保存，不包含私人问题。
+- 官网草稿 `bv.research-entry.v1` 有效期 30 分钟，现货/永续、交易对、期限、语言与最多 2,000 字问题。登录后无非空草稿及历史上下文时恢复到输入框；有冲突先选择保留或恢复，绝不自动发起研究。跨设备/隔天无草稿时继续现有欢迎区与推荐问题，不增加强制向导。
+- 首次结果附近提供可折叠阅读帮助；失效或失败后可重新输入、选择示例、查看首次指南。受管账号显示最近读取的剩余额度及会员联系入口；总额度为 0 时禁用发送，服务端仍为最终判定。
+- 管理首页新增官网公开联系方式、普通用户开通、额度/密码管理。复用 AI 配置弹窗，不增加模型配置体系；生成后才展示随机密码，关闭面板清除。联系复制失败可手动选取，外部联系另开页面。
+- 官网演示保留三个案例的可展开完整文字，移动端或无 JavaScript 也能读取；支持键盘切换案例与减少动效偏好。

@@ -28,6 +28,8 @@ import { kv, log, fmtMs, briefUa } from './logger.js'
 import { startQueue } from './queue.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
 import { registerAdminRoutes } from './admin/routes.js'
+import { registerWebsiteSettingsRoutes } from './admin/websiteSettings.js'
+import { registerProvisionUserRoutes } from './admin/provisionUsers.js'
 import { refreshCapabilities } from './admin/capabilities.js'
 import {
   aiModelName,
@@ -76,7 +78,7 @@ app.addHook('preHandler', async (req, reply) => {
   if (!url.startsWith('/api/')) return
   if (url === '/api/health' || url.startsWith('/api/auth/')) return
   try {
-    auth.requireSession(req)
+    await auth.requireLiveSession(req)
   } catch (err) {
     const e = err as { statusCode?: number }
     reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
@@ -114,6 +116,8 @@ app.get('/api/ai/status', async () => ({ configured: isAiConfigured(), model: ai
 // 管理端路由（原 user-api 上的物理收口：admin 核心 + agents/evals/models/users/audit/ai overview）
 // ---------------------------------------------------------------------------
 registerAdminRoutes(app, { requireSuperadmin })
+registerWebsiteSettingsRoutes(app, { requireSuperadmin })
+registerProvisionUserRoutes(app, { requireSuperadmin })
 
 // 知识库（multipart 上传；解析入队由共享 pg-boss 交给 worker 消费）
 await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 20 } })

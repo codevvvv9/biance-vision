@@ -1,0 +1,1123 @@
+[
+  {
+    "id": "getting-started",
+    "path": "guides/getting-started",
+    "kind": "guide",
+    "topic": {
+      "en": "START HERE",
+      "zh": "从这里开始"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Your first research, from question to evidence.",
+        "summary": "Get access, prepare a focused question, and understand what to read in your first result.",
+        "body": "content/en/getting-started.mdx",
+        "url": "/en/guides/getting-started",
+        "translation": "/zh/guides/getting-started",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "1. Get access"
+          },
+          {
+            "id": "section-2",
+            "title": "2. Ask one focused question"
+          },
+          {
+            "id": "section-3",
+            "title": "3. Confirm, then read"
+          },
+          {
+            "id": "section-4",
+            "title": "4. If something is unavailable"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "第一次研究：从问题到证据。",
+        "summary": "了解开通步骤，准备一个明确的问题，读懂第一次研究结果。",
+        "body": "content/zh/getting-started.mdx",
+        "url": "/zh/guides/getting-started",
+        "translation": "/en/guides/getting-started",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "1. 联系开通"
+          },
+          {
+            "id": "section-2",
+            "title": "2. 提出一个明确的问题"
+          },
+          {
+            "id": "section-3",
+            "title": "3. 确认发送，再阅读结果"
+          },
+          {
+            "id": "section-4",
+            "title": "4. 遇到不可用状态"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "reading-research-results",
+    "path": "guides/reading-research-results",
+    "kind": "guide",
+    "topic": {
+      "en": "RESEARCH BASICS",
+      "zh": "研究基础"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Read the reasoning. Not just the headline.",
+        "summary": "A practical sequence for reading data time, evidence, counterevidence and invalidation.",
+        "body": "content/en/reading-research-results.mdx",
+        "url": "/en/guides/reading-research-results",
+        "translation": "/zh/guides/reading-research-results",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "Begin with the information boundary"
+          },
+          {
+            "id": "section-2",
+            "title": "A conclusion is conditional"
+          },
+          {
+            "id": "section-3",
+            "title": "Read both sides of the evidence"
+          },
+          {
+            "id": "section-4",
+            "title": "Know when to stop using the result"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "读懂推理，而不只看结论。",
+        "summary": "按数据时间、证据、反证与失效条件的顺序阅读研究。",
+        "body": "content/zh/reading-research-results.mdx",
+        "url": "/zh/guides/reading-research-results",
+        "translation": "/en/guides/reading-research-results",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "从信息边界开始"
+          },
+          {
+            "id": "section-2",
+            "title": "结论包含条件"
+          },
+          {
+            "id": "section-3",
+            "title": "同时阅读支持与反对证据"
+          },
+          {
+            "id": "section-4",
+            "title": "知道何时停止沿用结果"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "price-action-context",
+    "path": "guides/price-action-context",
+    "kind": "guide",
+    "topic": {
+      "en": "PRICE ACTION",
+      "zh": "价格行为"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "A pattern means little without its context.",
+        "summary": "Understand why trend, range, confirmation time and counterexamples belong in the same research.",
+        "body": "content/en/price-action-context.mdx",
+        "url": "/en/guides/price-action-context",
+        "translation": "/zh/guides/price-action-context",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "Describe the market before naming the setup"
+          },
+          {
+            "id": "section-2",
+            "title": "Separate observation from confirmation"
+          },
+          {
+            "id": "section-3",
+            "title": "Use a counterexample"
+          },
+          {
+            "id": "section-4",
+            "title": "Apply the method, keep its limits visible"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "离开上下文，形态没有完整含义。",
+        "summary": "为什么趋势、区间、确认时间与反例必须一起研究。",
+        "body": "content/zh/price-action-context.mdx",
+        "url": "/zh/guides/price-action-context",
+        "translation": "/en/guides/price-action-context",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "先描述市场，再命名形态"
+          },
+          {
+            "id": "section-2",
+            "title": "区分观察与确认"
+          },
+          {
+            "id": "section-3",
+            "title": "用反例检验解释"
+          },
+          {
+            "id": "section-4",
+            "title": "使用方法，同时保留边界"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "event-quotes",
+    "path": "guides/event-quotes",
+    "kind": "guide",
+    "topic": {
+      "en": "EVENT RESEARCH",
+      "zh": "事件研究"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Start event research with the exact quote.",
+        "summary": "Keep strike, expiry, stake and total payout distinct, and understand unavailable results.",
+        "body": "content/en/event-quotes.mdx",
+        "url": "/en/guides/event-quotes",
+        "translation": "/zh/guides/event-quotes",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "Use the actual product terms"
+          },
+          {
+            "id": "section-2",
+            "title": "Keep the inputs separate"
+          },
+          {
+            "id": "section-3",
+            "title": "Time remaining matters"
+          },
+          {
+            "id": "section-4",
+            "title": "Do not replace unavailable evidence with a guess"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "事件研究，从准确报价开始。",
+        "summary": "区分执行价、到期时间、本金和总返还，理解不可用结果。",
+        "body": "content/zh/event-quotes.mdx",
+        "url": "/zh/guides/event-quotes",
+        "translation": "/en/guides/event-quotes",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "以实际产品条款为准"
+          },
+          {
+            "id": "section-2",
+            "title": "分别确认每个输入"
+          },
+          {
+            "id": "section-3",
+            "title": "剩余时间影响研究适用性"
+          },
+          {
+            "id": "section-4",
+            "title": "不以猜测替代不可用证据"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "about",
+    "path": "about",
+    "kind": "page",
+    "topic": {
+      "en": "ABOUT THE PROJECT",
+      "zh": "关于项目"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "What is Biance Vision?",
+        "summary": "An independent, AI-assisted crypto market research workspace. Understand who maintains it, what it does and its limits.",
+        "body": "content/en/about.mdx",
+        "url": "/en/about",
+        "translation": "/zh/about",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "An independent research project"
+          },
+          {
+            "id": "section-2",
+            "title": "Who prepares these notes"
+          },
+          {
+            "id": "section-3",
+            "title": "Market data does not imply affiliation"
+          },
+          {
+            "id": "section-4",
+            "title": "What access provides"
+          },
+          {
+            "id": "section-5",
+            "title": "Access and geographic boundaries"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "Biance Vision 是什么？",
+        "summary": "一个独立的 AI 辅助加密市场研究工作台。了解维护者、产品范围与使用边界。",
+        "body": "content/zh/about.mdx",
+        "url": "/zh/about",
+        "translation": "/en/about",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "一个独立的研究项目"
+          },
+          {
+            "id": "section-2",
+            "title": "谁在维护这些内容"
+          },
+          {
+            "id": "section-3",
+            "title": "使用行情数据不代表关联关系"
+          },
+          {
+            "id": "section-4",
+            "title": "开通后可以做什么"
+          },
+          {
+            "id": "section-5",
+            "title": "开通与地区边界"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "methodology",
+    "path": "methodology",
+    "kind": "page",
+    "topic": {
+      "en": "RESEARCH METHOD",
+      "zh": "研究方法"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "How Biance Vision approaches research",
+        "summary": "Start with an information boundary, examine structure, challenge the view, and state what would invalidate it.",
+        "body": "content/en/methodology.mdx",
+        "url": "/en/methodology",
+        "translation": "/zh/methodology",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "brooks"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "Freeze the information boundary"
+          },
+          {
+            "id": "section-2",
+            "title": "Read structure in context"
+          },
+          {
+            "id": "section-3",
+            "title": "Keep the strongest opposing explanation"
+          },
+          {
+            "id": "section-4",
+            "title": "Validate inputs and disclose gaps"
+          },
+          {
+            "id": "section-5",
+            "title": "State invalidation before the next move"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "Biance Vision 如何开展研究",
+        "summary": "从信息边界出发，观察结构，检验观点，并说明什么会使解释失效。",
+        "body": "content/zh/methodology.mdx",
+        "url": "/zh/methodology",
+        "translation": "/en/methodology",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "brooks"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "冻结信息边界"
+          },
+          {
+            "id": "section-2",
+            "title": "在上下文中观察结构"
+          },
+          {
+            "id": "section-3",
+            "title": "保留有力的反对解释"
+          },
+          {
+            "id": "section-4",
+            "title": "校验输入并披露缺口"
+          },
+          {
+            "id": "section-5",
+            "title": "提前说明失效条件"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "second-entry-h2",
+    "path": "guides/second-entry-h2",
+    "kind": "guide",
+    "topic": {
+      "en": "RESEARCH NOTES",
+      "zh": "研究手记"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "What is an H2 second entry?",
+        "summary": "Understand the counting idea, the trend context and why a second attempt still needs scrutiny.",
+        "body": "content/en/second-entry-h2.mdx",
+        "url": "/en/guides/second-entry-h2",
+        "translation": "/zh/guides/second-entry-h2",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "The direct answer"
+          },
+          {
+            "id": "section-2",
+            "title": "Context comes before the label"
+          },
+          {
+            "id": "section-3",
+            "title": "A schematic sequence"
+          },
+          {
+            "id": "section-4",
+            "title": "Counterexamples and invalidation"
+          },
+          {
+            "id": "section-5",
+            "title": "Turn the label into a research question"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "什么是 H2 二次进场？",
+        "summary": "理解计数思路、趋势背景，以及为什么第二次尝试仍然需要检验。",
+        "body": "content/zh/second-entry-h2.mdx",
+        "url": "/zh/guides/second-entry-h2",
+        "translation": "/en/guides/second-entry-h2",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "直接解释"
+          },
+          {
+            "id": "section-2",
+            "title": "先确定背景，再讨论标签"
+          },
+          {
+            "id": "section-3",
+            "title": "一个示意过程"
+          },
+          {
+            "id": "section-4",
+            "title": "反例与失效条件"
+          },
+          {
+            "id": "section-5",
+            "title": "把标签变成研究问题"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "closed-candles-and-live-price",
+    "path": "guides/closed-candles-and-live-price",
+    "kind": "guide",
+    "topic": {
+      "en": "RESEARCH NOTES",
+      "zh": "研究手记"
+    },
+    "status": "published",
+    "relatedDemo": "range-breakout",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Closed candles and live prices answer different questions",
+        "summary": "Separate a confirmed observation from a changing quote, and avoid reading later information into an earlier snapshot.",
+        "body": "content/en/closed-candles-and-live-price.mdx",
+        "url": "/en/guides/closed-candles-and-live-price",
+        "translation": "/zh/guides/closed-candles-and-live-price",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "A live update is not a closed candle"
+          },
+          {
+            "id": "section-2",
+            "title": "Track three separate moments"
+          },
+          {
+            "id": "section-3",
+            "title": "How to read a result safely"
+          },
+          {
+            "id": "section-4",
+            "title": "Limits and failure cases"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "已收盘 K 线与实时价格回答不同问题",
+        "summary": "区分已确认观察与不断变化的报价，避免把后来的信息放回更早的快照。",
+        "body": "content/zh/closed-candles-and-live-price.mdx",
+        "url": "/zh/guides/closed-candles-and-live-price",
+        "translation": "/en/guides/closed-candles-and-live-price",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "实时更新不等于已收盘"
+          },
+          {
+            "id": "section-2",
+            "title": "分别记录三个时间"
+          },
+          {
+            "id": "section-3",
+            "title": "怎样核对研究结果"
+          },
+          {
+            "id": "section-4",
+            "title": "限制与异常情形"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "reviewing-perpetual-research",
+    "path": "guides/reviewing-perpetual-research",
+    "kind": "guide",
+    "topic": {
+      "en": "RESEARCH NOTES",
+      "zh": "研究手记"
+    },
+    "status": "published",
+    "relatedDemo": "wait-for-confirmation",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "How to review perpetual-position research",
+        "summary": "Check the position assumptions, market context, fee inputs and invalidation before relying on a review.",
+        "body": "content/en/reviewing-perpetual-research.mdx",
+        "url": "/en/guides/reviewing-perpetual-research",
+        "translation": "/zh/guides/reviewing-perpetual-research",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-funding",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "A review tests an existing thesis"
+          },
+          {
+            "id": "section-2",
+            "title": "Confirm the input contract"
+          },
+          {
+            "id": "section-3",
+            "title": "Separate price, mark price and funding"
+          },
+          {
+            "id": "section-4",
+            "title": "Challenge the reason for staying in the trade"
+          },
+          {
+            "id": "section-5",
+            "title": "What the result cannot establish"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "如何复查永续持仓研究",
+        "summary": "依赖复查结果前，先核对持仓假设、市场背景、费用输入和失效条件。",
+        "body": "content/zh/reviewing-perpetual-research.mdx",
+        "url": "/zh/guides/reviewing-perpetual-research",
+        "translation": "/en/guides/reviewing-perpetual-research",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-funding",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "复查是在检验已有假设"
+          },
+          {
+            "id": "section-2",
+            "title": "确认输入含义"
+          },
+          {
+            "id": "section-3",
+            "title": "区分价格、标记价格与资金费率"
+          },
+          {
+            "id": "section-4",
+            "title": "检验继续持仓的理由"
+          },
+          {
+            "id": "section-5",
+            "title": "结果不能证明什么"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "research-tool-checklist",
+    "path": "guides/research-tool-checklist",
+    "kind": "guide",
+    "topic": {
+      "en": "RESEARCH NOTES",
+      "zh": "研究手记"
+    },
+    "status": "published",
+    "relatedDemo": "wait-for-confirmation",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "A checklist for choosing an AI crypto research tool",
+        "summary": "Evaluate traceability, uncertainty, supported workflows and access conditions using the same question.",
+        "body": "content/en/research-tool-checklist.mdx",
+        "url": "/en/guides/research-tool-checklist",
+        "translation": "/zh/guides/research-tool-checklist",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "Start with the job you need done"
+          },
+          {
+            "id": "section-2",
+            "title": "Test traceability with one question"
+          },
+          {
+            "id": "section-3",
+            "title": "Look for honest limits"
+          },
+          {
+            "id": "section-4",
+            "title": "Check privacy, access and practical use"
+          },
+          {
+            "id": "section-5",
+            "title": "Use a comparison you can reproduce"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "选择 AI 加密研究工具的核对清单",
+        "summary": "用同一个问题核对证据追溯、不确定性、适用流程与开通条件。",
+        "body": "content/zh/research-tool-checklist.mdx",
+        "url": "/zh/guides/research-tool-checklist",
+        "translation": "/en/guides/research-tool-checklist",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "先明确需要完成的任务"
+          },
+          {
+            "id": "section-2",
+            "title": "用同一个问题检验证据追溯"
+          },
+          {
+            "id": "section-3",
+            "title": "寻找真实的限制说明"
+          },
+          {
+            "id": "section-4",
+            "title": "核对隐私、开通与实际操作"
+          },
+          {
+            "id": "section-5",
+            "title": "使用可复核的比较方法"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "trend-pullback",
+    "path": "demo/trend-pullback",
+    "kind": "demo",
+    "topic": {
+      "en": "TEACHING CASE · NOT LIVE",
+      "zh": "教学案例 · 非实时研究"
+    },
+    "status": "published",
+    "relatedDemo": "trend-pullback",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Trend pullback: test the context before assuming continuation",
+        "summary": "A worked teaching case separates an upward backdrop from an unconfirmed entry idea.",
+        "body": "content/en/trend-pullback.mdx",
+        "url": "/en/demo/trend-pullback",
+        "translation": "/zh/demo/trend-pullback",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "The research question"
+          },
+          {
+            "id": "section-2",
+            "title": "Snapshot and diagram"
+          },
+          {
+            "id": "section-3",
+            "title": "Supporting evidence and the opposing case"
+          },
+          {
+            "id": "section-4",
+            "title": "What would change the view"
+          },
+          {
+            "id": "section-5",
+            "title": "Use the method on your own question"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "趋势回调：先检验背景，再讨论延续",
+        "summary": "通过教学案例，区分上行背景与尚未确认的入场想法。",
+        "body": "content/zh/trend-pullback.mdx",
+        "url": "/zh/demo/trend-pullback",
+        "translation": "/en/demo/trend-pullback",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "研究问题"
+          },
+          {
+            "id": "section-2",
+            "title": "快照与图例"
+          },
+          {
+            "id": "section-3",
+            "title": "支持证据与反对解释"
+          },
+          {
+            "id": "section-4",
+            "title": "什么会改变观点"
+          },
+          {
+            "id": "section-5",
+            "title": "把方法用于自己的问题"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "range-breakout",
+    "path": "demo/range-breakout",
+    "kind": "demo",
+    "topic": {
+      "en": "TEACHING CASE · NOT LIVE",
+      "zh": "教学案例 · 非实时研究"
+    },
+    "status": "published",
+    "relatedDemo": "range-breakout",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Range breakout: distinguish the attempt from acceptance",
+        "summary": "A close beyond a boundary is one observation, not proof that the market will remain there.",
+        "body": "content/en/range-breakout.mdx",
+        "url": "/en/demo/range-breakout",
+        "translation": "/zh/demo/range-breakout",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "The research question"
+          },
+          {
+            "id": "section-2",
+            "title": "Snapshot and diagram"
+          },
+          {
+            "id": "section-3",
+            "title": "Supporting evidence and counterevidence"
+          },
+          {
+            "id": "section-4",
+            "title": "What weakens the interpretation"
+          },
+          {
+            "id": "section-5",
+            "title": "Next research step"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "区间突破：区分尝试与站稳",
+        "summary": "收在边界之外是一项观察，不能证明市场会持续停留在那里。",
+        "body": "content/zh/range-breakout.mdx",
+        "url": "/zh/demo/range-breakout",
+        "translation": "/en/demo/range-breakout",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "研究问题"
+          },
+          {
+            "id": "section-2",
+            "title": "快照与图例"
+          },
+          {
+            "id": "section-3",
+            "title": "支持证据与反证"
+          },
+          {
+            "id": "section-4",
+            "title": "什么会削弱解释"
+          },
+          {
+            "id": "section-5",
+            "title": "下一步研究"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "wait-for-confirmation",
+    "path": "demo/wait-for-confirmation",
+    "kind": "demo",
+    "topic": {
+      "en": "TEACHING CASE · NOT LIVE",
+      "zh": "教学案例 · 非实时研究"
+    },
+    "status": "published",
+    "relatedDemo": "wait-for-confirmation",
+    "translations": {
+      "en": {
+        "locale": "en",
+        "title": "Waiting for confirmation is a research result",
+        "summary": "When the evidence remains mixed, explain the uncertainty and define what would justify another look.",
+        "body": "content/en/wait-for-confirmation.mdx",
+        "url": "/en/demo/wait-for-confirmation",
+        "translation": "/zh/demo/wait-for-confirmation",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "The research question"
+          },
+          {
+            "id": "section-2",
+            "title": "Snapshot and diagram"
+          },
+          {
+            "id": "section-3",
+            "title": "Why a stronger conclusion is unsupported"
+          },
+          {
+            "id": "section-4",
+            "title": "A condition for revisiting"
+          },
+          {
+            "id": "section-5",
+            "title": "Carry the question forward"
+          }
+        ]
+      },
+      "zh": {
+        "locale": "zh",
+        "title": "等待确认也是研究结果",
+        "summary": "证据仍然矛盾时，说明不确定性，并定义何时值得重新观察。",
+        "body": "content/zh/wait-for-confirmation.mdx",
+        "url": "/zh/demo/wait-for-confirmation",
+        "translation": "/en/demo/wait-for-confirmation",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "研究问题"
+          },
+          {
+            "id": "section-2",
+            "title": "快照与图例"
+          },
+          {
+            "id": "section-3",
+            "title": "为什么不能给出更强结论"
+          },
+          {
+            "id": "section-4",
+            "title": "重新观察的条件"
+          },
+          {
+            "id": "section-5",
+            "title": "继续提出更好的问题"
+          }
+        ]
+      }
+    }
+  }
+]

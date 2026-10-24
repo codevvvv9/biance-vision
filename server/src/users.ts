@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -373,15 +374,25 @@ export async function destroySession(token: string | undefined): Promise<void> {
 
 /** 销毁某用户的全部会话（改密码/管控掐断后调用），返回销毁数量 */
 export async function destroySessionsFor(username: string): Promise<number> {
-  let n = 0
-  for (const [key, s] of sessions) {
-    if (s.username === username) {
-      sessions.delete(key)
-      await deleteSessionRow(key)
-      n++
-    }
-  }
-  return n
+  const conn = getDb()
+  if (!conn) throw Object.assign(new Error('认证服务暂不可用，未能撤销会话'), { statusCode: 503 })
+  // Delete all persistent sessions, including tokens never loaded in this process.
+  const deleted = await conn.delete(authSessions).where(eq(authSessions.username, username)).returning({ hash: authSessions.tokenHash })
+  for (const [key, session] of sessions) if (session.username === username) sessions.delete(key)
+  return deleted.length
+}
+
+/** Check persistent revocation on each protected HTTP request across independent processes. */
+export async function findLiveSession(token: string | undefined, purpose: SessionPurpose): Promise<SessionRecord | null> {
+  const cached = findSession(token, purpose)
+  if (!cached || !token) return null
+  const conn = getDb()
+  if (!conn) throw Object.assign(new Error('认证服务暂不可用，请稍后重试'), { statusCode: 503 })
+  try {
+    const rows = await conn.select({ purpose: authSessions.purpose, expiresAt: authSessions.expiresAt }).from(authSessions).where(eq(authSessions.tokenHash, sha256Hex(token))).limit(1)
+    if (!rows[0] || rows[0].purpose !== purpose || rows[0].expiresAt.getTime() <= Date.now()) { sessions.delete(sha256Hex(token)); return null }
+    return cached
+  } catch { throw Object.assign(new Error('认证服务暂不可用，请稍后重试'), { statusCode: 503 }) }
 }
 
 /** 从 Cookie 头解析会话 token */

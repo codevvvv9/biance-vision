@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
 import LanguageSwitcher from '../components/LanguageSwitcher'
@@ -10,7 +10,8 @@ import { authReturnTo, authUrl, researchUiMode } from '../research/uiMode'
 /** 注册页：暂不开放注册，仅提示联系超级管理员 */
 export default function RegisterPage(): JSX.Element {
   const { search } = useLocation()
-  const { t } = useTranslation('auth')
+  const { t, i18n } = useTranslation('auth')
+  const locale = i18n.language.startsWith('zh') ? 'zh' : 'en'
   const { t: tc } = useTranslation('common')
   return (
     <div className="auth-wrap">
@@ -39,15 +40,13 @@ export default function RegisterPage(): JSX.Element {
           <p>
             {t('register.noticeLine1')}
             <br />
-            <Trans
-              i18nKey="register.noticeLine2"
-              ns="auth"
-              components={{ mono: <span className="mono auth-admin" />, code: <code /> }}
-            />
+            {locale === 'zh' ? '请联系团队确认使用方式与开通条件，取得账号后登录。' : 'Contact our team to confirm access conditions and receive your account.'}
           </p>
         </div>
 
         <div className="auth-foot center">
+          <a href={`/${locale}/contact`}>{locale === 'zh' ? '联系开通' : 'Contact us for access'}</a>
+          <a href={`/${locale}`}>{locale === 'zh' ? '返回官网' : 'Back to website'}</a>
           <Link to={authUrl('/login', authReturnTo(search), researchUiMode(search))} className="btn btn-ghost">
             {t('register.backToLogin')}
           </Link>

@@ -32,6 +32,15 @@
 | [specs/admin-security.md](specs/admin-security.md) | Admin 能力配置、知识绑定、发布版本、密钥管理、授权模型与审计 | partial |
 | [specs/evaluation-deployment.md](specs/evaluation-deployment.md) | 测试集、评测指标、回放口径、上线门槛、Docker Compose 部署与监控恢复 | partial |
 
+## 设计方案
+
+| 文档 | 说明 | 状态 |
+| --- | --- | --- |
+| [website-nextjs-architecture-plan.md](website-nextjs-architecture-plan.md) | Next.js 双语官网与 SEO；含获客演示、人工联系开通、草稿与中断恢复、终端首次研究，以及 W3 排期、部署边界和技术 / 用户试用验收 | implemented，首版本地验收中，未部署（同域路径分流） |
+| [website-geo-sgo-implementation-plan.md](website-geo-sgo-implementation-plan.md) | GEO/SGO：双语身份 / 方法 / 深入指南 / 独立案例、抓取、语言、日志与 12 题观测 | 工程已实现；未部署，平台 / 用户验收待执行 |
+| [website-geo-sgo-qa-2026-10-24.md](references/website-geo-sgo-qa-2026-10-24.md) | GEO/SGO 内容、生产构建、日志隐私、浏览器验证与观测边界 | 本地验收记录；AI 引用未观测 |
+| [website-implementation-qa-2026-10-24.md](references/website-implementation-qa-2026-10-24.md) | 首版官网、同域入口、人工开通与硬额度本地验收记录 | 本地检查通过；完整发布门槛阻塞，未部署 |
+
 ## references（参考资料）
 
 | 文档 | 说明 | 状态 |

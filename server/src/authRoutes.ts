@@ -23,6 +23,8 @@ import {
   createSession,
   destroySession,
   findSession,
+  findLiveSession,
+  initUsers,
   readSessionToken,
   roleOfUsername,
   sessionCookie,
@@ -67,6 +69,7 @@ export interface AuthRoutes {
   /** 当前进程的会话用途（user-api='user' / admin-api='admin'） */
   sessionPurpose: SessionPurpose
   requireSession(req: FastifyRequest): SessionRecord
+  requireLiveSession(req: FastifyRequest): Promise<SessionRecord>
 }
 
 export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext): AuthRoutes {
@@ -76,6 +79,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
 
   function requireSession(req: FastifyRequest): SessionRecord {
     const session = findSession(readSessionToken(req.headers.cookie), sessionPurpose)
+    if (!session) throw unauthorized()
+    return session
+  }
+
+  async function requireLiveSession(req: FastifyRequest): Promise<SessionRecord> {
+    const session = await findLiveSession(readSessionToken(req.headers.cookie), sessionPurpose)
     if (!session) throw unauthorized()
     return session
   }
@@ -127,6 +136,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
     // 验证前预检（进程级入口，2026-10-21 三轮审查 P1 语义延续）：错误入口的账号在
     // 密码验证之前拒绝——server 端不执行 scrypt（消除用户端对管理员密码的爆破确认通道）。
     // 拒绝与密码错误完全同构；未知用户名放行至 verifyLogin 正常 401（不暴露账号存在性）。
+    // Newly provisioned admin-api accounts must work immediately in user-api.
+    // Refresh only after rate limiting, before role and password checks.
+    await initUsers({ seed: false })
     const preRole = roleOfUsername(name)
     if (preRole !== null && (preRole === 'superadmin') !== adminEntry) {
       await failLogin('登录入口与账号角色不匹配被拒（验证前预检，密码校验未执行）', {
@@ -179,9 +191,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
   })
 
   app.get('/api/auth/me', async (req) => {
-    const session = requireSession(req)
+    const session = await requireLiveSession(req)
     return { user: { username: session.username, role: session.role } }
   })
 
-  return { sessionPurpose, requireSession }
+  return { sessionPurpose, requireSession, requireLiveSession }
 }

@@ -22,3 +22,12 @@ GITHUB_ACTIONS_PLAN.md
 .v2c
 *.log
 .DS_Store
+
+website/node_modules
+website/.next
+website/test-results
+website/playwright-report
+**/*.tsbuildinfo
+**/.env
+**/.env.local
+**/.env.production

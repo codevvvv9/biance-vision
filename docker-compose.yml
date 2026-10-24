@@ -40,7 +40,32 @@ services:
       postgres:
         condition: service_healthy
 
-  # 完整线上服务：一个进程同源托管 前端页面 / API / WebSocket
+  # 独立官网；只读公开联系方式目录，不挂载 AI Key、账号或会话目录。
+  website:
+    build:
+      context: .
+      dockerfile: website/Dockerfile
+      args:
+        WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:-http://localhost:3100}
+        GOOGLE_SITE_VERIFICATION: ${GOOGLE_SITE_VERIFICATION:-}
+        BING_SITE_VERIFICATION: ${BING_SITE_VERIFICATION:-}
+    image: biance-vision-website:latest
+    container_name: biance-vision-website
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    mem_limit: 512m
+    environment:
+      WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:-http://localhost:3100}
+      WEBSITE_PUBLIC_CONFIG_DIR: /app/website-public
+      WEBSITE_TRUST_PROXY: "1"
+      WEBSITE_CN_IP_LIST: /app/website/data/cn-ipv4.txt
+      WEBSITE_ACCESS_LOG_DIR: /app/website-logs
+    volumes:
+      - ./server/data/website-public:/app/website-public:ro
+      - website-logs:/app/website-logs
+
+  # 用户终端 SPA / API / WebSocket（Caddy 按路径承接）
   app:
     build: .
     image: biance-vision:latest
@@ -80,6 +105,7 @@ services:
       - "127.0.0.1:3201:3200"
     environment:
       TZ: Asia/Shanghai
+      WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:-http://localhost:3100}
       DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: biance_minio
@@ -172,6 +198,7 @@ services:
       - argos-packages:/root/.local/share/argos-translate
 
 volumes:
+  website-logs:
   pgdata:
   research-models:
   minio-data:

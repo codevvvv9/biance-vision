@@ -1,0 +1,19 @@
+## A review tests an existing thesis
+
+A perpetual-position review asks whether the current evidence still supports a user-provided thesis and its risk assumptions. It is not an instruction to hold, add or reverse a position. The terminal does not fetch a private exchange account or execute a change. Inputs should be checked by the user before research is submitted.
+
+## Confirm the input contract
+
+Verify the instrument, position direction, entry reference, size units, research horizon and any planned stop or target. Distinguish user-entered values from observed market values. If a quantity or fee assumption is missing, the result should identify the gap rather than silently substitute a convincing number. Different contracts and quote units require different calculations.
+
+## Separate price, mark price and funding
+
+An exchange’s mark-price and funding data describe specific market mechanisms. They are not interchangeable with the last trade or a fixed future cost. Historical funding is an observation, not a promise of the next settlement. Review the source, timestamp, rate interval and estimation assumptions before interpreting a cost figure.
+
+## Challenge the reason for staying in the trade
+
+List what still supports the original view, the strongest contrary observation and the condition that would require reassessment. A change in market structure matters even if an unrealized profit is positive. Conversely, an adverse tick alone may not settle a question defined on closed candles. Use the declared horizon and confirmation rule consistently.
+
+## What the result cannot establish
+
+Without validated inputs and an appropriate model, a research review cannot establish liquidation safety, executable fill prices or a reliable probability of profit. Missing evidence, stale data or unsupported assumptions can justify waiting or revising the question. Compare the waiting case with your own decision process; never copy its teaching levels as real orders.

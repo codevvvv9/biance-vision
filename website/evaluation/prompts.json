@@ -1,0 +1,14 @@
+[
+  {"id":"en-01","locale":"en","question":"What is Biance Vision?","expectedPaths":["/en/about"]},
+  {"id":"en-02","locale":"en","question":"Is Biance Vision affiliated with Binance?","expectedPaths":["/en/about"]},
+  {"id":"en-03","locale":"en","question":"Does Biance Vision execute trades?","expectedPaths":["/en/about"]},
+  {"id":"en-04","locale":"en","question":"How should I read supporting and opposing evidence in crypto research?","expectedPaths":["/en/guides/reading-research-results"]},
+  {"id":"en-05","locale":"en","question":"What invalidates a price action research conclusion?","expectedPaths":["/en/methodology","/en/demo/trend-pullback"]},
+  {"id":"en-06","locale":"en","question":"Why might research recommend waiting after a breakout?","expectedPaths":["/en/demo/range-breakout","/en/demo/wait-for-confirmation"]},
+  {"id":"en-07","locale":"en","question":"What is an H2 second entry, and what context does it require?","expectedPaths":["/en/guides/second-entry-h2"]},
+  {"id":"en-08","locale":"en","question":"What should I check when choosing an AI crypto research tool?","expectedPaths":["/en/guides/research-tool-checklist"]},
+  {"id":"en-09","locale":"en","question":"How can I get access to Biance Vision?","expectedPaths":["/en/contact","/en/guides/getting-started"]},
+  {"id":"zh-01","locale":"zh","question":"Biance Vision 是什么，它与 Binance 有什么关系？","expectedPaths":["/zh/about"]},
+  {"id":"zh-02","locale":"zh","question":"阅读加密市场研究时，怎样区分行情时间、支持证据与反对证据？","expectedPaths":["/zh/guides/closed-candles-and-live-price","/zh/guides/reading-research-results"]},
+  {"id":"zh-03","locale":"zh","question":"如何联系开通 Biance Vision 并开始首次研究？","expectedPaths":["/zh/contact","/zh/guides/getting-started"]}
+]

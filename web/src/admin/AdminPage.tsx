@@ -3,6 +3,10 @@ import { cutOffUserChat, fetchAdminUsers, updateChatPolicy, api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { fmtDateTime } from '../utils'
 import type { AdminUserRow, AuditAction, AuditEntry, AuditRecord } from '../types'
+import { ProvisionUserPanel } from './ProvisionUserPanel'
+import { UserAccessPanel } from './UserAccessPanel'
+import { WebsiteSettings } from './WebsiteSettings'
+import './website-admin.css'
 
 const ACTION_META: Record<AuditAction, { label: string; cls: string }> = {
   login: { label: '登录', cls: 'act-auth' },
@@ -102,6 +106,7 @@ export default function AdminPage(): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [error, setError] = useState('')
   /** 正在执行聊天管控操作的用户名；非空时全部行的管控按钮禁用（全局互斥，避免并发管控写） */
+  const [accessUser, setAccessUser] = useState<string | null>(null)
   const [busyUser, setBusyUser] = useState('')
 
   const load = useCallback((name: string): void => {
@@ -181,6 +186,8 @@ export default function AdminPage(): JSX.Element {
 
   return (
     <div className="page">
+      <ProvisionUserPanel onCreated={refreshUsers} />
+      <WebsiteSettings />
       <section className="panel">
         <div className="panel-head">
           <h2 className="panel-title">
@@ -263,6 +270,7 @@ export default function AdminPage(): JSX.Element {
                       >
                         {u.chatPolicy.disabled ? '启用' : '禁用'}
                       </button>
+                      {u.role === 'user' && <button className="btn btn-ghost btn-sm" onClick={() => setAccessUser(u.username)}>额度 / 重置密码</button>}
                       <LimitInput
                         key={`${u.username}:${u.chatPolicy.dailyLimit ?? 'null'}`}
                         limit={u.chatPolicy.dailyLimit}
@@ -285,6 +293,7 @@ export default function AdminPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        {accessUser && <UserAccessPanel key={accessUser} username={accessUser} onClose={() => setAccessUser(null)} />}
         <p className="form-hint muted audit-hint">
           AI 配置档案的「绑定用户」需与上述用户名完全一致（区分大小写），可点击「复制」后直接粘贴；
           「聊天」列展示禁用状态与今日用量（已用/上限），可对单个用户禁用/设每日上限/一键掐断（掐断同时取消其进行中的研究任务）。
@@ -393,6 +402,7 @@ export default function AdminPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        {accessUser && <UserAccessPanel key={accessUser} username={accessUser} onClose={() => setAccessUser(null)} />}
         <p className="form-hint muted audit-hint">
           一次登录即一条会话记录，展开可查看该次登录后的完整操作路径（含登录来源 IP 与设备）；
           登录失败单独记录。保留最近 200 条会话，仅超级管理员可见。

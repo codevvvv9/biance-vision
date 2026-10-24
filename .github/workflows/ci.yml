@@ -24,6 +24,7 @@ jobs:
 
       # 类型检查 + 引擎/计算的纯自测（无需数据库；知识库/研究集成 smoke 属于
       # release:gate 本地门槛，依赖库内行情数据，不在无状态 CI 里伪造环境）
+      - run: pnpm website:check
       - run: pnpm typecheck
       - run: pnpm brooks:causality
       - run: pnpm brooks:selftest

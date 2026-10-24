@@ -19,6 +19,7 @@ import { ContextCard } from './ContextCard'
 import type { FollowUpAction } from 'biance-vision-brooks'
 import { Combobox } from './Combobox'
 import { authUrl } from './uiMode'
+import { ENTRY_KEY, parseEntry, type ResearchEntryDraftV1 } from './websiteEntry'
 import { useResearchConversation } from './useResearchConversation'
 import type { ConversationContextSync } from './useResearchConversation'
 import { useResearchRun } from './useResearchRun'
@@ -83,12 +84,20 @@ function useLayerFocus(ref: RefObject<HTMLElement>, open: boolean, modal: boolea
 }
 
 export default function WorkbenchPage(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const zh = i18n.language.startsWith('zh')
+  const websiteLocale = zh ? 'zh' : 'en'
   const { user, logout } = useAuth()
   const location = useLocation(), navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const compact = useCompact()
   const [saved] = useState(() => readDraft(user?.username ?? null))
+  const [entry, setEntry] = useState<ResearchEntryDraftV1 | null>(() => { try { return parseEntry(sessionStorage.getItem(ENTRY_KEY)) } catch { return null } })
+  const [entryNotice, setEntryNotice] = useState('')
+  const [quota, setQuota] = useState<{ managed: boolean; remaining: number | null } | null>(null)
+  const refreshQuota = useCallback(async (): Promise<void> => { if (!user) return; try { setQuota(await api('/users/me/ai-access')) } catch { /* Server still enforces quota if status cannot load. */ } }, [user])
+  useEffect(() => { void refreshQuota() }, [refreshQuota])
+  useEffect(() => { try { if (sessionStorage.getItem(ENTRY_KEY) && !entry) { sessionStorage.removeItem(ENTRY_KEY); setEntryNotice(zh ? '官网问题已失效，请重新输入或选择下方示例问题。' : 'Your website question expired. Write a question or choose an example below.') } } catch { /* Manual input remains available. */ } }, [])
   const [scene, setScene] = useState<Scene>(saved.scene)
   const [symbol, setSymbol] = useState(saved.symbol)
   const [horizon, setHorizon] = useState<Horizon>(saved.horizon)
@@ -125,11 +134,22 @@ export default function WorkbenchPage(): JSX.Element {
     if (q.status === 'fulfilled') setQuotes(q.value.quotes)
     setDataError([p, q].flatMap(r => r.status === 'rejected' ? [(r.reason as Error).message] : []).join('；'))
   }, [user])
+  const applyEntry = (): void => {
+    const valid = entry ? parseEntry(JSON.stringify(entry)) : null
+    if (!valid) { setEntry(null); setEntryNotice(zh ? '问题已失效，请重新输入或选择示例。' : 'Question expired. Write a new question or choose an example.'); return }
+    if (selectedConversation || selectedRun) { updateUrl({ conversation: null, run: null }); conv.newConversation(); tracker.clearRun() }
+    setScene(valid.scene); setSymbol(valid.symbol); setHorizon(valid.horizon); setPositionId(''); setQuoteId('')
+    setDrafts(d => ({ ...d, [valid.scene]: valid.question })); void i18n.changeLanguage(valid.locale)
+    try { sessionStorage.removeItem(ENTRY_KEY) } catch { /* No storage is required for sending. */ }
+    setEntry(null); setEntryNotice(valid.locale === 'zh-CN' ? '官网问题已恢复，请检查后确认发送。' : 'Question restored. Review it before sending.'); inputRef.current?.focus()
+  }
+  const keepDraft = (): void => { try { sessionStorage.removeItem(ENTRY_KEY) } catch { /* optional */ }; setEntry(null) }
   const context = { symbol, horizon, product: SCENES[scene].product, marketType: SCENES[scene].marketType, positionId, quoteId }
   const conv = useResearchConversation({ enabled: !!user, greeting: '', context,
     onConversationCreated: id => updateUrl({ conversation: id }, true),
     onRunCreated: id => updateUrl({ run: id }), onPositionsChanged: () => void refreshTools(),
   })
+  useEffect(() => { if (user && entry && !selectedConversation && !selectedRun && !Object.values(drafts).some(d => d.trim())) applyEntry() }, [user, entry, selectedConversation, selectedRun])
   const run = tracker.activeRun
   const running = !!run && !TERMINAL.includes(run.status)
   const locked = conv.busy || conv.loadingConversation || contextLoading || conv.cardBusy !== null || runLoading || running || retryBusy || (!!selectedConversation && conv.convId !== selectedConversation)
@@ -218,12 +238,13 @@ export default function WorkbenchPage(): JSX.Element {
     updateUrl({ conversation: null, run: null }); inputRef.current?.focus()
   }
   const send = async (): Promise<void> => {
-    if (!drafts[scene].trim() || locked) return
+    if (!drafts[scene].trim() || locked || quota?.remaining === 0) return
     if (!user) { login(); return }
     if (!/^[A-Z0-9]{3,30}USDT$/.test(symbol)) { setPageError(t('research:run.invalidSymbol')); return }
     const raw = drafts[scene]; setDrafts(prev => ({ ...prev, [scene]: '' })); setPageError('')
     nearBottom.current = true
     const sent = await conv.send(raw)
+    void refreshQuota()
     if (!sent) setDrafts(prev => ({ ...prev, [scene]: prev[scene] || raw }))
     inputRef.current?.focus()
   }
@@ -302,7 +323,7 @@ export default function WorkbenchPage(): JSX.Element {
               onClick={() => { setNavOpen(false); nearBottom.current = true; updateUrl({ conversation: c.id, run: null }) }}>{c.title || t('research:wb.untitled')}</button></div>)}
         </>}
       </div>
-      <div className="wb-sidebar-foot"><nav aria-label={t('research:wb.otherWorkbench')}><Link to="/">◫ <span>{t('research:wb.markets')}</span></Link><Link to="/brooks">⌁ <span>{t('research:wb.priceAction')}</span></Link></nav>
+      <div className="wb-sidebar-foot"><nav aria-label={t('research:wb.otherWorkbench')}><Link to="/dashboard">◫ <span>{t('research:wb.markets')}</span></Link><a href={`/${websiteLocale}`}>↗ <span>{zh ? '官网' : 'Website'}</span></a><Link to="/brooks">⌁ <span>{t('research:wb.priceAction')}</span></Link></nav>
         <div className="wb-account">{user ? <><span className="wb-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="wb-account-name">{user.username}</span><button onClick={() => void logout()} aria-label={t('research:wb.logoutAria')}>{t('research:wb.logout')}</button></> : <button className="wb-login" onClick={login}><span className="wb-avatar">↗</span><span>{t('research:wb.login')}</span></button>}</div>
       </div>
     </aside>
@@ -331,6 +352,7 @@ export default function WorkbenchPage(): JSX.Element {
                 {m.card && <PositionConfirmCard card={m.card} busy={conv.cardBusy !== null} onResolve={confirm => void conv.resolveCard(i, confirm)} />}
                 {m.runId && (m.runId === run?.id ? bubble : <button className="wb-run-link" disabled={running || conv.busy} onClick={() => updateUrl({ run: m.runId! })}>{t('research:wb.viewThisRun', { id: m.runId.slice(0, 8) })}</button>)}</div>
             </article>)}
+            {(run || visibleMessages.some(m => m.role === 'assistant')) && <details className="wb-result-help"><summary>{zh ? '如何阅读研究结果' : 'How to read your research'}</summary><p>{zh ? '先看结论适用的场景与时间，再核对支持证据、反对证据和失效条件。数据不足时先补充问题或等待，不将研究结果视为保证。' : 'Check the context and research time, then compare supporting evidence, opposing evidence and invalidation conditions. When data is insufficient, refine your question or wait. Research does not guarantee outcomes.'}</p><a href={`/${websiteLocale}/guides/reading-research-results`}>{zh ? '完整阅读指南' : 'Read the full guide'}</a></details>}
             {conv.busy && <p className="wb-thinking" role="status"><span />{t('research:wb.understanding')}</p>}
             {runLoading && <p className="wb-caption" role="status">{t('research:wb.readingRun')}</p>}
             {run && !hasInlineRun && <article className="wb-message assistant"><div className="wb-message-label">{t('research:wb.visionResearch')}</div><div className="wb-message-body">{bubble}</div></article>}
@@ -338,7 +360,10 @@ export default function WorkbenchPage(): JSX.Element {
         </div>
         {unread && <button className="wb-to-bottom" onClick={() => { nearBottom.current = true; const el = logRef.current; if (el) el.scrollTop = el.scrollHeight; setUnread(false) }}>{t('research:wb.toBottom')}</button>}
         <div className="wb-compose-wrap">
-          {pageError && <p className="wb-alert" role="alert">{pageError}</p>}
+          {entry && user && <div className="wb-entry" role="region" aria-label={zh ? '官网问题恢复' : 'Restore website question'}><p>{zh ? '官网有一个待恢复的问题。恢复仅填写输入框，由你确认发送。' : 'A website question is ready to restore. Review and send it yourself.'}</p><blockquote>{entry.question}</blockquote>{(Object.values(drafts).some(d => d.trim()) || selectedConversation || selectedRun) && <p>{zh ? '当前有草稿或历史会话。替换会切换到新会话，请先保存需要保留的文字。' : 'There is a draft or history open. Restoring starts a new conversation. Save any text you wish to keep first.'}</p>}<button disabled={locked} onClick={applyEntry}>{zh ? '恢复官网问题' : 'Restore website question'}</button><button onClick={keepDraft}>{zh ? '保留当前草稿' : 'Keep current draft'}</button></div>}
+          {entryNotice && <p className="wb-caption" role="status">{entryNotice}</p>}
+          {quota?.managed && <p className="wb-caption" role="status">{zh ? `剩余 AI 交互次数：${quota.remaining}` : `AI interactions remaining: ${quota.remaining}`} · <a href={`/${websiteLocale}/contact`}>{zh ? '联系开通会员服务' : 'Contact us for membership'}</a></p>}
+          {pageError && <p className="wb-alert" role="alert">{pageError} <a href={`/${websiteLocale}/guides/getting-started`}>{zh ? '查看首次使用指南' : 'Getting started'}</a></p>}
           {conv.historyError && selectedConversation && <p className="wb-alert" role="alert">{t('research:wb.restoreFailed', { msg: conv.historyError })}</p>}
           <ContextCard symbol={symbol} horizon={horizon} product={SCENES[scene].product}
             position={scene === 'perp' ? positions.find(p => p.id === positionId) ?? null : null}
@@ -353,7 +378,7 @@ export default function WorkbenchPage(): JSX.Element {
           }}>{(Object.keys(SCENES) as Scene[]).map(s => <button key={s} id={`scene-${s}`} role="tab" tabIndex={scene === s ? 0 : -1} aria-selected={scene === s} aria-controls="wb-composer-panel" disabled={locked} onClick={() => changeScene(s)}>{t(`research:scene.${s}.label`)}</button>)}</div>
             <div role="tabpanel" id="wb-composer-panel" aria-labelledby={`scene-${scene}`}><textarea ref={inputRef} aria-label={t('research:wb.questionAria')} value={drafts[scene]} placeholder={inputCfg.placeholder[scene] ?? t(`research:scene.${scene}.hint`)} maxLength={2000} rows={3} onChange={e => setDrafts(d => ({ ...d, [scene]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
               <div className="wb-compose-tools"><div className="wb-context"><label><span className="sr-only">{t('research:wb.symbolAria')}</span><Combobox ariaLabel={t('research:wb.symbolAria')} value={symbol} disabled={locked} onChange={v => { setSymbol(v.toUpperCase()); setPositionId(''); setQuoteId('') }} suggestions={['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']} /></label><label><span className="sr-only">{t('research:wb.horizonAria')}</span><Dropdown ariaLabel={t('research:wb.horizonAria')} value={horizon} disabled={locked} onChange={v => setHorizon(v)} options={(['10m', '30m', '1h', '1d', '1w'] as Horizon[]).map(h => ({ value: h, label: `${h}${h === '1w' ? t('research:wb.h1wSuffix') : ''}` }))} /></label></div>
-                <div className="wb-send-tools">{scene !== 'spot' && <button className="wb-tool" disabled={locked} onClick={() => user ? setToolsOpen(true) : login()}>{scene === 'perp' ? (positionId ? t('research:wb.positionLinked') : t('research:wb.positionTools')) : (quoteId ? t('research:wb.quoteLinked') : t('research:wb.quoteTools'))}</button>}<button className="wb-send" aria-label={user ? t('research:wb.sendAria') : t('research:wb.sendLoginAria')} disabled={locked || !drafts[scene].trim()} onClick={() => void send()}>{conv.busy ? '…' : '↑'}</button></div>
+                <div className="wb-send-tools">{scene !== 'spot' && <button className="wb-tool" disabled={locked} onClick={() => user ? setToolsOpen(true) : login()}>{scene === 'perp' ? (positionId ? t('research:wb.positionLinked') : t('research:wb.positionTools')) : (quoteId ? t('research:wb.quoteLinked') : t('research:wb.quoteTools'))}</button>}<button className="wb-send" aria-label={user ? t('research:wb.sendAria') : t('research:wb.sendLoginAria')} disabled={locked || quota?.remaining === 0 || !drafts[scene].trim()} onClick={() => void send()}>{conv.busy ? '…' : '↑'}</button></div>
               </div>
             </div>
           </div>

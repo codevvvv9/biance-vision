@@ -53,7 +53,9 @@ const TEST_DB = 'bv_login_regression'
 const SERVER_DIR = new URL('../server/', import.meta.url).pathname
 
 let failed = 0
+let checked = 0
 function check(name: string, actual: unknown, expected: unknown): void {
+  checked++
   const ok = actual === expected
   console.log(`${ok ? '✔' : '✖'} ${name}${ok ? '' : `（期望 ${String(expected)}，实际 ${String(actual)}）`}`)
   if (!ok) failed++
@@ -293,6 +295,11 @@ try {
     }
     check('R0 server 连接独立测试库（未降级 JSON 存储）', serverLog.join('\n').includes(TEST_DB), true)
 
+    for (const [route, status] of [['/login', 200], ['/dashboard', 200], ['/research', 200], ['/definitely-unknown', 404], ['/index.html', 404], ['/api/undefined-test-route', 401]] as const) {
+      const response = await fetch(`http://127.0.0.1:${PORT}${route}`)
+      check(`官网分流接缝：直连 user-api ${route}`, response.status, status)
+    }
+
     // 请求顺序有讲究：先走一次成功登录（R1）把失败计数清零，随后 R3/R4/R6 的三次失败
     // 恰好达到注入的锁定阈值 3，R7/R8 验证锁定生效与按 IP 语义
     const r1 = await login(ADMIN_HOST, adminUser, adminPass)
@@ -455,4 +462,4 @@ if (failed > 0) {
   console.error(`\n登录回归未通过 ✖（${failed} 项失败）`)
   process.exit(1)
 }
-console.log('\n登录回归全部通过 ✔（25 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入 / W3-S2 用途标记+限速持久化+fail-closed）')
+console.log(`\n登录回归全部通过 ✔（${checked} 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入 / W3-S2 用途标记+限速持久化+fail-closed / 官网路径与 404）`)
