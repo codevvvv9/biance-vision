@@ -3,3 +3,5 @@ packages:
   - web
   - shared
   - packages/shared-ui
+  - packages/brand
+  - website

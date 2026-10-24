@@ -134,3 +134,23 @@
 ## 参考来源
 
 - 仓库内：`server/src/models.ts`、`server/src/index.ts`（现有路由）、`server/drizzle/`、`server/drizzle.config.ts`、docs/specs/market-data.md、docs/specs/knowledge-rag.md、docs/specs/agent-orchestration.md、docs/specs/admin-security.md、docs/brooks-agent-architecture.md（§10）。
+
+
+## 人工开通、官网联系方式与受管 AI 额度（2026-10-24）
+
+状态：`implemented`；独立临时 PG 数据库集成检查通过，未部署。
+
+| API | 权限与行为 |
+| --- | --- |
+| `GET/PUT /api/admin/website-config` | 仅管理进程超管；PUT 为 Telegram 用户名、email、expectedRevision；只发布公开快照，版本冲突 409 |
+| `POST /api/admin/users/provision` | 仅管理进程超管；普通用户名可自动生成、profileName、totalLimit、dailyLimit、requestsPerMinute；全部成功后 201 返回一次性随机密码与相对登录路径，可附配置的 publicOrigin |
+| `GET/PUT /api/admin/users/:username/ai-access` | 超管读取/调整硬上限；修改保留已用计数，不作为清零接口 |
+| `POST /api/admin/users/:username/reset-credentials` | 超管重置普通用户随机密码，撤销 PG 中该用户全部会话；独立进程在后续受保护 HTTP 请求核验撤销状态 |
+| `GET /api/users/me/ai-access` | 用户只读本人 managed/totalLimit/used/remaining，不返回 AI Key 或其他账号状态 |
+| `GET /site-config.json` | Next 仅输出公开联系方式快照；no-store，不依赖用户 API |
+
+AI 额度写在既有 `app_settings` 的 `ai_access:<username>`，结构 version/generation/累计上限及已用/每日日期及已用/每分钟窗口/档案名。PG 条件 UPDATE 原子预留，跨进程并发不超发。每次已受理的聊天、研究入口、翻译计一次；HTTP 错误退回累计/每日额度，频率尝试不退回。已受理任务的异步失败或流式响应中途失败仍计一次。日界为 UTC+8。旧账号无记录时维持原策略，管理员停用仍逐次查 PG 生效。
+
+总额度耗尽为 403 `ai_access_exhausted`；每日/频率耗尽为 429；存储异常拒绝继续。所有判断在调用模型之前进行，终端展示联系开通会员服务；模型自身 Token/工具/档案日限继续取更严格规则。开通 API 采用严格字段校验、JSON 来源检查、超管会话及额外操作频率限制，公开用户域名上的管理 API 始终 404。登录保留持久化防爆破计数、入口用途隔离及 fail-closed。robots/noindex 只限制索引意图，不替代鉴权。
+
+原始密码不持久化、不写日志，只保存 scrypt 哈希；研究/对话/持仓请求体从 HTTP 日志省略。公开配置独立目录仅含公开联系方式，Next 容器无账号、会话、数据库和模型密钥挂载。账号与额度写 PG 事务，AI 档案文件绑定有失败补偿；极端进程崩溃可能遗留无账号的档案绑定，需运维清理，不会产生可登录账号。

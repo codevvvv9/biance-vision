@@ -1,364 +1,356 @@
-import { useTranslation } from 'react-i18next'
-import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { api } from '../api'
-import { useAi } from '../ai/AiContext'
-import type { AdminUser } from '../types'
-
-interface Props {
-  onClose: () => void
-}
-
+import { Drawer, Modal, overlayContainer } from "./ui/overlays";
+import {
+  App,
+  AutoComplete,
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Switch,
+  Typography,
+} from "antd";
+import { useEffect, useRef, useState } from "react";
+import { useResource } from "./ui/resource";
+import { Feedback } from "./ui/feedback";
+import { useConfirmDiscard, useDirtyForm } from "./ui/forms";
+import { useAdminText } from "./ui/text";
+import {
+  clearAiConfig,
+  loadAiConfig,
+  loadModels,
+  loadPrompt,
+  saveAiConfig,
+  testAiConfig,
+} from "./features/ai/configApi";
+import type { AiProfileMasked } from "../types";
+import styles from "./ui/admin.module.css";
 interface ProfileForm {
-  baseUrl: string
-  apiKey: string
-  model: string
-  temperature: string
-  maxTokens: string
-  extraPrompt: string
-  dailyLimit: string
-  allowedUsers: string // 逗号分隔，表单态
-  enableTools: boolean // 工具调用（行情查询/技术分析/画图）
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  extraPrompt: string;
+  dailyLimit?: number;
+  allowedUsers: string[];
+  enableTools: boolean;
 }
-
-const EMPTY_PROFILE: ProfileForm = {
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: '',
-  model: '',
-  temperature: '',
-  maxTokens: '',
-  extraPrompt: '',
-  dailyLimit: '',
-  allowedUsers: '',
+const emptyProfile = (): ProfileForm => ({
+  baseUrl: "",
+  apiKey: "",
+  model: "",
+  extraPrompt: "",
+  allowedUsers: [],
   enableTools: true,
-}
-
-const toForm = (p: {
-  baseUrl: string
-  model: string
-  apiKeyMasked: string
-  temperature?: number
-  maxTokens?: number
-  extraPrompt?: string
-  dailyLimit?: number
-  allowedUsers?: string[]
-  enableTools?: boolean
-}): ProfileForm => ({
-  baseUrl: p.baseUrl || 'https://api.openai.com/v1',
+});
+const fromMasked = (
+  p: AiProfileMasked & { enableTools?: boolean },
+): ProfileForm => ({
+  ...p,
   apiKey: p.apiKeyMasked,
-  model: p.model,
-  temperature: p.temperature === undefined ? '' : String(p.temperature),
-  maxTokens: p.maxTokens === undefined ? '' : String(p.maxTokens),
-  extraPrompt: p.extraPrompt ?? '',
-  dailyLimit: p.dailyLimit === undefined ? '' : String(p.dailyLimit),
-  allowedUsers: (p.allowedUsers ?? []).join(', '),
-  enableTools: p.enableTools !== false,
-})
-
-/** AI 大模型设置（仅超级管理员）：多档案 + 用户绑定；Key 只存服务端，界面回显打码 */
-export default function AiSettingsModal({ onClose }: Props): JSX.Element {
-  const { t } = useTranslation('admin')
-  const { refresh, status } = useAi()
-  const [profiles, setProfiles] = useState<Record<string, ProfileForm>>({ default: EMPTY_PROFILE })
-  const [current, setCurrent] = useState('default')
-  const [loading, setLoading] = useState(true)
-  const [testing, setTesting] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
-  const [promptView, setPromptView] = useState<string | null>(null)
-  const [modelOptions, setModelOptions] = useState<string[]>([])
-  const [allUsers, setAllUsers] = useState<string[]>([])
-
+  extraPrompt: p.extraPrompt ?? "",
+  allowedUsers: p.allowedUsers ?? [],
+  enableTools: p.enableTools ?? true,
+});
+export default function AiSettingsModal({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void;
+  onSaved?: () => void;
+}): JSX.Element {
+  const text = useAdminText();
+  const { modal } = App.useApp();
+  const resource = useResource(loadAiConfig);
+  const [profiles, setProfiles] = useState<Record<string, ProfileForm>>({
+    default: emptyProfile(),
+  });
+  const [baseline, setBaseline] = useState("");
+  const [current, setCurrent] = useState("default");
+  const [models, setModels] = useState<string[]>([]);
+  const [prompt, setPrompt] = useState<string | null>(null);
+  const [newName, setNewName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const alive = useRef(true);
+  useEffect(
+    () => () => {
+      alive.current = false;
+    },
+    [],
+  );
   useEffect(() => {
-    api<{ profiles: Record<string, Parameters<typeof toForm>[0]> }>('/admin/ai/config')
-      .then((r) => {
-        const entries = Object.entries(r.profiles ?? {})
-        if (entries.length > 0) {
-          setProfiles(Object.fromEntries(entries.map(([name, p]) => [name, toForm(p)])))
-        }
-      })
-      .catch((e: Error) => setResult({ ok: false, message: e.message }))
-      .finally(() => setLoading(false))
-    // 绑定用户候选：与「用户列表」同源的精确用户名（区分大小写）
-    api<{ users: AdminUser[] }>('/admin/users')
-      .then((r) => setAllUsers(r.users.map((u) => u.username)))
-      .catch(() => {
-        /* 拉取失败时退回手输，不阻断设置 */
-      })
-  }, [])
-
-  // 切换档案时拉取该档案的模型候选与提示词（收起旧内容）
+    if (!resource.data) return;
+    const next = Object.fromEntries(
+      Object.entries(resource.data.profiles).map(([name, profile]) => [
+        name,
+        fromMasked(profile),
+      ]),
+    );
+    if (!next.default) next.default = emptyProfile();
+    setProfiles(next);
+    setBaseline(JSON.stringify(next));
+  }, [resource.data]);
   useEffect(() => {
-    setPromptView(null)
-    setModelOptions([])
-    if (loading) return
-    api<{ models: string[] }>(`/admin/ai/models?name=${encodeURIComponent(current)}`)
-      .then((r) => setModelOptions(r.models))
-      .catch(() => {
-        /* noop */
+    let active = true;
+    setModels([]);
+    setPrompt(null);
+    if (!resource.data) return;
+    void loadModels(current)
+      .then((result) => {
+        if (active) setModels(result.models);
       })
-  }, [current, loading])
-
-  const form = profiles[current] ?? EMPTY_PROFILE
-
-  const setField = (k: keyof ProfileForm, v: string): void => {
-    setProfiles((prev) => ({ ...prev, [current]: { ...(prev[current] ?? EMPTY_PROFILE), [k]: v } }))
-  }
-
-  const boundUsers = form.allowedUsers.split(/[,，\s]+/).filter(Boolean)
-  const unknownUsers = allUsers.length > 0 ? boundUsers.filter((u) => !allUsers.includes(u)) : []
-
-  const toggleBoundUser = (u: string): void => {
-    const next = boundUsers.includes(u) ? boundUsers.filter((x) => x !== u) : [...boundUsers, u]
-    setField('allowedUsers', next.join(', '))
-  }
-
-  const addProfile = (): void => {
-    const name = window.prompt(t('新档案名（1~24 位字母 / 数字 / _ / -）'))?.trim()
-    if (!name) return
-    if (!/^[a-zA-Z0-9_-]{1,24}$/.test(name)) {
-      setResult({ ok: false, message: t('档案名「{{name}}」不合法', { name }) })
-      return
-    }
-    if (profiles[name]) {
-      setResult({ ok: false, message: t('档案「{{name}}」已存在', { name }) })
-      return
-    }
-    setProfiles((prev) => ({ ...prev, [name]: { ...EMPTY_PROFILE, baseUrl: '' } }))
-    setCurrent(name)
-    setResult(null)
-  }
-
-  const removeCurrent = (): void => {
-    if (current === 'default') return
-    if (!window.confirm(t('删除档案「{{name}}」？绑定该档案的用户将回落到 default。', { name: current }))) return
-    setProfiles((prev) => {
-      const next = { ...prev }
-      delete next[current]
-      return next
-    })
-    setCurrent('default')
-  }
-
-  const viewPrompt = async (): Promise<void> => {
-    if (promptView !== null) {
-      setPromptView(null)
-      return
-    }
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [current, resource.data]);
+  const form = profiles[current] ?? emptyProfile();
+  const dirty = Boolean(baseline && baseline !== JSON.stringify(profiles));
+  useDirtyForm(dirty);
+  const confirmDiscard = useConfirmDiscard();
+  const close = async () => {
+    if (!busy && (await confirmDiscard(dirty))) onClose();
+  };
+  const field = <K extends keyof ProfileForm>(name: K, value: ProfileForm[K]) =>
+    setProfiles((previous) => ({
+      ...previous,
+      [current]: { ...previous[current], [name]: value },
+    }));
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
     try {
-      const r = await api<{ prompt: string }>(`/admin/ai/prompt?name=${encodeURIComponent(current)}`)
-      setPromptView(r.prompt)
+      await saveAiConfig(profiles);
+      onSaved?.();
+      onClose();
     } catch (e) {
-      setResult({ ok: false, message: (e as Error).message })
-    }
-  }
-
-  const test = async (): Promise<void> => {
-    setTesting(true)
-    setResult(null)
-    try {
-      const r = await api<{ ok: boolean; message: string }>(`/admin/ai/test?name=${encodeURIComponent(current)}`, {
-        method: 'POST',
-        body: form,
-      })
-      setResult({ ok: r.ok, message: r.ok ? t('连接成功，Key 有效') : t('连接失败：{{msg}}', { msg: r.message }) })
-    } catch (e) {
-      setResult({ ok: false, message: (e as Error).message })
+      if (alive.current) setError((e as Error).message);
     } finally {
-      setTesting(false)
+      if (alive.current) setBusy(false);
     }
-  }
-
-  const save = async (): Promise<void> => {
-    setSaving(true)
-    setResult(null)
-    try {
-      const payload = {
-        profiles: Object.fromEntries(
-          Object.entries(profiles).map(([name, p]) => [
-            name,
-            { ...p, allowedUsers: p.allowedUsers.split(/[,，\s]+/).filter(Boolean) },
-          ]),
-        ),
+  };
+  const remove = async (all = false) => {
+    if (
+      !(await modal.confirm({
+        getContainer: overlayContainer,
+        title: all ? text("clearAiConfig") : text("deleteProfile"),
+        content: text("profileFallback"),
+        okText: text("confirm"),
+        cancelText: text("cancel"),
+        okButtonProps: { danger: true },
+      }))
+    )
+      return;
+    if (all) {
+      setBusy(true);
+      try {
+        await clearAiConfig();
+        onSaved?.();
+        onClose();
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setBusy(false);
       }
-      await api('/admin/ai/config', { method: 'PUT', body: payload })
-      await refresh()
-      onClose()
-    } catch (e) {
-      setResult({ ok: false, message: (e as Error).message })
-    } finally {
-      setSaving(false)
+    } else {
+      setProfiles((previous) => {
+        const next = { ...previous };
+        delete next[current];
+        return next;
+      });
+      setCurrent("default");
     }
-  }
-
-  const removeAll = async (): Promise<void> => {
-    if (!window.confirm(t('确定清空全部 AI 配置吗？删除后机器人与聊天窗口将不再出现（可随时重新配置）'))) return
-    try {
-      await api('/admin/ai/config', { method: 'DELETE' })
-      await refresh()
-      onClose()
-    } catch (e) {
-      setResult({ ok: false, message: (e as Error).message })
-    }
-  }
-
-  const names = Object.keys(profiles)
-
-  // Portal 渲染到 body：Header 的 backdrop-filter 会破坏 fixed 后代的视口定位，导致弹窗错位
-  return createPortal(
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal ai-settings-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <h3>{t('AI 大模型设置')}</h3>
-          <button className="modal-close" onClick={onClose} aria-label={t("关闭")}>
-            ✕
-          </button>
-        </div>
-        <div className="modal-body">
-          <div className="ai-profile-bar">
-            <label className="ai-profile-select">
-              <span>{t('配置档案')}</span>
-              <select value={current} onChange={(e) => setCurrent(e.target.value)}>
-                {names.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                    {n === 'default' ? t('（默认）') : ''}
-                    {profiles[n].allowedUsers ? ` · ${profiles[n].allowedUsers}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="btn btn-ghost btn-sm" onClick={addProfile}>
-              ＋ {t('新建')}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm danger"
-              onClick={removeCurrent}
-              disabled={current === 'default'}
-              title={current === 'default' ? t('default 档案不可删除') : t('删除档案「{{name}}」', { name: current })}
+  };
+  return (
+    <Drawer
+      title={text("aiSettings")}
+      open
+      size={720}
+      onClose={() => void close()}
+      maskClosable={!busy}
+      keyboard={!busy}
+      loading={resource.loading}
+      extra={
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={!baseline}
+          onClick={() => void save()}
+        >
+          {text("save")}
+        </Button>
+      }
+    >
+      <div className={styles.stack}>
+        <Feedback error={error || resource.error} success={success} />
+        <div className={styles.toolbar}>
+          <Select
+            aria-label={text("profile")}
+            value={current}
+            onChange={setCurrent}
+            options={Object.keys(profiles).map((value) => ({
+              value,
+              label: value,
+            }))}
+            style={{ minWidth: 180 }}
+          />
+          <Space>
+            <Button onClick={() => setNewName("")}>{text("newProfile")}</Button>
+            <Button
+              danger
+              disabled={current === "default" || busy}
+              onClick={() => void remove()}
             >
-              {t('删除档案')}
-            </button>
-          </div>
-          <p className="ai-settings-tip">
-            {t('兼容 OpenAI 接口格式，保存即生效无需重启。绑定用户的档案优先，其他用户走')} <code>default</code>
-            {t('；API Key 只存服务端，不下发浏览器。')}
-          </p>
-          <label className="ai-field">
-            <span>Base URL</span>
-            <input value={form.baseUrl} onChange={(e) => setField('baseUrl', e.target.value)} placeholder="https://api.openai.com/v1" spellCheck={false} />
-          </label>
-          <label className="ai-field">
-            <span>API Key</span>
-            <input type="password" value={form.apiKey} onChange={(e) => setField('apiKey', e.target.value)} placeholder="sk-..." spellCheck={false} />
-          </label>
-          <label className="ai-field">
-            <span>{t('模型名称')}{modelOptions.length > 0 ? t('（可下拉选择）') : ''}</span>
-            <input
-              value={form.model}
-              onChange={(e) => setField('model', e.target.value)}
-              placeholder="gpt-4o-mini"
-              list="ai-model-options"
-              spellCheck={false}
-            />
-            {modelOptions.length > 0 && (
-              <datalist id="ai-model-options">
-                {modelOptions.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            )}
-          </label>
-          <div className="ai-field-row">
-            <label className="ai-field">
-              <span>{t('temperature（0~2，空 = 0.7）')}</span>
-              <input type="number" min={0} max={2} step={0.1} value={form.temperature} onChange={(e) => setField('temperature', e.target.value)} placeholder="0.7" />
-            </label>
-            <label className="ai-field">
-              <span>{t('输出上限（空 = 不限）')}</span>
-              <input type="number" min={0} step={256} value={form.maxTokens} onChange={(e) => setField('maxTokens', e.target.value)} placeholder={t("如 2048")} />
-            </label>
-            <label className="ai-field">
-              <span>{t('每人每日次数（空 = 不限）')}</span>
-              <input type="number" min={0} step={10} value={form.dailyLimit} onChange={(e) => setField('dailyLimit', e.target.value)} placeholder={t("如 50")} />
-            </label>
-          </div>
-          <label className="ai-field ai-tools-toggle" title={t("开启后 AI 可调用工具：实时行情查询、K 线技术分析、相关性计算、画图、新闻；接口不支持时自动降级为纯对话")}>
-            <input
-              type="checkbox"
-              checked={form.enableTools}
-              onChange={(e) =>
-                setProfiles((prev) => ({
-                  ...prev,
-                  [current]: { ...(prev[current] ?? EMPTY_PROFILE), enableTools: e.target.checked },
-                }))
-              }
-            />
-            <span>{t('工具调用（function calling）：行情查询 / 技术分析 / 画图，模型不支持时自动降级')}</span>
-          </label>
-          {current !== 'default' && (
-            <div className="ai-field">
-              <span>{t('绑定用户（逗号分隔，留空 = 不绑定；绑定的用户使用本档案而非 default）')}</span>
-              <input value={form.allowedUsers} onChange={(e) => setField('allowedUsers', e.target.value)} placeholder={t("如 zhangsan, lisi")} spellCheck={false} />
-              {allUsers.length > 0 && (
-                <div className="ai-user-chips">
-                  {allUsers.map((u) => {
-                    const bound = boundUsers.includes(u)
-                    return (
-                      <button
-                        key={u}
-                        type="button"
-                        className={`ai-user-chip ${bound ? 'is-bound' : ''}`}
-                        onClick={() => toggleBoundUser(u)}
-                        title={bound ? t('点击解除绑定') : t('点击绑定该用户')}
-                      >
-                        {bound ? '✓ ' : '+ '}
-                        {u}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-              {unknownUsers.length > 0 && (
-                <p className="ai-user-warn">
-                  {t('「{{users}}」不在系统用户列表中——绑定按用户名精准匹配（区分大小写），请到「管理」页核对', { users: unknownUsers.join('、') })}
-                </p>
-              )}
-            </div>
-          )}
-          <div className="ai-field">
-            <span className="ai-field-label-row">
-              {t('追加系统提示词（可选）')}
-              <button className="ai-prompt-toggle" onClick={() => void viewPrompt()} title={t("查看当前档案生效的完整系统提示词")}>
-                ❗ {promptView === null ? t('查看当前生效提示词') : t('收起提示词')}
-              </button>
-            </span>
-            <textarea
-              rows={3}
-              value={form.extraPrompt}
-              onChange={(e) => setField('extraPrompt', e.target.value)}
-              placeholder={t("追加在内置金融分析提示词之后，例如：回答控制在 300 字内；重点关注主流币")}
-              spellCheck={false}
-            />
-          </div>
-          {promptView !== null && <pre className="ai-prompt-view">{promptView}</pre>}
-          {result && <p className={`ai-settings-result ${result.ok ? 'ok' : 'bad'}`}>{result.message}</p>}
-          <div className="ai-settings-actions">
-            {status.configured && (
-              <button className="btn btn-ghost btn-sm danger ai-del-btn" onClick={() => void removeAll()}>
-                {t('清空全部')}
-              </button>
-            )}
-            <button className="btn btn-ghost btn-sm" onClick={() => void test()} disabled={testing || loading}>
-              {testing ? t('测试中…') : t('测试连接')}
-            </button>
-            <button className="btn btn-sm" onClick={() => void save()} disabled={saving || loading}>
-              {saving ? t('保存中…') : t('保存')}
-            </button>
-          </div>
+              {text("deleteProfile")}
+            </Button>
+          </Space>
         </div>
+        <Typography.Paragraph type="secondary">
+          {text("configHint")}
+        </Typography.Paragraph>
+        <Form layout="vertical" requiredMark={false}>
+          <Form.Item label="Base URL" htmlFor="admin-ai-base">
+            <Input
+              id="admin-ai-base"
+              value={form.baseUrl}
+              onChange={(event) => field("baseUrl", event.target.value)}
+              autoComplete="off"
+            />
+          </Form.Item>
+          <Form.Item label="API Key" htmlFor="admin-ai-key">
+            <Input.Password
+              id="admin-ai-key"
+              value={form.apiKey}
+              onChange={(event) => field("apiKey", event.target.value)}
+              autoComplete="new-password"
+            />
+          </Form.Item>
+          <Form.Item label={text("model")}>
+            <AutoComplete
+              value={form.model}
+              onChange={(value) => field("model", value)}
+              options={models.map((value) => ({ value }))}
+            />
+          </Form.Item>
+          <div className={styles.grid}>
+            <Form.Item label="Temperature">
+              <InputNumber
+                min={0}
+                max={2}
+                step={0.1}
+                value={form.temperature}
+                onChange={(value) => field("temperature", value ?? undefined)}
+              />
+            </Form.Item>
+            <Form.Item label={text("maxTokens")}>
+              <InputNumber
+                min={0}
+                value={form.maxTokens}
+                onChange={(value) => field("maxTokens", value ?? undefined)}
+              />
+            </Form.Item>
+            <Form.Item label={text("dailyLimit")}>
+              <InputNumber
+                min={0}
+                value={form.dailyLimit}
+                onChange={(value) => field("dailyLimit", value ?? undefined)}
+              />
+            </Form.Item>
+          </div>
+          <Form.Item label={text("enableTools")}>
+            <Switch
+              checked={form.enableTools}
+              onChange={(value) => field("enableTools", value)}
+            />
+          </Form.Item>
+          {current !== "default" && (
+            <Form.Item label={text("boundUsers")}>
+              <Select
+                mode="tags"
+                tokenSeparators={[",", "，"]}
+                value={form.allowedUsers}
+                onChange={(value) => field("allowedUsers", value)}
+                options={(resource.data?.users ?? []).map((user) => ({
+                  value: user.username,
+                  label: user.username,
+                }))}
+              />
+            </Form.Item>
+          )}
+          <Form.Item label={text("extraPrompt")}>
+            <Input.TextArea
+              rows={5}
+              value={form.extraPrompt}
+              onChange={(event) => field("extraPrompt", event.target.value)}
+            />
+          </Form.Item>
+        </Form>
+        <Space wrap>
+          <Button
+            loading={testing}
+            disabled={busy}
+            onClick={() => {
+              setTesting(true);
+              setError("");
+              setSuccess("");
+              void testAiConfig(current, form)
+                .then((result) => {
+                  if (!alive.current) return;
+                  if (result.ok) setSuccess(text("connectionOk"));
+                  else setError(result.message);
+                })
+                .catch((e) => alive.current && setError(e.message))
+                .finally(() => alive.current && setTesting(false));
+            }}
+          >
+            {text("testConnection")}
+          </Button>
+          <Button
+            onClick={() => {
+              if (prompt !== null) setPrompt(null);
+              else
+                void loadPrompt(current)
+                  .then((result) => alive.current && setPrompt(result.prompt))
+                  .catch((e) => alive.current && setError(e.message));
+            }}
+          >
+            {text("effectivePrompt")}
+          </Button>
+          <Button danger disabled={busy} onClick={() => void remove(true)}>
+            {text("clearAiConfig")}
+          </Button>
+        </Space>
+        {prompt !== null && <pre className={styles.pre}>{prompt}</pre>}
       </div>
-    </div>,
-    document.body,
-  )
+      <Modal
+        title={text("newProfile")}
+        open={newName !== null}
+        onCancel={() => setNewName(null)}
+        okText={text("create")}
+        onOk={() => {
+          const name = newName?.trim() ?? "";
+          if (!/^[a-zA-Z0-9_-]{1,24}$/.test(name) || profiles[name]) {
+            setError(text("invalidProfile"));
+            return;
+          }
+          setProfiles((previous) => ({ ...previous, [name]: emptyProfile() }));
+          setCurrent(name);
+          setNewName(null);
+        }}
+      >
+        <Input
+          autoFocus
+          aria-label={text("profileName")}
+          value={newName ?? ""}
+          onChange={(event) => setNewName(event.target.value)}
+        />
+      </Modal>
+    </Drawer>
+  );
 }

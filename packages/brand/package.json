@@ -1,0 +1,10 @@
+{
+  "name": "@biance/brand",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./tokens.css": "./tokens.css",
+    "./mark.svg": "./mark.svg"
+  },
+  "files": ["tokens.css", "mark.svg"]
+}

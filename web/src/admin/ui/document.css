@@ -1,0 +1,30 @@
+/* Independent admin document reset; no user app layout or effects. */
+* {
+  box-sizing: border-box;
+}
+html {
+  color-scheme: dark;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font: 14px/1.5 var(--sans);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+#admin-overlays {
+  position: relative;
+  z-index: 1000;
+}
+@media (prefers-reduced-motion: reduce) {
+  #root *,
+  #admin-overlays * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

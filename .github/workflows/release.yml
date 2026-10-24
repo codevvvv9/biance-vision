@@ -14,6 +14,9 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  WEBSITE_ORIGIN: ${{ vars.WEBSITE_ORIGIN }}
+  GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
+  BING_SITE_VERIFICATION: ${{ vars.BING_SITE_VERIFICATION }}
 
 jobs:
   release:
@@ -27,6 +30,8 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @biance/website check:release
+      - run: pnpm website:check
       - run: pnpm typecheck
       - run: pnpm build
 
@@ -39,11 +44,12 @@ jobs:
         run: |
           mkdir -p release
           tar -czf release/biance-vision-${{ github.ref_name }}.tar.gz \
-            server/dist web/dist \
+            server/dist web/dist web/dist-admin \
             shared/package.json shared/dist \
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             server/package.json web/package.json \
-            Dockerfile .dockerignore \
+            Dockerfile website/Dockerfile website/.next/standalone website/.next/static website/public website/data website/runtime \
+            website/package.json packages/shared-ui/package.json packages/brand website/next.config.ts \
             docker-compose.yml docker README.md
 
       # Docker 镜像：app 与 worker 同镜像（worker 以不同入口跑），research-py 独立构建
@@ -71,6 +77,27 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - uses: docker/metadata-action@v5
+        id: meta-website
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-website
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: website/Dockerfile
+          push: true
+          tags: ${{ steps.meta-website.outputs.tags }}
+          build-args: |
+            WEBSITE_ORIGIN=${{ env.WEBSITE_ORIGIN }}
+            GOOGLE_SITE_VERIFICATION=${{ env.GOOGLE_SITE_VERIFICATION }}
+            BING_SITE_VERIFICATION=${{ env.BING_SITE_VERIFICATION }}
+          cache-from: type=gha,scope=website
+          cache-to: type=gha,mode=max,scope=website
 
       - uses: docker/metadata-action@v5
         id: meta-py

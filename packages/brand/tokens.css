@@ -1,0 +1,9 @@
+:root {
+  --bv-ink: #090e17;
+  --bv-surface: #101827;
+  --bv-text: #f2f4f8;
+  --bv-muted: #97a5b9;
+  --bv-cyan: #60f0d0;
+  --bv-violet: #b5a6ed;
+  --bv-line: rgba(179, 200, 225, .13);
+}

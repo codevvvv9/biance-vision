@@ -193,3 +193,8 @@
 }
 @media (max-height:720px) { .wb-welcome h1 { font-size:30px; } .wb-welcome-icon { display:none; } .wb-welcome>p { margin-top:12px; } .wb-suggestions { margin-top:16px; } }
 @media (prefers-reduced-motion:reduce) { .workbench *, .workbench *:before, .workbench *:after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+
+.wb-entry,.wb-result-help { border:1px solid var(--cyan); border-radius:12px; padding:12px; margin:8px 0; font-size:13px; line-height:1.6; background:var(--bg-2); }
+.wb-entry blockquote { margin:8px 0; white-space:pre-wrap; max-height:90px; overflow:auto; }
+.wb-entry button { padding:7px 10px; margin-right:8px; border:1px solid var(--cyan); border-radius:6px; }
+.wb-compose-wrap a,.wb-result-help a { color:var(--cyan); text-decoration:underline; }

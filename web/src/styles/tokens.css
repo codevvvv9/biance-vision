@@ -1,0 +1,34 @@
+/* Shared brand tokens. Presentation and effects belong to each application. */
+:root {
+  --bg-0: #04060c;
+  --bg-1: #070b14;
+  --bg-2: #0b1120;
+  --bg-3: #101a2e;
+  --line: #1a2438;
+  --line-2: #24304a;
+  --line-3: #33436b;
+
+  --text: #e8eefc;
+  --text-1: #c9d6ef;
+  --text-2: #8ea0c2;
+  --text-3: #5a6b8c;
+
+  --cyan: #00e5ff;
+  --cyan-soft: rgba(0, 229, 255, 0.12);
+  --up: #00d68f;
+  --down: #ff4d6a;
+  --amber: #f0b90b;
+  --purple: #a78bfa;
+  --blue: #4da3ff;
+  /* 置于 cyan/amber 渐变高亮上的深色文字 */
+  --on-accent: #06121f;
+
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+
+  --panel-bg: linear-gradient(180deg, rgba(18, 28, 50, 0.72), rgba(10, 16, 30, 0.86));
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}

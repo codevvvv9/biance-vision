@@ -29,6 +29,10 @@ const steps: Step[] = [
   { name: '双入口切分（W3-S3，21 项，需 PG）', cmd: 'pnpm admin:dual-check', skip: skipDb },
   { name: '数据库分权（W3-S4，12 项，需 PG）', cmd: 'pnpm db:grants-check', skip: skipDb },
   { name: '研究流程集成（需 PG+行情）', cmd: 'pnpm research:smoke', skip: skipDb },
+  { name: '官网入口契约', cmd: 'pnpm website:check' },
+  { name: '人工开通与 AI 硬额度（独立测试库）', cmd: 'pnpm access:check', skip: skipDb },
+  { name: '官网生产构建', cmd: 'pnpm build:website' },
+  { name: '管理端受控浏览器回归', cmd: 'pnpm --dir web test:admin' },
   { name: 'web 生产构建', cmd: 'pnpm --dir web build' },
 ]
 
@@ -52,4 +56,4 @@ if (failed > 0) {
   console.error('\n上线门槛未通过 ✖ —— 修复后重试；不得带伤发布')
   process.exit(1)
 }
-console.log('\n上线门槛全部通过 ✔（可打 tag 触发 Release）')
+console.log(skipDb ? '\n部分检查通过（已跳过数据库检查）' : '\n上线门槛全部通过 ✔')

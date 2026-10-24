@@ -7,14 +7,15 @@ import { Logo } from '../components/Header'
 import LanguageSwitcher from '../components/LanguageSwitcher'
 import Magnet from '../components/fx/Magnet'
 import SplitText from '../components/fx/SplitText'
-import { authReturnTo, authUrl, researchUiMode } from '../research/uiMode'
+import { pendingAuthReturnTo as authReturnTo, rememberAuthReturn, clearAuthReturn, researchUiMode } from '../research/uiMode'
 
-/** 登录页：未开放自助注册，账号由超级管理员通过脚本开通 */
+/** 登录页：未开放自助注册，账号由管理员人工开通 */
 export default function LoginPage(): JSX.Element {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { t } = useTranslation('auth')
+  const { t, i18n } = useTranslation('auth')
+  const websiteLocale = i18n.language.startsWith('zh') ? 'zh' : 'en'
   const { t: tc } = useTranslation('common')
   const from = authReturnTo(location.search, location.state as { from?: string } | null)
 
@@ -34,6 +35,7 @@ export default function LoginPage(): JSX.Element {
     setError('')
     try {
       await login(username, password)
+      clearAuthReturn()
       navigate(from, { replace: true })
     } catch (err) {
       setError((err as Error).message || t('login.failed'))
@@ -92,7 +94,8 @@ export default function LoginPage(): JSX.Element {
 
         <div className="auth-foot">
           {t('login.noAccount')}
-          <Link to={authUrl('/register', from, researchUiMode(location.search))}>{t('login.contactAdmin')}</Link>
+          <a href={`/${websiteLocale}/contact`} onClick={() => rememberAuthReturn(from)}>{t('login.contactAdmin')}</a>
+          <a href={`/${websiteLocale}`} onClick={() => rememberAuthReturn(from)}>{websiteLocale === 'zh' ? '返回官网' : 'Back to website'}</a>
           {researchUiMode(location.search) === 'dev' && <Link to={from}>{t('login.backToWorkbench')}</Link>}
         </div>
       </div>

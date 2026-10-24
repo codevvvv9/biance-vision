@@ -54,3 +54,9 @@ docs/references/antafu-*.md
 # 操作手册（本地文档不进公开仓库；线上使用说明保存在本地/密码管理器）
 docs/user-manual*.md
 docs/admin-manual*.md
+# Browser test artifacts
+web/test-results/
+web/playwright-report/
+
+# AppleDouble metadata is not application source.
+._*

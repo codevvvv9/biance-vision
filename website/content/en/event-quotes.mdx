@@ -1,0 +1,21 @@
+## Use the actual product terms
+
+Event research is tied to a specific quote and expiry. Copy the actual terms from the supported product rather than asking a model to invent a quote. Website examples do not establish product availability in your region.
+
+## Keep the inputs separate
+
+The strike is the comparison price at expiry. The stake is the amount committed. Total payout includes the returned stake when the winning condition is met; it is not just profit. Confirm the expiry with its time zone.
+
+- Strike price and the rule for comparing it at expiry.
+- Expiry time and remaining time when the quote is recorded.
+- Stake, total payout and the actual product settlement terms.
+
+## Time remaining matters
+
+A full-horizon estimate cannot automatically be reused for an order close to expiry. If the available horizon, validated model or current data does not match the quote, the result should explain that it is unavailable.
+
+A one-week research horizon must not be described as proof that an exchange offers a one-week event product. Always confirm the current product and regional terms in the official application.
+
+## Do not replace unavailable evidence with a guess
+
+Calculations depend on confirmed inputs and available validated estimates. A language model’s confident prose does not make a probability valid. Missing values, stale data and settlement uncertainty should remain visible.

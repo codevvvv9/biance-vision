@@ -1,43 +1,53 @@
-# 部署到 /etc/caddy/Caddyfile（域名替换成自己的），systemctl reload caddy 生效。
-# Caddy 自动签发/续期 Let's Encrypt 证书（需 80/443 放行 + DNS A 记录已指向本机）。
-# SSE（研究运行进度）与 WebSocket（实时行情）：Caddy 反代原生支持；
-# flush_interval -1 关闭响应缓冲，保证 SSE 事件即时推送到浏览器。
-#
-# 双域名架构（docs/admin-isolation-plan.md）：
-# - 用户端域名：admin 路径在 Caddy 层直接 404（第一层屏蔽；server 的 ADMIN_HOSTS 门禁是第二层兜底）；
-# - 管理端域名（duckdns 独立二级域名，常规 HTTP-01 签证书，无需插件）：整站在 Basic Auth
-#   门禁之后（caddy hash-password 生成哈希；真实用户名/哈希只写服务器上的 Caddyfile，不入库）。
-# 上线顺序：先加 admin 站点块验证可达 → 发版启用 ADMIN_HOSTS → 最后才给用户端块加 404 屏蔽
-#（任意时刻超管都至少有一个可用入口，不会把自己锁在门外）。
-
+# 将两个既有域名替换到下面站点块；官网与终端共用用户域名。
+# 网站 CSP 由 Next 专属 headers 设置，不能套用到 SPA。
 bv.example.com {
 	encode zstd gzip
-	@admin path /admin /admin/* /api/admin /api/admin/*
-	respond @admin 404
-	reverse_proxy 127.0.0.1:3200 {
-		flush_interval -1
-	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
+	}
+	route {
+		@admin path /admin /admin/* /api/admin /api/admin/*
+		respond @admin 404
+		@toolSlash path_regexp toolSlash ^/(dashboard|research|brooks|movers|alerts|login|register)/$
+		redir @toolSlash /{re.toolSlash.1}?{query} 308
+		@tools path /dashboard /research /brooks /movers /alerts /login /register
+		handle @tools {
+			header X-Robots-Tag "noindex, nofollow"
+			reverse_proxy 127.0.0.1:3200 {
+				flush_interval -1
+			}
+		}
+		@backend path /api /api/* /ws /assets/*
+		handle @backend {
+			header X-Robots-Tag "noindex, nofollow"
+			reverse_proxy 127.0.0.1:3200 {
+				flush_interval -1
+			}
+		}
+		# /、/en、/zh、/_next/*、SEO 与品牌资源、所有未知路径归官网。
+		handle {
+			reverse_proxy 127.0.0.1:3100 {
+				header_up X-Website-Client-IP {remote_host}
+			}
+		}
 	}
 }
 
 admin.example.com {
 	encode zstd gzip
-	# 打开管理域名直达后台（Caddy 指令排序 redir 先于 basic_auth：根路径 302 后在 /admin 弹 401，
-	# 未认证最终仍被拦，浏览器体验=打开即弹账密框）
 	redir / /admin 302
 	basic_auth {
-		bvadmin <bcrypt哈希，caddy hash-password 生成后替换>
+		bvadmin <替换为caddy-hash-password生成的bcrypt哈希>
 	}
-	reverse_proxy 127.0.0.1:3200 {
+	reverse_proxy 127.0.0.1:3201 {
 		flush_interval -1
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
+		X-Robots-Tag "noindex, nofollow"
 	}
 }

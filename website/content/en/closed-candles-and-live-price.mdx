@@ -1,0 +1,17 @@
+## A live update is not a closed candle
+
+An open candle can change before its interval ends. A live quote describes a price observation at its own timestamp; it cannot confirm how the current candle will close. Binance’s kline stream provides an explicit closure flag. Do not infer closure merely because a screen shows a familiar interval label.
+
+## Track three separate moments
+
+<ResearchFigure kind="timeline" locale="en" />
+
+Record the candle interval, the market-data observation time and the research snapshot time. If a swing requires later confirmation, record that later availability too. A diagram can point to an earlier candle while the structure was only knowable afterward. This distinction matters in replay and in evaluating a current explanation.
+
+## How to read a result safely
+
+Check the pair and market first. Next compare the latest closed-candle timestamp with the snapshot and the separately labelled live quote. If the quote has moved through an important area, treat that as a reason to reassess; do not silently rewrite what the earlier closed candles showed. Ask for updated research when the context has changed.
+
+## Limits and failure cases
+
+A closed candle is more stable than an open one, but it does not guarantee the next move. Delayed data, missing intervals and mismatched time zones can still undermine an interpretation. Treat an unavailable feed as a data gap rather than evidence that nothing changed. A live tick beyond a level and sustained closed-candle acceptance are different observations.

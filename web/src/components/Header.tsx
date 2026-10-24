@@ -17,7 +17,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { to: '/', labelKey: 'nav.overview', end: true },
+  { to: '/dashboard', labelKey: 'nav.overview', end: true },
   // 异动榜/预警中心入口暂时隐藏（聚焦研究 agent 三场景建议）；路由保留，直达链接仍可用
   { to: '/brooks', labelKey: 'nav.priceAction' },
   { to: '/research', labelKey: 'nav.research' },
@@ -177,6 +177,7 @@ export default function Header(): JSX.Element {
             {t(tab.labelKey)}
           </NavLink>
         ))}
+        <a href={currentLocale().startsWith('zh') ? '/zh' : '/en'}>{currentLocale().startsWith('zh') ? '官网' : 'Website'}</a>
       </nav>
 
       <div className="header-right">

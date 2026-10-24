@@ -53,7 +53,9 @@ const TEST_DB = 'bv_login_regression'
 const SERVER_DIR = new URL('../server/', import.meta.url).pathname
 
 let failed = 0
+let checked = 0
 function check(name: string, actual: unknown, expected: unknown): void {
+  checked++
   const ok = actual === expected
   console.log(`${ok ? '✔' : '✖'} ${name}${ok ? '' : `（期望 ${String(expected)}，实际 ${String(actual)}）`}`)
   if (!ok) failed++
@@ -293,6 +295,11 @@ try {
     }
     check('R0 server 连接独立测试库（未降级 JSON 存储）', serverLog.join('\n').includes(TEST_DB), true)
 
+    for (const [route, status] of [['/login', 200], ['/dashboard', 200], ['/research', 200], ['/definitely-unknown', 404], ['/index.html', 404], ['/api/undefined-test-route', 401]] as const) {
+      const response = await fetch(`http://127.0.0.1:${PORT}${route}`)
+      check(`官网分流接缝：直连 user-api ${route}`, response.status, status)
+    }
+
     // 请求顺序有讲究：先走一次成功登录（R1）把失败计数清零，随后 R3/R4/R6 的三次失败
     // 恰好达到注入的锁定阈值 3，R7/R8 验证锁定生效与按 IP 语义
     const r1 = await login(ADMIN_HOST, adminUser, adminPass)
@@ -376,6 +383,18 @@ try {
       check('P2b user 会话在用户入口有效', meUserOk.status, 200)
       const meUserCross = await getWithCookie(ADMIN_HOST, '/api/auth/me', userCookie, xff)
       check('P2c user 会话在管理入口被拒（跨用途）', meUserCross.status, 401)
+      const allowance = await getWithCookie(MAIN_HOST, '/api/users/me/ai-access', userCookie, xff)
+      check('P2d real user entry exposes persistent AI allowance', allowance.status, 200)
+      const { getDb, sql } = await import('../server/src/db.js')
+      const access = JSON.stringify({ version: 1, generation: 'w4-http-regression', totalLimit: 0, used: 0, dailyLimit: null, dailyDate: '', dailyUsed: 0, requestsPerMinute: 6, windowAt: 0, windowUsed: 0, profileName: 'default' })
+      await getDb()!.execute(sql`INSERT INTO app_settings (key, value) VALUES (${`ai_access:${normalUser}`}, ${access}::jsonb)`)
+      const exhausted = await fetch(`http://127.0.0.1:${PORT}/api/research/runs`, { method: 'POST', headers: { cookie: userCookie, 'content-type': 'application/json', 'x-forwarded-for': xff }, body: '{}' })
+      check('P2e zero allowance blocks the actual research handler', exhausted.status, 403)
+      check('P2f actual handler returns the allowance denial code', (await exhausted.json() as { code?: string }).code, 'ai_access_exhausted')
+      await getDb()!.execute(sql`DELETE FROM auth_sessions WHERE username = ${normalUser}`)
+      const revoked = await getWithCookie(MAIN_HOST, '/api/portfolio', userCookie, xff)
+      check('P2g revoked PG session cannot access a cached business route', revoked.status, 401)
+
     } finally {
       await stopServer(s2.child)
       if (s2a !== null) await stopServer(s2a.child)
@@ -455,4 +474,4 @@ if (failed > 0) {
   console.error(`\n登录回归未通过 ✖（${failed} 项失败）`)
   process.exit(1)
 }
-console.log('\n登录回归全部通过 ✔（25 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入 / W3-S2 用途标记+限速持久化+fail-closed）')
+console.log(`\n登录回归全部通过 ✔（${checked} 项：测试库隔离 / 入口同构 / 会话签发 / 失败计数 / IP 锁定 / 非法配置拒绝启动+零写入 / W3-S2 用途标记+限速持久化+fail-closed / 官网路径与 404）`)

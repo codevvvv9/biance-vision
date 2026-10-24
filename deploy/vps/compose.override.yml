@@ -14,10 +14,17 @@ services:
       # 公网入口只留 Caddy 的 80/443：app 端口收口回环（原先 0.0.0.0:3200 依赖
       # 云安全组兜底，按纵深防御与 postgres/minio 同标准收口，防安全组误开放）
       - "127.0.0.1:3200:3200"
+  website:
+    build: !reset null
+    image: ghcr.io/codevvvv9/biance-vision-website:${BV_VERSION:-latest}
     environment:
-      # 管理端域名门禁（server/src/adminGate.ts）：管理端域名逗号分隔；
-      # 未配置=门禁关闭零行为变化。建议写进服务器上 ~/biance-vision/.env（compose 自动读）
-      ADMIN_HOSTS: ${ADMIN_HOSTS:-}
+      WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:?请设置既有用户域名的HTTPS origin}
+  admin-api:
+    image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
+    environment:
+      WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:?请设置既有用户域名的HTTPS origin}
+  migrate:
+    image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
   worker:
     image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
   research-py:

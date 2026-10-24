@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -13,7 +13,7 @@ import Dashboard from './pages/Dashboard'
 // 登录/注册是未登录用户的第一屏，保持静态 import（不进懒加载列表）
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
-import { authReturnTo, authUrl, researchUiMode } from './research/uiMode'
+import { pendingAuthReturnTo as authReturnTo, authUrl, researchUiMode } from './research/uiMode'
 
 // 重页面全部懒加载：登录后的首屏只有大盘，K 线/研究/价格行为按需取 chunk
 // （W3-S1 起管理端为独立构建 admin.html/admin-main.tsx，用户端包不再含 admin 子应用）
@@ -46,7 +46,7 @@ function AuthedApp(): JSX.Element {
         <TickerTape />
         <main className="main">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route
               path="/movers"
               element={
@@ -88,8 +88,8 @@ function AuthedApp(): JSX.Element {
               }
             />
             {/* W3-S1：管理端已独立构建（admin.html → dist-admin，经 /admin 前缀托管），
-                用户端产物不再包含 admin 子应用；主域名 /admin 由 Caddy+ADMIN_HOSTS 双层 404 */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+                用户端产物不再包含 admin 子应用；主域名 /admin 由 Caddy 与 user-api 物理隔离 */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
         <footer className="footer">{t('footer.disclaimer')}</footer>
@@ -105,7 +105,8 @@ function AuthedApp(): JSX.Element {
 function Shell(): JSX.Element {
   const { user, loading } = useAuth()
   const location = useLocation()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  useEffect(() => { const lang = new URLSearchParams(location.search).get('lang'); if (lang === 'zh-CN' || lang === 'en-US') void i18n.changeLanguage(lang) }, [location.search, i18n])
   const dev = location.pathname === '/research' && researchUiMode(location.search) === 'dev'
   const workbench = <ErrorBoundary><Suspense fallback={<PageFallback />}><WorkbenchPage key={user?.username ?? 'guest'} /></Suspense></ErrorBoundary>
 

@@ -1,0 +1,38 @@
+# 本地集成入口。三个端口可用环境变量覆盖；生产使用 deploy/vps/Caddyfile。
+{
+	admin off
+	auto_https off
+}
+http://localhost:3310 {
+	route {
+		@admin path /admin /admin/* /api/admin /api/admin/*
+		respond @admin 404
+		@api path /api /api/* /ws
+		handle @api {
+			reverse_proxy host.docker.internal:{$BV_API_PORT:3200} {
+				flush_interval -1
+			}
+		}
+		# Vite 专属开发资源只出现在本地配置，生产仅代理 /assets/*。
+		@terminal path /dashboard /research /brooks /movers /alerts /login /register /assets/* /src/* /@vite/* /@id/* /@fs/* /@react-refresh /node_modules/*
+		handle @terminal {
+			reverse_proxy host.docker.internal:{$BV_WEB_PORT:17834}
+		}
+		handle {
+			reverse_proxy host.docker.internal:{$BV_WEBSITE_PORT:3100}
+		}
+	}
+}
+http://localhost:3311 {
+	redir / /admin/ 302
+	redir /admin /admin/ 308
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy host.docker.internal:{$BV_ADMIN_API_PORT:3201}
+	}
+	handle {
+		@adminDocument header Accept *text/html*
+		rewrite @adminDocument /admin/admin.html
+		reverse_proxy host.docker.internal:{$BV_ADMIN_WEB_PORT:17835}
+	}
+}

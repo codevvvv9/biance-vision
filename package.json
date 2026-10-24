@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.9",
-  "description": "\u5e01\u5b89\u5927\u76d8\u76d1\u63a7\u7ec8\u7aef\uff1a\u5b9e\u65f6\u884c\u60c5\u3001K\u7ebf\u3001\u4ef7\u683c\u7a81\u7834\u4e0e\u6da8\u8dcc\u5e45\u9884\u8b66\u63a8\u9001",
+  "description": "币安大盘监控终端：实时行情、K线、价格突破与涨跌幅预警推送",
   "workspaces": [
     "server",
     "web",
-    "shared"
+    "shared",
+    "packages/shared-ui",
+    "packages/brand",
+    "website"
   ],
   "scripts": {
     "dev": "tsx scripts/dev.ts",
@@ -20,8 +23,8 @@
     "brooks:selftest": "tsx scripts/brooks-selftest.ts",
     "quote-guide:selftest": "tsx scripts/quote-guide-selftest.ts",
     "market:smoke": "tsx scripts/market-ingest-smoke.ts",
-    "build": "pnpm --filter biance-vision-brooks run build && pnpm --filter biance-vision-server run build && pnpm --filter biance-vision-web run build",
-    "typecheck": "pnpm --filter biance-vision-brooks run build && tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "build": "pnpm --filter biance-vision-brooks run build && pnpm --filter biance-vision-server run build && pnpm --filter biance-vision-web run build && pnpm build:website",
+    "typecheck": "pnpm --filter biance-vision-brooks run build && tsc -p tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit && pnpm --filter @biance/website typecheck",
     "start": "pnpm --filter biance-vision-server run start",
     "brooks:causality": "tsx scripts/causality-check.ts",
     "chat:policy-check": "tsx scripts/chat-policy-check.ts",
@@ -44,6 +47,11 @@
     "check:i18n": "tsx scripts/check-i18n.ts",
     "admin:dual-check": "tsx scripts/admin-dual-entry-check.ts",
     "db:grants-check": "tsx scripts/db-grants-check.ts",
+    "dev:website": "pnpm --filter @biance/website dev",
+    "build:website": "pnpm --filter @biance/website build",
+    "website:check": "pnpm --filter @biance/website test",
+    "website:browser-check": "pnpm --filter @biance/website test:browser",
+    "access:check": "tsx scripts/ai-access-check.ts",
     "knowledge:enhance-eval": "tsx scripts/knowledge-enhance-eval.ts"
   },
   "devDependencies": {
@@ -51,5 +59,29 @@
     "fastify": "^4.28.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "react-router@6": {
+        "peerDependencies": {
+          "@types/react": "*"
+        },
+        "peerDependenciesMeta": {
+          "@types/react": {
+            "optional": true
+          }
+        }
+      },
+      "react-router-dom@6": {
+        "peerDependencies": {
+          "@types/react": "*"
+        },
+        "peerDependenciesMeta": {
+          "@types/react": {
+            "optional": true
+          }
+        }
+      }
+    }
   }
 }
