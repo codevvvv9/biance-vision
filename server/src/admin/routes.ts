@@ -505,21 +505,21 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
   app.get('/api/admin/users', async (req) => {
     deps.requireSuperadmin(req)
     const active = listActiveUsernames(5 * 60_000)
-    return {
-      users: getUsers()
-        .map((u) => {
-          const chatPolicy = normalizeChatPolicy(u)
-          return {
-            username: u.username,
-            role: u.role,
-            createdAt: u.createdAt,
-            chatPolicy,
-            chatUsage: { today: getChatUsageToday(u.username), limit: chatPolicy.dailyLimit },
-            activeRecently: active.has(u.username),
-          }
-        })
-        .sort((a, b) => a.role.localeCompare(b.role) || a.createdAt - b.createdAt),
-    }
+    const users = await Promise.all(
+      getUsers().map(async (u) => {
+        const chatPolicy = normalizeChatPolicy(u)
+        return {
+          username: u.username,
+          role: u.role,
+          createdAt: u.createdAt,
+          chatPolicy,
+          chatUsage: { today: await getChatUsageToday(u.username), limit: chatPolicy.dailyLimit },
+          activeRecently: active.has(u.username),
+        }
+      }),
+    )
+    users.sort((a, b) => a.role.localeCompare(b.role) || a.createdAt - b.createdAt)
+    return { users }
   })
 
   app.get('/api/admin/audit-logs', async (req) => {
@@ -534,7 +534,7 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
   app.get('/api/admin/ai/overview', async (req) => {
     deps.requireSuperadmin(req)
     return {
-      stats: adminAiStats().map((s) => ({ ...s, profileName: resolveAiProfileName(s.username) })),
+      stats: (await adminAiStats()).map((s) => ({ ...s, profileName: resolveAiProfileName(s.username) })),
       profiles: getAiProfilesMasked(),
     }
   })
@@ -551,16 +551,16 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
       profileName,
       profileConfigured: !!profile,
       profileMasked: getAiProfilesMasked()[profileName] ?? null,
-      prompt: profile ? buildSystemPrompt(profile, memoriesPromptBlock(username)) : '',
+      prompt: profile ? buildSystemPrompt(profile, await memoriesPromptBlock(username)) : '',
       conversations: listAiConversations(username),
-      memories: listMemories(username),
+      memories: await listMemories(username),
     }
   })
 
   /** 任意会话的完整消息记录（链路 A，不限归属，管理端查看上下文用） */
   app.get('/api/admin/ai/conversations/:id', async (req, reply) => {
     deps.requireSuperadmin(req)
-    const conv = getConversationAny((req.params as { id: string }).id)
+    const conv = await getConversationAny((req.params as { id: string }).id)
     if (!conv) return badRequest(reply, '会话不存在')
     return {
       conversation: {

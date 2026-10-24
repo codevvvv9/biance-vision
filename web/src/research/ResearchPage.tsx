@@ -24,6 +24,7 @@ import { currentLocale } from '../i18n'
 import { PositionConfirmCard } from './PositionConfirmCard'
 import { RunBubble } from './RunBubble'
 import MiniMarkdown from '../components/MiniMarkdown'
+import CitationBadges from './CitationBadges'
 import { MessageTranslate } from './MessageTranslate'
 import { UiModeSwitch } from './UiModeSwitch'
 import { Dropdown } from './Dropdown'
@@ -576,6 +577,7 @@ export default function ResearchPage(): JSX.Element {
                 <div key={i} className={`chat-msg ${m.role}`}>
                   {m.role === 'user' ? m.text : <MiniMarkdown text={m.text} />}
                   {m.text !== '' && <MessageTranslate text={m.text} />}
+                  {m.citations !== undefined && <CitationBadges citations={m.citations} />}
                   {m.card !== undefined && (
                     <PositionConfirmCard card={m.card} busy={conv.cardBusy === i} onResolve={(confirm) => void conv.resolveCard(i, confirm)} />
                   )}

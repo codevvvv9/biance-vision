@@ -312,7 +312,8 @@
     "sourceUnavailable": "Source unavailable (archived/purged, or no local file)",
     "sourceLoading": "Loading source…",
     "sourceDownload": "Download file",
-    "sourceUnsupported": "No inline preview for this format; download to view."
+    "sourceUnsupported": "No inline preview for this format; download to view.",
+    "citationOpenSource": "Open source page"
   },
   "form": {
     "positionTitle": "Enter position (copied from the app)",

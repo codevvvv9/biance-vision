@@ -229,3 +229,16 @@ export const RunProgressEventSchema = z.object({
   payload: z.unknown().optional(),
 })
 export type RunProgressEvent = z.infer<typeof RunProgressEventSchema>
+
+// ---- 聊天引用角标（2026-10-24，契约只增；0027 迁移 conversation_messages.citations） ----
+
+/** 聊天 assistant 消息的结构化引用（知识块/网页）；文本版「来源」行保留兼容 */
+export const MessageCitationSchema = z.object({
+  n: z.number().int().positive(),
+  kind: z.enum(['knowledge_chunk', 'web_page']),
+  title: z.string(),
+  pageNo: z.number().int().nullable().optional(),
+  url: z.string().nullable().optional(),
+  snippet: z.string(),
+})
+export type MessageCitation = z.infer<typeof MessageCitationSchema>

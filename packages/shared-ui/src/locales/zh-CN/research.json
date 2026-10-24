@@ -312,7 +312,8 @@
     "sourceUnavailable": "原文不可用（已归档/清除或无本地文件）",
     "sourceLoading": "加载原文…",
     "sourceDownload": "下载文件",
-    "sourceUnsupported": "该格式无在线预览，可下载后查看。"
+    "sourceUnsupported": "该格式无在线预览，可下载后查看。",
+    "citationOpenSource": "打开原页"
   },
   "form": {
     "positionTitle": "录入持仓（App 抄录）",

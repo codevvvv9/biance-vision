@@ -129,7 +129,8 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     return {
       messages: rows.map((m) => ({
         id: m.id, conversationId: m.conversationId, role: m.role, content: m.content,
-        intent: m.intent, sceneCode: m.sceneCode ?? undefined, runId: m.runId, card: m.card, createdAt: m.createdAt.getTime(),
+        intent: m.intent, sceneCode: m.sceneCode ?? undefined, runId: m.runId, card: m.card,
+        citations: m.citations ?? undefined, createdAt: m.createdAt.getTime(),
       })),
     }
   })
@@ -138,7 +139,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
     // 用户级聊天管控（禁用/每日上限），鉴权后、业务前拦截
-    assertChatAllowed(session.username)
+    await assertChatAllowed(session.username)
     const { id } = req.params as { id: string }
     const conv = await getConversationForUser(id, session.username)
     if (conv === null) return reply.code(404).send({ code: 'not_found', message: '会话不存在' })
@@ -147,7 +148,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     if (message.trim() === '') return badRequest(reply, 'message 不能为空')
     const r = await postMessage(conv, message)
     // 按交互次数宽松口径：postMessage 的 10s 同内容幂等重放走到这里会重复计数，可接受
-    recordChatMessage(session.username)
+    await recordChatMessage(session.username)
     return reply.code(202).send({
       message: { id: r.message.id, role: r.message.role, content: r.message.content, intent: r.message.intent, sceneCode: r.message.sceneCode ?? undefined, promptRefs: r.message.promptRefs ?? undefined, runId: r.message.runId, card: r.message.card, createdAt: r.message.createdAt.getTime() },
       runId: r.runId,
@@ -174,7 +175,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
   app.post('/api/translate', async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
-    assertChatAllowed(session.username)
+    await assertChatAllowed(session.username)
     const body = (req.body ?? {}) as { text?: unknown; targetLang?: unknown }
     const text = typeof body.text === 'string' ? body.text.trim() : ''
     if (text === '') return badRequest(reply, 'text 不能为空')
@@ -182,7 +183,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const targetLang = typeof body.targetLang === 'string' && /^[a-z]{2}$/.test(body.targetLang) ? body.targetLang : 'en'
     const { translateWithFallback } = await import('../translate.js')
     const out = await translateWithFallback(text, { text, targetLang, sourceLang: targetLang === 'zh' ? 'en' : 'zh' })
-    recordChatMessage(session.username)
+    await recordChatMessage(session.username)
     return { text: out.text, engine: out.engine }
   })
 
@@ -217,14 +218,14 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
     // 遗留入口同样纳入用户级聊天管控（与对话消息口径一致）
-    assertChatAllowed(session.username)
+    await assertChatAllowed(session.username)
     const body = (req.body ?? {}) as { message?: unknown; lastRunId?: unknown }
     const message = typeof body.message === 'string' ? body.message : ''
     if (message.trim() === '') return badRequest(reply, 'message 不能为空')
     const lastRunId = typeof body.lastRunId === 'string' ? body.lastRunId : undefined
     try {
       const outcome = await handleResearchChat(session.username, { message, lastRunId })
-      recordChatMessage(session.username)
+      await recordChatMessage(session.username)
       return reply.code(202).send(outcome)
     } catch (err) {
       const e = err as { statusCode?: number; message: string }
@@ -236,7 +237,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
     // 直建 run 也要过用户级管控，堵住绕过对话入口的通道
-    assertChatAllowed(session.username)
+    await assertChatAllowed(session.username)
     const parsed = ResearchRunCreateSchema.safeParse(req.body ?? {})
     if (!parsed.success) return badRequest(reply, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('；'))
     const input = parsed.data
@@ -266,7 +267,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       log.warn('research', '队列不可用，研究运行已建档未投递', kv({ run: row.id.slice(0, 8) }))
       return reply.code(503).send({ code: 'queue_unavailable', message: '队列不可用；运行已保存，稍后由管理员重投', runId: row.id })
     }
-    recordChatMessage(session.username)
+    await recordChatMessage(session.username)
     return reply.code(202).send({ runId: row.id, run: runDto(row) })
   })
 

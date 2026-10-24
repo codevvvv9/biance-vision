@@ -811,20 +811,20 @@ export async function runSlashCommand(username: string, text: string): Promise<S
     }
     case 'remember': {
       if (!args) throw badRequest('用法：/remember 要记住的内容，如 /remember 我的止损纪律是单笔 2%')
-      const item = addManualMemory(username, args)
+      const item = await addManualMemory(username, args)
       return { reply: `✅ 已记入长期记忆（跨会话生效，可用 /forget 删除）：\n\n- ${item.content}` }
     }
     case 'forget': {
       if (!args || args.toLowerCase() === 'all' || args === '全部') {
-        const n = clearMemories(username)
+        const n = await clearMemories(username)
         return { reply: n > 0 ? `🗑️ 已清空全部长期记忆（${n} 条）` : '当前没有长期记忆' }
       }
-      const n = deleteMemoriesByKeyword(username, args)
+      const n = await deleteMemoriesByKeyword(username, args)
       return { reply: n > 0 ? `🗑️ 已删除 ${n} 条含「${args}」的记忆` : `没有找到含「${args}」的记忆`
       }
     }
     case 'mem': {
-      const list = listMemories(username)
+      const list = await listMemories(username)
       if (list.length === 0) return { reply: '还没有长期记忆——多聊几句，或用 /remember 手动添加' }
       return {
         reply: `🧠 我的长期记忆（${list.length} 条，跨会话生效）\n\n${list

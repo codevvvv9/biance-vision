@@ -7,6 +7,7 @@ import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { Logo } from '../components/Header'
 import MiniMarkdown from '../components/MiniMarkdown'
+import CitationBadges from './CitationBadges'
 import { MessageTranslate } from './MessageTranslate'
 import { PositionForm, QuoteForm } from './ResearchForms'
 import { PositionConfirmCard } from './PositionConfirmCard'
@@ -326,6 +327,7 @@ export default function WorkbenchPage(): JSX.Element {
             {!conv.loadingConversation && conv.messages.map((m, i) => (!m.text && !m.card && !m.runId) ? null : <article key={i} className={`wb-message ${m.role}`}>
               <div className="wb-message-label">{m.role === 'user' ? t('research:wb.you') : 'VISION'}</div><div className="wb-message-body">{m.text && (m.role === 'user' ? <p className="wb-user-text">{m.text}</p> : <MiniMarkdown text={m.text} />)}
                 {m.text !== '' && <MessageTranslate text={m.text} />}
+                {m.citations !== undefined && <CitationBadges citations={m.citations} />}
                 {m.card && <PositionConfirmCard card={m.card} busy={conv.cardBusy !== null} onResolve={confirm => void conv.resolveCard(i, confirm)} />}
                 {m.runId && (m.runId === run?.id ? bubble : <button className="wb-run-link" disabled={running || conv.busy} onClick={() => updateUrl({ run: m.runId! })}>{t('research:wb.viewThisRun', { id: m.runId.slice(0, 8) })}</button>)}</div>
             </article>)}
