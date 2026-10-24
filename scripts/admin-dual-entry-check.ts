@@ -224,6 +224,14 @@ try {
 
   // 日志证据：user-api 拒超管走预检（scrypt 未执行）
   check('D21 user-api 预检日志（密码校验未执行）', u.log.join('\n').includes('验证前预检，密码校验未执行'), true)
+
+  // ---- async 列表函数必须 await（回归：漏 await 会把 Promise 序列化成 {} 发给前端）----
+  // 线上事故 2026-10-24：/api/admin/ai/user 的 conversations 未 await → antd Table 崩
+  // （be.some is not a function）。两侧都钉住：字段必须是数组而非对象。
+  const panorama = await req(ADMIN_PORT, 'GET', `/api/admin/ai/user?username=${normalUser}`, { cookie: adminCookie })
+  check('D22 admin-api /ai/user conversations 为数组（未泄漏 Promise）', Array.isArray(JSON.parse(panorama.body).conversations), true)
+  const myConvs = await req(USER_PORT, 'GET', '/api/ai/conversations', { cookie: userCookie })
+  check('D23 user-api /ai/conversations conversations 为数组（未泄漏 Promise）', Array.isArray(JSON.parse(myConvs.body).conversations), true)
 } finally {
   for (const c of procs) await stop(c)
   if (testUrl !== null) {
@@ -237,5 +245,5 @@ try {
   }
 }
 
-console.log(failures === 0 ? '\n双入口切分自测全部通过 ✔（21 项）' : `\n失败 ${failures} 项 ✖`)
+console.log(failures === 0 ? '\n双入口切分自测全部通过 ✔（23 项）' : `\n失败 ${failures} 项 ✖`)
 process.exit(failures === 0 ? 0 : 1)

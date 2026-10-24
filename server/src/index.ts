@@ -637,7 +637,8 @@ app.post('/api/ai/command', async (req) => {
 
 app.get('/api/ai/conversations', async (req) => {
   const session = requireSession(req)
-  return { conversations: listConversations(session.username) }
+  // listConversations 是 async（内部 ensureFresh）——漏 await 会把 Promise 序列化成 {}
+  return { conversations: await listConversations(session.username) }
 })
 
 app.get('/api/ai/conversations/:id', async (req) => {
