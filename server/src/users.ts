@@ -133,7 +133,7 @@ async function persistUsers(list: UserRecord[]): Promise<void> {
  * - PG 不可用：fail-closed——缓存保持空，一切登录与管理认证拒绝（不降级 JSON 判权）；
  * - ❗旧「JSON 优先合并回写数据库」初始化已移除（JSON 从此只是备份，不是来源）。
  */
-export async function initUsers(): Promise<void> {
+export async function initUsers(opts: { seed?: boolean } = {}): Promise<void> {
   if (!isDbAvailable()) await initDb()
 
   if (!isDbAvailable()) {
@@ -141,23 +141,30 @@ export async function initUsers(): Promise<void> {
     return
   }
 
+  // W3-S4：内置账号种子只在 migrate 容器执行（seed:true）；app/admin-api/worker
+  // 只加载——user-api 最小权限账号连 users 表写权限都没有，种子路径物理不可达
   if ((await loadUsersFromDb()).length === 0) {
-    const seeds = loadSeedUsers()
-    const current = getUsers()
-    if (seeds.length > 0) {
-      const now = Date.now()
-      const seeded = seeds.map((s) => ({
-        id: crypto.randomUUID(),
-        username: s.username,
-        passwordHash: hashPassword(s.password),
-        role: s.role,
-        createdAt: now,
-        updatedAt: now,
-      }))
-      await persistUsers([...current, ...seeded])
-      log.ok('users', `已按 seed-users.json 写入内置账号 ${seeded.length} 个（PG）`)
+    if (opts.seed === true) {
+      const seeds = loadSeedUsers()
+      const current = getUsers()
+      if (seeds.length > 0) {
+        const now = Date.now()
+        const seeded = seeds.map((s) => ({
+          id: crypto.randomUUID(),
+          username: s.username,
+          passwordHash: hashPassword(s.password),
+          role: s.role,
+          createdAt: now,
+          updatedAt: now,
+        }))
+        await persistUsers([...current, ...seeded])
+        log.ok('users', `已按 seed-users.json 写入内置账号 ${seeded.length} 个（PG）`)
+      } else {
+        log.warn('users', '未配置内置账号（server/data/seed-users.json），可用 pnpm user:add 创建')
+      }
     } else {
-      log.warn('users', '未配置内置账号（server/data/seed-users.json），可用 pnpm user:add 创建')
+      log.warn('users', '用户表为空且本进程不承担种子（种子由 migrate 容器写入）')
+      usersCache = []
     }
   } else {
     await refreshUsersFromDb()

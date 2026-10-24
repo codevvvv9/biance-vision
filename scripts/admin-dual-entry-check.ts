@@ -79,7 +79,7 @@ function baseDatabaseUrl(): URL {
 function startServer(entry: string, port: number, dbUrl: string, dataDir: string): { child: ChildProcess; log: string[] } {
   const child = spawn('npx', ['tsx', entry], {
     cwd: SERVER_DIR,
-    env: { ...process.env, PORT: String(port), BV_DATA_DIR: dataDir, DATABASE_URL: dbUrl, BV_AUTO_MIGRATE: entry === 'src/index.ts' ? '1' : '0' },
+    env: { ...process.env, PORT: String(port), BV_DATA_DIR: dataDir, DATABASE_URL: dbUrl, BV_AUTO_MIGRATE: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const log: string[] = []
@@ -135,10 +135,38 @@ try {
     { username: normalUser, password: normalPass, role: 'user' },
   ]))
 
-  const u = startServer('src/index.ts', USER_PORT, testUrl.toString(), dataDir)
+  // W3-S4：模拟部署序——①owner 账号跑迁移 ②同步角色白名单 ③user-api 以最小权限账号起
+  process.env.BV_DB_USER_PASSWORD = process.env.BV_DB_USER_PASSWORD ?? 'dual-check-pw'
+  const prevDataDir = process.env.BV_DATA_DIR
+  {
+    const prev = process.env.DATABASE_URL
+    process.env.DATABASE_URL = testUrl.toString()
+    const { initDb } = await import('../server/src/db.js')
+    const migrated = await initDb({ migrate: true })
+    process.env.DATABASE_URL = prev
+    if (!migrated) throw new Error('测试库迁移失败（owner 账号）')
+    // 种子（W3-S4 移入 migrate 容器语义；测试中同序预跑）
+    process.env.DATABASE_URL = testUrl.toString()
+    process.env.BV_DATA_DIR = dataDir
+    const { initUsers } = await import('../server/src/users.js')
+    await initUsers({ seed: true })
+    process.env.DATABASE_URL = prev
+    process.env.BV_DATA_DIR = prevDataDir
+    const { syncDbUserRole } = await import('../server/src/dbGrants.js')
+    const dclUrl = new URL(testUrl.toString())
+    dclUrl.username = 'postgres'
+    dclUrl.password = process.env.PG_SUPER_PASSWORD ?? 'postgres'
+    const dcl = postgres(dclUrl.toString(), { max: 1, onnotice: () => {} })
+    await syncDbUserRole(dcl)
+    await dcl.end({ timeout: 1 })
+  }
+  const userUrl = new URL(testUrl.toString())
+  userUrl.username = 'biance_user'
+  userUrl.password = process.env.BV_DB_USER_PASSWORD
+  const u = startServer('src/index.ts', USER_PORT, userUrl.toString(), dataDir)
   procs.push(u.child)
-  if (!(await waitHealth(USER_PORT))) throw new Error(`user-api 未就绪：${u.log.slice(-6).join('\n')}`)
-  check('D1 user-api 健康就绪', true, true)
+  if (!(await waitHealth(USER_PORT))) throw new Error(`user-api（最小权限账号）未就绪：${u.log.slice(-6).join('\n')}`)
+  check('D1 user-api 健康就绪（biance_user 最小权限账号）', true, true)
 
   // user-api 先行跑迁移后 admin-api 以 BV_AUTO_MIGRATE=0 启动
   const a = startServer('src/adminApi.ts', ADMIN_PORT, testUrl.toString(), dataDir)

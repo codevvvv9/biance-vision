@@ -30,6 +30,12 @@ services:
     environment:
       TZ: Asia/Shanghai
       DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
+      # W3-S4：user-api 最小权限账号密码（与 app 的 DATABASE_URL 同源注入；
+      # 生产真实值写在 VPS ~/biance-vision/.env，不入库）
+      BV_DB_USER_PASSWORD: ${BV_DB_USER_PASSWORD:-biance_user_local}
+    volumes:
+      # 内置账号种子（W3-S4：seed 只在 migrate 容器执行）
+      - ./server/data:/app/server/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,7 +51,9 @@ services:
       - "127.0.0.1:3200:3200"
     environment:
       TZ: Asia/Shanghai # 日志时间戳用北京时间（容器默认 UTC）
-      DATABASE_URL: postgresql://biance_app:biance_app@postgres:5432/biance_vision
+      # W3-S4：user-api 用最小权限账号（表级白名单见 server/src/dbGrants.ts；
+      # 密码由 migrate 容器按同一 env 同步进 PG）
+      DATABASE_URL: postgresql://biance_user:${BV_DB_USER_PASSWORD:-biance_user_local}@postgres:5432/biance_vision
       RESEARCH_PY_URL: http://research-py:8100
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: biance_minio
