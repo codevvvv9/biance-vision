@@ -30,6 +30,9 @@ const EXEMPT_FILES = new Set([
 
 /** 豁免的行内模式（服务端 fact 契约前缀匹配等，中文为协议常量而非 UI 文案） */
 const EXEMPT_LINE_RE: RegExp[] = [
+  // 「常量即词典 key」声明行（admin 词典策略）：`键: '中文值',` 的纯常量赋值——
+  // 值是 t() 的 key 数据源（渲染处 t(META[k].label) 包裹），不是待迁移 UI 文案
+  /^\s*[A-Za-z_][\w]*\s*:\s*\{?\s*(label|hint|title|desc|sourceNote|placeholder)?\s*:?\s*'[^']*\u4e00-\u9fa5[^']*'\s*(,\s*\}\s*)?,?\s*$/,
   /周期冲突/, // 服务端 structure fact 的前缀匹配契约（ResearchPage mtf 条）
   /：状态 /, // 同上：服务端 fact 文本结构匹配
   /term="[^"]*[\u4e00-\u9fff][^"]*"/, // BrooksTerm 的 term prop：BROOKS_TERMS 中文索引 key（数据，非显示文案）
@@ -79,7 +82,9 @@ for (const root of SCAN_ROOTS) {
     const lines = stripComments(readFileSync(file, 'utf8'))
     const hits: string[] = []
     lines.forEach((line, i) => {
-      if (!CJK_RE.test(line)) return
+      // 中文即 key（admin 词典策略）：t('..中文..') 调用内的中文是词典 key，视为已迁移
+      const stripped = line.replace(/\bt{1,2}\('[^']*'/g, '').replace(/\bt{1,2}\("[^"]*"/g, '')
+      if (!CJK_RE.test(stripped)) return
       if (EXEMPT_LINE_RE.some((re) => re.test(line))) return
       hits.push(`  ${display}:${i + 1}: ${line.trim().slice(0, 100)}`)
     })

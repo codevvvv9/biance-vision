@@ -229,6 +229,16 @@ export async function replaceChunks(
   })
 }
 
+/** R3 增强：把 LLM 产出的词项合并进已有块的 terms[]（去重；不动其他列） */
+export async function updateChunkTerms(chunkId: string, extraTerms: string[]): Promise<void> {
+  if (extraTerms.length === 0) return
+  const d = db()
+  const rows = await d.select({ terms: knowledgeChunks.terms }).from(knowledgeChunks).where(eq(knowledgeChunks.id, chunkId)).limit(1)
+  if (rows.length === 0) return
+  const merged = [...new Set([...(rows[0].terms ?? []), ...extraTerms])].slice(0, 128)
+  await d.update(knowledgeChunks).set({ terms: merged }).where(eq(knowledgeChunks.id, chunkId))
+}
+
 /** 向量写入（仅 pgvector enabled 时调用）；按行 update，失败抛错由上层决定状态 */
 export async function storeEmbeddings(rows: { id: string; vector: number[] }[]): Promise<void> {
   if (rows.length === 0) return

@@ -114,7 +114,7 @@ export async function saveCapabilities(input: unknown): Promise<AgentCapabilitie
   log.ok(
     'capabilities',
     '能力配置已更新',
-    kv({ 状态: Object.entries(parsed).map(([k, v]) => `${k}=${v.enabled ? 'on' : '待配置'}`).join(' ') }),
+    kv({ 状态: Object.entries(parsed).filter(([, v]) => typeof v === 'object' && v !== null && 'enabled' in v).map(([k, v]) => `${k}=${(v as { enabled: boolean }).enabled ? 'on' : '待配置'}`).join(' ') }),
   )
   return parsed
 }

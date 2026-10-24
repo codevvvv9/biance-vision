@@ -398,6 +398,17 @@ check('文档状态 published + version=1', pub.doc.status === 'published' && pu
   check('W3 证据源：规则卡证据无原文入口', pRule.fileUrl === null && pRule.docUpdated === false && pRule.docId === null)
 }
 
+// ---- 12) R3 索引增强：配置默认关/容错解析/问题分词（纯函数，不依赖 LLM） ----
+{
+  const { enhanceConfig, ENHANCE_DEFAULTS, parseEnhanceJsonForTest } = await import('../server/src/knowledge/enhance.js')
+  const cfg = enhanceConfig()
+  check('R3 默认关闭（capabilities 缺省=零行为变化）', cfg.enabled === false, JSON.stringify(cfg))
+  check('R3 参数缺省（4 关键词/2 问题）', cfg.keywordsPerChunk === ENHANCE_DEFAULTS.keywordsPerChunk && cfg.questionsPerChunk === ENHANCE_DEFAULTS.questionsPerChunk)
+  const parsed = parseEnhanceJsonForTest('前置噪声 [{"index":0,"keywords":["H2","二次进场"],"questions":["H2 怎么做"]}]')
+  check('R3 输出容错解析（截取 JSON 数组）', parsed !== null && (parsed[0] as { keywords?: string[] } | undefined)?.keywords?.[0] === 'H2', JSON.stringify(parsed))
+  check('R3 非法输入返回 null（不阻塞索引）', parseEnhanceJsonForTest('完全不是 JSON') === null)
+}
+
 // ---- 清理 ----
 await db.execute(sql`delete from knowledge_chunks where doc_id in (select id from knowledge_documents where title like 'smoke-%')`)
 await db.execute(sql`delete from knowledge_documents where title like 'smoke-%'`)

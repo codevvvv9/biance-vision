@@ -32,13 +32,27 @@ export const SearchCapabilityConfigSchema = CapabilityConfigSchema.extend({
 })
 export type SearchCapabilityConfig = z.infer<typeof SearchCapabilityConfigSchema>
 
-/** 五类能力；未配置（enabled=false）的能力在界面与运行中显示「待配置」 */
+/** R3 索引增强配置（server/src/knowledge/enhance.ts；缺省关闭=零行为变化） */
+export const KnowledgeEnhanceSchema = z.object({
+  enabled: z.boolean().default(false),
+  keywordsPerChunk: z.number().int().min(1).max(8).default(4),
+  questionsPerChunk: z.number().int().min(1).max(4).default(2),
+})
+export type KnowledgeEnhance = z.infer<typeof KnowledgeEnhanceSchema>
+
+export const KnowledgeCapabilitySchema = z.object({
+  enhance: KnowledgeEnhanceSchema.default({ enabled: false, keywordsPerChunk: 4, questionsPerChunk: 2 }),
+})
+
+/** 五类能力；未配置（enabled=false）的能力在界面与运行中显示「待配置」；
+ * knowledge 为 R3 索引增强节（可选，缺省=关闭） */
 export const AgentCapabilitiesSchema = z.object({
   chat: CapabilityConfigSchema,
   embedding: CapabilityConfigSchema,
   rerank: CapabilityConfigSchema,
   vision: CapabilityConfigSchema,
   search: SearchCapabilityConfigSchema,
+  knowledge: KnowledgeCapabilitySchema.optional(),
 })
 export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>
 
