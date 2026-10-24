@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import i18n from '../i18n'
+import type { MessageCitation } from 'biance-vision-brooks'
 import { api } from '../api'
 
 /** 会话确认卡（confirm_position）：未经确认不落库，卡片内联在消息流中 */
@@ -26,6 +27,8 @@ export interface ChatMessage {
   text: string
   runId?: string
   card?: PositionDraftCard
+  /** 聊天引用角标（只增字段；结构化数据驱动 CitationBadges 渲染） */
+  citations?: MessageCitation[]
 }
 
 export interface ConversationSummary {
@@ -51,6 +54,7 @@ interface ServerMessage {
   content: string
   runId: string | null
   card: { kind: string; draft: Record<string, unknown>; missingFields?: string[]; complete?: boolean } | null
+  citations?: MessageCitation[]
 }
 
 export interface UseResearchConversationOptions {
@@ -86,7 +90,7 @@ function toChatMessage(m: ServerMessage): ChatMessage | null {
           ...(m.card.complete !== undefined ? { complete: m.card.complete } : {}),
         }
       : undefined
-  return { role: m.role, text: m.content, runId: m.runId ?? undefined, ...(card !== undefined ? { card } : {}) }
+  return { role: m.role, text: m.content, runId: m.runId ?? undefined, ...(card !== undefined ? { card } : {}), ...(m.citations !== undefined && m.citations !== null && m.citations.length > 0 ? { citations: m.citations } : {}) }
 }
 
 export function useResearchConversation(options: UseResearchConversationOptions = {}) {

@@ -66,7 +66,7 @@ import {
   memoriesPromptBlock,
   updateMemory,
 } from './aiMemory.js'
-import { assertChatAllowed, recordChatMessage } from './chatPolicy.js'
+import { assertChatAllowed, initChatUsage, recordChatMessage } from './chatPolicy.js'
 import { runSlashCommand, runToolLoop } from './aiTools.js'
 import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage } from './types.js'
 import { findSession, initSessions, initUsers, readSessionToken } from './users.js'
@@ -98,6 +98,7 @@ await initUsers()
 await initSessions()
 await initAudit()
 await initAiMemory()
+await initChatUsage() // W3 后修订：当日用量收编进 PG（一次性迁移旧 JSON）
 // 地域封锁（默认屏蔽中国大陆来源 IP；名单缺失时 fail-open 并告警，详见 geoblock.ts）
 initGeoBlock()
 
@@ -547,7 +548,7 @@ app.post('/api/ai/chat', async (req, reply) => {
   const session = requireSession(req) // 所有登录用户可用，配置仅超管
   // 用户级管控先行：被管理端禁用/超限的用户恒定收到 403 chat_disabled / 429 chat_limit_exceeded，
   // 不被「AI 未配置」或档案级配额错误掩盖（其余四个挂载点同为策略先行）
-  assertChatAllowed(session.username)
+  await assertChatAllowed(session.username)
   const profile = resolveAiProfile(session.username)
   if (!profile) throw badRequest('AI 未配置，或当前用户没有可用的配置档案（请联系超级管理员）')
   // checkAiQuota 为档案级限额（每用户每日 LLM 对话数）；两者独立判定、任一超限即拒（取严）
@@ -557,12 +558,12 @@ app.post('/api/ai/chat', async (req, reply) => {
   if (!content) throw badRequest('消息内容不能为空')
   // 会话归属校验：带 id 必须存在且属于当前用户；不带则新建（首条消息时）
   const wanted = typeof body.conversationId === 'string' ? body.conversationId : ''
-  const existing = wanted ? getConversation(session.username, wanted) : null
+  const existing = wanted ? await getConversation(session.username, wanted) : null
   if (wanted && !existing) throw badRequest('会话不存在')
-  const conv = existing ?? createConversation(session.username)
-  appendConversationMessages(conv, [{ role: 'user', content }])
+  const conv = existing ?? await createConversation(session.username)
+  await appendConversationMessages(conv, [{ role: 'user', content }])
   const history = chatHistoryOf(conv)
-  const memories = memoriesPromptBlock(session.username)
+  const memories = await memoriesPromptBlock(session.username)
 
   // 首个 delta 到达后再接管原生响应（hijack）：出错早于流启动时仍能返回标准 JSON 错误；
   // 新建的会话 id 通过响应头回传（前端据此续接会话）
@@ -582,10 +583,10 @@ app.post('/api/ai/chat', async (req, reply) => {
       reply.raw.write(delta)
     }, session.username, memories)
     // 用户级交互计数：成功完成才计（失败不计，与 recordAiUsage 含失败尝试的防刷口径不同）
-    recordChatMessage(session.username)
+    await recordChatMessage(session.username)
     if (started) {
       reply.raw.end()
-      appendConversationMessages(conv, [{ role: 'assistant', content: full }])
+      await appendConversationMessages(conv, [{ role: 'assistant', content: full }])
       // 记忆提取为后台任务：不阻塞响应、不占用户配额
       maybeExtractMemories(profile, session.username, conv)
       return
@@ -606,21 +607,21 @@ app.post('/api/ai/chat', async (req, reply) => {
 app.post('/api/ai/command', async (req) => {
   const session = requireSession(req)
   // 斜杠命令不调用大模型，但纳入用户级统一管控口径（防绕过禁用/上限）
-  assertChatAllowed(session.username)
+  await assertChatAllowed(session.username)
   const body = (req.body ?? {}) as { conversationId?: unknown; text?: unknown }
   const text = typeof body.text === 'string' ? body.text.trim() : ''
   if (!text.startsWith('/')) throw badRequest('命令需以 / 开头')
   const wanted = typeof body.conversationId === 'string' ? body.conversationId : ''
-  const existing = wanted ? getConversation(session.username, wanted) : null
+  const existing = wanted ? await getConversation(session.username, wanted) : null
   if (wanted && !existing) throw badRequest('会话不存在')
 
   // 先执行命令再建/写会话：执行失败（参数错等）不留空会话
   const r = await runSlashCommand(session.username, text)
-  const conv = existing ?? createConversation(session.username)
+  const conv = existing ?? await createConversation(session.username)
   const replyWithChart = r.chart
     ? `\`\`\`chart\n${JSON.stringify(r.chart)}\n\`\`\`\n\n${r.reply}`
     : r.reply
-  appendConversationMessages(conv, [
+  await appendConversationMessages(conv, [
     { role: 'user', content: text },
     { role: 'assistant', content: replyWithChart },
   ])
@@ -639,7 +640,7 @@ app.get('/api/ai/conversations', async (req) => {
 app.get('/api/ai/conversations/:id', async (req) => {
   const session = requireSession(req)
   const { id } = req.params as { id: string }
-  const conv = getConversation(session.username, id)
+  const conv = await getConversation(session.username, id)
   if (!conv) throw badRequest('会话不存在')
   return {
     conversation: {
@@ -655,7 +656,7 @@ app.get('/api/ai/conversations/:id', async (req) => {
 app.delete('/api/ai/conversations/:id', async (req) => {
   const session = requireSession(req)
   const { id } = req.params as { id: string }
-  if (!deleteConversation(session.username, id)) throw badRequest('会话不存在')
+  if (!await deleteConversation(session.username, id)) throw badRequest('会话不存在')
   log.info('ai', '会话已删除', kv({ 用户: session.username, 会话: id }))
   return { ok: true }
 })
@@ -669,20 +670,20 @@ app.put('/api/ai/memories/:id', async (req) => {
   const session = requireSession(req)
   const { id } = req.params as { id: string }
   const content = String(((req.body ?? {}) as { content?: unknown }).content ?? '')
-  return { memory: updateMemory(session.username, id, content) }
+  return { memory: await updateMemory(session.username, id, content) }
 })
 
 app.delete('/api/ai/memories/:id', async (req) => {
   const session = requireSession(req)
   const { id } = req.params as { id: string }
-  if (!deleteMemory(session.username, id)) throw badRequest('记忆不存在')
+  if (!await deleteMemory(session.username, id)) throw badRequest('记忆不存在')
   return { ok: true }
 })
 
 // 不带 id = 清空当前用户全部记忆
 app.delete('/api/ai/memories', async (req) => {
   const session = requireSession(req)
-  const n = clearMemories(session.username)
+  const n = await clearMemories(session.username)
   log.info('ai', '长期记忆已清空', kv({ 用户: session.username, 条数: n }))
   return { ok: true }
 })

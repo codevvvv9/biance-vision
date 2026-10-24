@@ -1,5 +1,7 @@
 import crypto from 'node:crypto'
-import { loadJson, saveJson } from './store.js'
+import fs from 'node:fs'
+import path from 'node:path'
+import { DATA_DIR, loadJson, saveJson } from './store.js'
 import { log, kv, fmtMs } from './logger.js'
 import { completeAi } from './ai.js'
 import type { AiProfile, ChatMessage } from './ai.js'
@@ -13,7 +15,13 @@ import {
 } from './db.js'
 
 // ---------------------------------------------------------------------------
-// AI 会话历史 + 长期记忆（用户级持久化；JSON 镜像为权威，PostgreSQL 可用时双写）
+// AI 会话历史 + 长期记忆（用户级持久化；W3 后修订：PostgreSQL 为权威，JSON 为备份）
+//
+// 双进程一致性契约（与 ai-config.json 同款「共享存储 + 变化检测」机制）：
+// - 写路径（user-api）：先 await PG 成功，再写 JSON 备份（更新 mtime 基准）；
+// - 读路径（任一进程）：JSON 备份 mtime 变化 = 他进程/本进程刚写过 → 从 PG 全量重载
+//   （权威数据源），PG 不可用时降级从 JSON 重载（宕机期单进程模式）；
+// - admin-api 的统计/全景因此始终读到最新（消除旧「启动快照永不刷新」问题）。
 //
 // 记忆设计参照 agent memory 最佳实践：
 // - 一条记忆 = 一个独立、自包含的事实（偏好 / 背景 / 关注 / 习惯），脱离原对话也能读懂
@@ -88,12 +96,67 @@ let memories: AiMemoryItem[] = loadJson<AiMemoryItem[]>('ai-memories.json', []).
   (m) => m && typeof m.id === 'string' && typeof m.username === 'string' && typeof m.content === 'string',
 )
 
+// JSON 备份 mtime 基准（变化 = 有新写入 → 读入口从 PG 权威重载）
+const CHATS_FILE = path.join(DATA_DIR, 'ai-chats.json')
+const MEMS_FILE = path.join(DATA_DIR, 'ai-memories.json')
+let chatsMtime = mtimeOf(CHATS_FILE)
+let memsMtime = mtimeOf(MEMS_FILE)
+
+function mtimeOf(file: string): number {
+  try {
+    return fs.statSync(file).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+let refreshing: Promise<void> | null = null
+
+/**
+ * 读入口的惰性刷新（高内聚：模块外部无感知）：检测 JSON 备份 mtime 变化后从 PG
+ * 全量重载（权威）；PG 不可用降级重载 JSON（单进程模式）。并发读共用一次刷新。
+ */
+function ensureFresh(): Promise<void> {
+  if (mtimeOf(CHATS_FILE) === chatsMtime && mtimeOf(MEMS_FILE) === memsMtime) return Promise.resolve()
+  refreshing ??= (async () => {
+    try {
+      if (isDbAvailable()) {
+        const data = await loadAiDataFromDb()
+        if (data) {
+          conversations = data.conversations
+          memories = data.memories
+        }
+      } else {
+        conversations = loadJson<StoredConversation[]>('ai-chats.json', []).filter(
+          (c) => c && typeof c.id === 'string' && typeof c.username === 'string' && Array.isArray(c.messages),
+        )
+        memories = loadJson<AiMemoryItem[]>('ai-memories.json', []).filter(
+          (m) => m && typeof m.id === 'string' && typeof m.username === 'string' && typeof m.content === 'string',
+        )
+      }
+    } catch (err) {
+      log.warn('ai', 'AI 会话/记忆刷新失败（保持当前缓存）', kv({ 错误: (err as Error).message }))
+    } finally {
+      chatsMtime = mtimeOf(CHATS_FILE)
+      memsMtime = mtimeOf(MEMS_FILE)
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
+/**
+ * JSON 备份落盘（更新 mtime 基准；作为跨进程「有新写入」的通知信号）。
+ * 权威写序由各写函数保证：先 await PG（变更条目），成功后调用本函数备份。
+ */
 function persistConversations(): void {
   saveJson('ai-chats.json', conversations)
+  chatsMtime = mtimeOf(CHATS_FILE)
 }
 
 function persistMemories(): void {
   saveJson('ai-memories.json', memories)
+  memsMtime = mtimeOf(MEMS_FILE)
 }
 
 /**
@@ -150,15 +213,16 @@ function userConversations(username: string): StoredConversation[] {
 }
 
 /** 裁剪：每用户只保留最近 CONV_KEEP_PER_USER 个会话，被裁的同步从数据库删除 */
-function trimConversations(username: string): void {
+async function trimConversations(username: string): Promise<void> {
   const mine = userConversations(username).sort((a, b) => b.updatedAt - a.updatedAt)
   for (const dropped of mine.slice(CONV_KEEP_PER_USER)) {
     conversations = conversations.filter((c) => c.id !== dropped.id)
-    void deleteAiConversationDb(dropped.id).catch((e: Error) => log.warn('ai', '会话数据库删除失败:', e.message))
+    await deleteAiConversationDb(dropped.id).catch((e: Error) => log.warn('ai', '会话数据库删除失败:', e.message))
   }
 }
 
-export function listConversations(username: string): ConversationSummary[] {
+export async function listConversations(username: string): Promise<ConversationSummary[]> {
+  await ensureFresh()
   return userConversations(username)
     .map((c) => ({
       id: c.id,
@@ -182,7 +246,8 @@ export interface AiUserStat {
 }
 
 /** 聚合全部用户的会话/消息/记忆统计，按最近活跃倒序 */
-export function adminAiStats(): AiUserStat[] {
+export async function adminAiStats(): Promise<AiUserStat[]> {
+  await ensureFresh()
   const map = new Map<string, AiUserStat>()
   const ensure = (u: string): AiUserStat => {
     let s = map.get(u)
@@ -203,17 +268,19 @@ export function adminAiStats(): AiUserStat[] {
 }
 
 /** 按 id 取任意用户的会话（不限归属，管理端查看用） */
-export function getConversationAny(id: string): StoredConversation | null {
+export async function getConversationAny(id: string): Promise<StoredConversation | null> {
+  await ensureFresh()
   return conversations.find((c) => c.id === id) ?? null
 }
 
-export function getConversation(username: string, id: string): StoredConversation | null {
+export async function getConversation(username: string, id: string): Promise<StoredConversation | null> {
+  await ensureFresh()
   const conv = conversations.find((c) => c.id === id)
   return conv && conv.username === username ? conv : null
 }
 
 /** 新建会话（首条消息发送时调用，正常路径不会产生空会话） */
-export function createConversation(username: string): StoredConversation {
+export async function createConversation(username: string): Promise<StoredConversation> {
   const now = Date.now()
   const conv: StoredConversation = {
     id: crypto.randomUUID(),
@@ -225,26 +292,26 @@ export function createConversation(username: string): StoredConversation {
     messages: [],
   }
   conversations.push(conv)
-  trimConversations(username)
+  await trimConversations(username)
+  await upsertAiConversationDb(conv)
   persistConversations()
-  void upsertAiConversationDb(conv).catch((e: Error) => log.warn('ai', '会话数据库写入失败:', e.message))
   return conv
 }
 
-export function deleteConversation(username: string, id: string): boolean {
+export async function deleteConversation(username: string, id: string): Promise<boolean> {
   const conv = getConversation(username, id)
   if (!conv) return false
   conversations = conversations.filter((c) => c.id !== id)
+  await deleteAiConversationDb(id)
   persistConversations()
-  void deleteAiConversationDb(id).catch((e: Error) => log.warn('ai', '会话数据库删除失败:', e.message))
   return true
 }
 
 /** 追加消息（内存 + JSON 镜像 + 数据库），更新标题与时间；返回更新后的会话 */
-export function appendConversationMessages(
+export async function appendConversationMessages(
   conv: StoredConversation,
   msgs: { role: 'user' | 'assistant'; content: string }[],
-): StoredConversation {
+): Promise<StoredConversation> {
   const now = Date.now()
   for (const m of msgs) {
     const content = m.content.slice(0, MSG_CONTENT_MAX)
@@ -254,8 +321,8 @@ export function appendConversationMessages(
   }
   conv.updatedAt = now
   if (conv.messages.length > MSG_KEEP) conv.messages = conv.messages.slice(-MSG_KEEP)
+  await upsertAiConversationDb(conv)
   persistConversations()
-  void upsertAiConversationDb(conv).catch((e: Error) => log.warn('ai', '会话数据库写入失败:', e.message))
   return conv
 }
 
@@ -280,13 +347,14 @@ export function chatHistoryOf(conv: StoredConversation): ChatMessage[] {
 // 长期记忆：读写 + 提示词注入 + 后台提取
 // ---------------------------------------------------------------------------
 
-export function listMemories(username: string): AiMemoryItem[] {
+export async function listMemories(username: string): Promise<AiMemoryItem[]> {
+  await ensureFresh()
   return memories.filter((m) => m.username === username).sort((a, b) => a.createdAt - b.createdAt)
 }
 
 /** 记忆注入 system prompt 的区段；无记忆返回空串 */
-export function memoriesPromptBlock(username: string): string {
-  const items = listMemories(username)
+export async function memoriesPromptBlock(username: string): Promise<string> {
+  const items = await listMemories(username)
   if (items.length === 0) return ''
   const lines = items.map((m) => `- [${MEMORY_KINDS[m.kind] ?? m.kind}] ${m.content}`)
   return [
@@ -296,44 +364,44 @@ export function memoriesPromptBlock(username: string): string {
   ].join('\n')
 }
 
-function persistMemory(m: AiMemoryItem): void {
+async function persistMemory(m: AiMemoryItem): Promise<void> {
+  await upsertAiMemoryDb(m)
   persistMemories()
-  void upsertAiMemoryDb(m).catch((e: Error) => log.warn('ai', '记忆数据库写入失败:', e.message))
 }
 
-export function updateMemory(username: string, id: string, content: string): AiMemoryItem {
+export async function updateMemory(username: string, id: string, content: string): Promise<AiMemoryItem> {
   const item = memories.find((m) => m.id === id && m.username === username)
   if (!item) throw badRequest('记忆不存在')
   const text = content.trim().slice(0, MEM_CONTENT_MAX)
   if (!text) throw badRequest('记忆内容不能为空')
   item.content = text
   item.updatedAt = Date.now()
-  persistMemory(item)
+  await persistMemory(item)
   return item
 }
 
-export function deleteMemory(username: string, id: string): boolean {
+export async function deleteMemory(username: string, id: string): Promise<boolean> {
   const item = memories.find((m) => m.id === id && m.username === username)
   if (!item) return false
   memories = memories.filter((m) => m.id !== id)
+  await deleteAiMemoryDb(id)
   persistMemories()
-  void deleteAiMemoryDb(id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
   return true
 }
 
-export function clearMemories(username: string): number {
+export async function clearMemories(username: string): Promise<number> {
   const mine = memories.filter((m) => m.username === username)
   if (mine.length === 0) return 0
   memories = memories.filter((m) => m.username !== username)
-  persistMemories()
   for (const m of mine) {
-    void deleteAiMemoryDb(m.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
+    await deleteAiMemoryDb(m.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
   }
+  persistMemories()
   return mine.length
 }
 
 /** /remember 命令：用户显式写入一条手动记忆 */
-export function addManualMemory(username: string, content: string): AiMemoryItem {
+export async function addManualMemory(username: string, content: string): Promise<AiMemoryItem> {
   const text = content.trim().slice(0, MEM_CONTENT_MAX)
   if (!text) throw badRequest('记忆内容不能为空')
   // 与已有内容完全相同的跳过（幂等）
@@ -352,20 +420,20 @@ export function addManualMemory(username: string, content: string): AiMemoryItem
   const mine = memories.filter((m) => m.username === username).sort((a, b) => a.updatedAt - b.updatedAt)
   for (const dropped of mine.slice(0, Math.max(0, mine.length - MEM_KEEP_PER_USER))) {
     memories = memories.filter((m) => m.id !== dropped.id)
-    void deleteAiMemoryDb(dropped.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
+    await deleteAiMemoryDb(dropped.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
   }
-  persistMemory(item)
+  await persistMemory(item)
   return item
 }
 
 /** /forget 命令：删除内容含关键词的记忆，返回删除条数 */
-export function deleteMemoriesByKeyword(username: string, keyword: string): number {
+export async function deleteMemoriesByKeyword(username: string, keyword: string): Promise<number> {
   const kw = keyword.trim().toLowerCase()
   if (!kw) throw badRequest('缺少关键词')
   const matched = memories.filter((m) => m.username === username && m.content.toLowerCase().includes(kw))
   for (const m of matched) {
     memories = memories.filter((x) => x.id !== m.id)
-    void deleteAiMemoryDb(m.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
+    await deleteAiMemoryDb(m.id).catch((e: Error) => log.warn('ai', '记忆数据库删除失败:', e.message))
   }
   if (matched.length > 0) persistMemories()
   return matched.length
@@ -417,7 +485,7 @@ export function maybeExtractMemories(profile: AiProfile, username: string, conv:
 }
 
 async function extractMemories(profile: AiProfile, username: string, conv: StoredConversation): Promise<void> {
-  const existing = listMemories(username)
+  const existing = await listMemories(username)
   const existingText = existing.length
     ? JSON.stringify(existing.map((m) => ({ id: m.id, kind: m.kind, content: m.content })))
     : '[]'
@@ -458,7 +526,7 @@ async function extractMemories(profile: AiProfile, username: string, conv: Store
       updatedAt: Date.now(),
     }
     memories.push(item)
-    persistMemory(item)
+    await persistMemory(item)
     added++
   }
   let updated = 0
@@ -468,7 +536,7 @@ async function extractMemories(profile: AiProfile, username: string, conv: Store
     if (!target || !content) continue
     target.content = content
     target.updatedAt = Date.now()
-    persistMemory(target)
+    await persistMemory(target)
     updated++
   }
   let removed = 0
@@ -497,7 +565,7 @@ async function extractMemories(profile: AiProfile, username: string, conv: Store
       增: added || undefined,
       改: updated || undefined,
       删: removed || undefined,
-      现存: listMemories(username).length,
+      现存: (await listMemories(username)).length,
       耗时: fmtMs(Date.now() - startedAt),
     }))
   }

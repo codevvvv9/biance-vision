@@ -286,6 +286,17 @@ export async function listMessages(conversationId: string, after?: string, limit
   return idx >= 0 ? all.slice(idx + 1) : all.slice(-limit)
 }
 
+/** 聊天引用角标结构（与 shared 契约 MessageCitationSchema 同构；0027 迁移落库） */
+export interface MessageCitation {
+  n: number
+  kind: 'knowledge_chunk' | 'web_page'
+  title: string
+  pageNo?: number | null
+  url?: string | null
+  snippet: string
+  [k: string]: unknown // jsonb 列的 index signature 兼容
+}
+
 async function appendMessage(input: {
   conversationId: string
   role: 'user' | 'assistant' | 'system'
@@ -297,6 +308,8 @@ async function appendMessage(input: {
   card?: Record<string, unknown> | null
   /** P0-6 审计：本条回复使用的提示词版本（注册表解析结果） */
   promptRefs?: { name: string; scene: string; version: number | null; templateId: string | null }[]
+  /** 聊天引用角标（只增字段，结构化数据驱动前端渲染；文本版来源行保留兼容旧客户端） */
+  citations?: MessageCitation[]
 }): Promise<ConversationMessageRow> {
   const rows = await getDb()!
     .insert(conversationMessages)
@@ -309,6 +322,7 @@ async function appendMessage(input: {
       runId: input.runId ?? null,
       card: input.card ?? null,
       promptRefs: input.promptRefs ?? null,
+      citations: input.citations ?? null,
     })
     .returning()
   await getDb()!.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, input.conversationId))
@@ -629,6 +643,13 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
         conversationId: conv.id, role: 'assistant', intent, content,
         promptRefs: [{ name: newsPrompt.name, scene: newsPrompt.scene, version: newsPrompt.version, templateId: newsPrompt.templateId }],
         sceneCode: 'news-attribution',
+        citations: items.map((w, i): MessageCitation => ({
+          n: i + 1,
+          kind: 'web_page',
+          title: w.title,
+          url: w.url,
+          snippet: (w.snippet !== '' ? w.snippet : w.pageText).slice(0, 240),
+        })),
       })
       fireMemoryExtraction(conv.userId, conv.id)
       return { message: msg, runId: null, needCompletion: [] }
@@ -680,6 +701,13 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
       conversationId: conv.id, role: 'assistant', intent, content: reply.content,
       promptRefs: [{ name: conceptPrompt.name, scene: conceptPrompt.scene, version: conceptPrompt.version, templateId: conceptPrompt.templateId }],
       sceneCode: 'concept-teach',
+      citations: [...support.hits, ...counter.hits].map((h, i): MessageCitation => ({
+        n: i + 1,
+        kind: 'knowledge_chunk',
+        title: h.docTitle,
+        pageNo: h.chunk.pageNo ?? null,
+        snippet: h.chunk.text.slice(0, 240),
+      })),
     })
     fireMemoryExtraction(conv.userId, conv.id)
     return { message: msg, runId: null, needCompletion: [] }

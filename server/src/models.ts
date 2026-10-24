@@ -835,6 +835,8 @@ export const conversationMessages = pgTable(
     card: jsonb('card').$type<Record<string, unknown>>(),
     /** 本条回复实际使用的提示词版本（P0-6 审计）：[{name,scene,version,templateId}] */
     promptRefs: jsonb('prompt_refs').$type<Record<string, unknown>[]>(),
+    /** 聊天引用角标（只增字段）：[{n,kind:'knowledge_chunk'|'web_page',title,pageNo?,url?,snippet}] */
+    citations: jsonb('citations').$type<Record<string, unknown>[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('conversation_messages_conv_idx').on(table.conversationId, table.createdAt)],
