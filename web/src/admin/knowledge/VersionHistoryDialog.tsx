@@ -4,6 +4,7 @@
  * 当前版本标记「生效中」；历史版本「切回此版本」→ 以旧集合发布新版本
  * （POST versions/:id/restore，红线 2：不修改历史记录）。
  */
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import type { KnowledgeVersionSummary } from 'biance-vision-brooks'
@@ -15,6 +16,7 @@ export default function VersionHistoryDialog({
   onClose: () => void
   onRestored: () => void
 }): JSX.Element | null {
+  const { t } = useTranslation('admin')
   const [versions, setVersions] = useState<KnowledgeVersionSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,7 +44,7 @@ export default function VersionHistoryDialog({
   const restore = async (v: KnowledgeVersionSummary): Promise<void> => {
     if (
       !window.confirm(
-        `切回 ${v.label}？\n\n将以旧集合发布一个新版本（不修改历史记录），\n当前版本之后产生的变更不会自动丢失（仍可再切回）。`,
+        t('切回 {{label}}？\n\n将以旧集合发布一个新版本（不修改历史记录），\n当前版本之后产生的变更不会自动丢失（仍可再切回）。', { label: v.label }),
       )
     ) {
       return
@@ -61,23 +63,23 @@ export default function VersionHistoryDialog({
 
   return (
     <div className="kb-modal-overlay" onClick={onClose} role="presentation">
-      <div className="kb-modal" role="dialog" aria-label="版本历史" onClick={(e) => e.stopPropagation()}>
+      <div className="kb-modal" role="dialog" aria-label={t("版本历史")} onClick={(e) => e.stopPropagation()}>
         <div className="kb-modal-head">
-          <strong>版本历史</strong>
-          <button onClick={onClose}>关闭</button>
+          <strong>{t('版本历史')}</strong>
+          <button onClick={onClose}>{t('关闭')}</button>
         </div>
         {error !== '' && <p className="err-text">{error}</p>}
-        {versions === null && error === '' && <p className="muted">加载中…</p>}
-        {versions !== null && versions.length === 0 && <p className="muted">尚无发布版本（发布第一份资料后生成）</p>}
+        {versions === null && error === '' && <p className="muted">{t('加载中…')}</p>}
+        {versions !== null && versions.length === 0 && <p className="muted">{t('尚无发布版本（发布第一份资料后生成）')}</p>}
         {versions !== null && versions.length > 0 && (
           <table className="kb-ver-table">
             <thead>
               <tr>
-                <th>版本</th>
-                <th>时间</th>
-                <th>文档数</th>
-                <th>触发人</th>
-                <th>备注</th>
+                <th>{t('版本')}</th>
+                <th>{t('时间')}</th>
+                <th>{t('文档数')}</th>
+                <th>{t('触发人')}</th>
+                <th>{t('备注')}</th>
                 <th />
               </tr>
             </thead>
@@ -86,7 +88,7 @@ export default function VersionHistoryDialog({
                 <tr key={v.id}>
                   <td>
                     {v.label}
-                    {i === 0 && <span className="kb-ver-live">生效中</span>}
+                    {i === 0 && <span className="kb-ver-live">{t('生效中')}</span>}
                   </td>
                   <td>{new Date(v.createdAt).toLocaleString()}</td>
                   <td>{v.docCount}</td>
@@ -95,7 +97,7 @@ export default function VersionHistoryDialog({
                   <td>
                     {i !== 0 && (
                       <button disabled={busy} onClick={() => void restore(v)}>
-                        切回此版本
+                        {t('切回此版本')}
                       </button>
                     )}
                   </td>
@@ -104,7 +106,7 @@ export default function VersionHistoryDialog({
             </tbody>
           </table>
         )}
-        <p className="kb-modal-note">回滚语义：以旧集合发布新版本，历史记录不可变；旧引用始终指向原版本切块。</p>
+        <p className="kb-modal-note">{t('回滚语义：以旧集合发布新版本，历史记录不可变；旧引用始终指向原版本切块。')}</p>
       </div>
     </div>
   )

@@ -5,6 +5,7 @@
  * 旧文档（事件记录启用前导入）显示降级文案。
  * 数据源 parseMeta.events（W2 第二批按证据调整：不建独立事件表，单轮覆盖语义）。
  */
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import type { KnowledgeEventsResponse } from 'biance-vision-brooks'
@@ -28,6 +29,7 @@ function fmtMs(ms: number | null | undefined): string {
 }
 
 export default function ParseLogDrawer({ docId, onClose }: { docId: string; onClose: () => void }): JSX.Element | null {
+  const { t } = useTranslation('admin')
   const [data, setData] = useState<KnowledgeEventsResponse | null>(null)
   const [error, setError] = useState('')
 
@@ -59,31 +61,31 @@ export default function ParseLogDrawer({ docId, onClose }: { docId: string; onCl
 
   return (
     <div className="kb-drawer-overlay" onClick={onClose} role="presentation">
-      <aside className="kb-drawer kb-log-drawer" role="dialog" aria-label="解析日志" onClick={(e) => e.stopPropagation()}>
+      <aside className="kb-drawer kb-log-drawer" role="dialog" aria-label={t("解析日志")} onClick={(e) => e.stopPropagation()}>
         <div className="kb-drawer-head">
           <div className="kb-drawer-title">
-            <strong>解析日志{data !== null ? ` · ${data.title}` : ''}</strong>
+            <strong>{t('解析日志')}{data !== null ? ` · ${data.title}` : ''}</strong>
             <span className="kb-drawer-meta">
               {data !== null && (
                 <>
                   <StatusBadge status={data.status} />
-                  {data.runNo > 0 && <span>第 {data.runNo} 次解析</span>}
+                  {data.runNo > 0 && <span>{t('第 {{n}} 次解析', { n: data.runNo })}</span>}
                   {data.attemptId !== null && <span className="kb-log-attempt">attempt {data.attemptId.slice(0, 8)}</span>}
-                  {totalMs !== null && <span>总耗时 {fmtMs(totalMs)}</span>}
+                  {totalMs !== null && <span>{t('总耗时 {{ms}}', { ms: fmtMs(totalMs) })}</span>}
                 </>
               )}
             </span>
           </div>
           <div className="kb-drawer-actions">
-            <button onClick={onClose}>关闭</button>
+            <button onClick={onClose}>{t('关闭')}</button>
           </div>
         </div>
         <div className="kb-drawer-body">
           {error !== '' && <p className="err-text">{error}</p>}
-          {data === null && error === '' && <p className="muted">加载中…</p>}
+          {data === null && error === '' && <p className="muted">{t('加载中…')}</p>}
           {data !== null && !data.hasEvents && (
             <p className="muted kb-log-empty">
-              该文档在事件记录启用前导入，无历史日志。点击「重解析」可产生新轮次的完整事件。
+              {t('该文档在事件记录启用前导入，无历史日志。点击「重解析」可产生新轮次的完整事件。')}
             </p>
           )}
           {events.length > 0 && (
@@ -94,7 +96,7 @@ export default function ParseLogDrawer({ docId, onClose }: { docId: string; onCl
                   <span className="kb-log-msg">{e.message ?? ''}</span>
                   <span className="kb-log-time">
                     +{fmtMs(e.atMs - startAt)}
-                    {e.durationMs !== null && e.durationMs !== undefined && e.durationMs > 0 ? ` · 耗时 ${fmtMs(e.durationMs)}` : ''}
+                    {e.durationMs !== null && e.durationMs !== undefined && e.durationMs > 0 ? ` · ${t('耗时')} ${fmtMs(e.durationMs)}` : ''}
                   </span>
                 </li>
               ))}

@@ -2,6 +2,7 @@
  * 知识库管理页共享 UI 元件：文档状态徽章、来源/权限徽章、按文件类型的彩色图标。
  * 状态色语义：uploaded 灰 → parsing 蓝（脉冲）→ parsed/chunked 琥珀 → indexed 待发布 → published 绿 → failed 红。
  */
+import { useTranslation } from 'react-i18next'
 import type { KnowledgeDocument } from 'biance-vision-brooks'
 
 export const STATUS_META: Record<string, { label: string; cls: string; hint: string }> = {
@@ -15,11 +16,12 @@ export const STATUS_META: Record<string, { label: string; cls: string; hint: str
 }
 
 export function StatusBadge({ status, error }: { status: string; error?: string }): JSX.Element {
+  const { t } = useTranslation('admin')
   const meta = STATUS_META[status] ?? { label: status, cls: 'st-uploaded', hint: '' }
   return (
-    <span className={`kb-status ${meta.cls}`} title={error !== undefined && error !== '' ? `失败原因：${error}` : meta.hint}>
+    <span className={`kb-status ${meta.cls}`} title={error !== undefined && error !== '' ? t('失败原因：{{msg}}', { msg: error }) : t(meta.hint)}>
       <i />
-      {meta.label}
+      {t(meta.label)}
     </span>
   )
 }
@@ -33,10 +35,11 @@ export const TIER_LABEL: Record<string, string> = {
 const ACCESS_LABEL: Record<string, string> = { public: '公开', purchase: '购买', member: '会员' }
 
 export function TierBadge({ tier, access }: { tier: string; access?: string }): JSX.Element {
+  const { t } = useTranslation('admin')
   return (
-    <span className="kb-badge" title={`来源等级 ${tier}${access !== undefined ? ` · 权限 ${access}` : ''}`}>
-      {TIER_LABEL[tier] ?? tier}
-      {access !== undefined && access !== 'public' ? ` · ${ACCESS_LABEL[access] ?? access}` : ''}
+    <span className="kb-badge" title={t('来源等级 {{tier}}{{access}}', { tier, access: access !== undefined ? ` · ${t('权限')} ${access}` : '' })}>
+      {t(TIER_LABEL[tier] ?? tier)}
+      {access !== undefined && access !== 'public' ? t(' · {{a}}', { a: ACCESS_LABEL[access] ?? access }) : ''}
     </span>
   )
 }

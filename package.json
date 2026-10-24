@@ -43,7 +43,8 @@
     "blobs:migrate": "tsx scripts/migrate-blobs-to-minio.ts",
     "check:i18n": "tsx scripts/check-i18n.ts",
     "admin:dual-check": "tsx scripts/admin-dual-entry-check.ts",
-    "db:grants-check": "tsx scripts/db-grants-check.ts"
+    "db:grants-check": "tsx scripts/db-grants-check.ts",
+    "knowledge:enhance-eval": "tsx scripts/knowledge-enhance-eval.ts"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",

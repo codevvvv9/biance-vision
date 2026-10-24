@@ -3,6 +3,7 @@
  * 点击卡片开预览抽屉。失败卡红边显示原因；解析中徽章脉冲。
  * 栅格容器挂一个聚光监听（useSpotlight），卡片加 .fx-spot 即获得跟随光标微光。
  */
+import { useTranslation } from 'react-i18next'
 import { useRef, useState, type CSSProperties } from 'react'
 import type { KnowledgeDocument } from 'biance-vision-brooks'
 import { useSpotlight } from '../../components/fx/useSpotlight'
@@ -32,6 +33,7 @@ const FILTERS = [
 ]
 
 export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onReparse, onPublish, onDelete, onBatch, onLogs, onVersions }: DocGridProps): JSX.Element {
+  const { t } = useTranslation('admin')
   const gridRef = useRef<HTMLDivElement>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   useSpotlight(gridRef)
@@ -49,9 +51,9 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
   return (
     <div className="panel kb-docs-panel fx-in" style={{ '--fx-i': 2 } as CSSProperties}>
       <div className="kb-docs-head">
-        <h4>资料库（{docs.length}）</h4>
-        <button className="kb-ver-entry" onClick={onVersions}>版本历史 ▾</button>
-        <div className="kb-filter" role="tablist" aria-label="按状态筛选">
+        <h4>{t('资料库（{{n}}）', { n: docs.length })}</h4>
+        <button className="kb-ver-entry" onClick={onVersions}>{t('版本历史')} ▾</button>
+        <div className="kb-filter" role="tablist" aria-label={t("按状态筛选")}>
           {FILTERS.map((f) => (
             <button
               key={f.key}
@@ -60,7 +62,7 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
               className={statusFilter === f.key ? 'on' : ''}
               onClick={() => onFilter(f.key)}
             >
-              {f.label}
+              {t(f.label)}
               {f.key !== '' ? ` ${counts.get(f.key) ?? 0}` : ''}
             </button>
           ))}
@@ -68,15 +70,15 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
       </div>
       {selectedIds.length > 0 && (
         <div className="kb-batch-bar">
-          <span>已选 {selectedIds.length} 项</span>
-          <button onClick={() => { onBatch('publish', selectedIds); setSelected(new Set()) }}>批量发布</button>
-          <button onClick={() => { onBatch('reparse', selectedIds); setSelected(new Set()) }}>批量重解析</button>
-          <button className="danger" onClick={() => { if (window.confirm(`确认删除 ${selectedIds.length} 个文档？（归档，不影响历史引用）`)) { onBatch('delete', selectedIds); setSelected(new Set()) } }}>批量删除</button>
-          <button onClick={() => setSelected(new Set())}>取消选择</button>
+          <span>{t('已选 {{n}} 项', { n: selectedIds.length })}</span>
+          <button onClick={() => { onBatch('publish', selectedIds); setSelected(new Set()) }}>{t('批量发布')}</button>
+          <button onClick={() => { onBatch('reparse', selectedIds); setSelected(new Set()) }}>{t('批量重解析')}</button>
+          <button className="danger" onClick={() => { if (window.confirm(t('确认删除 {{n}} 个文档？（归档，不影响历史引用）', { n: selectedIds.length }))) { onBatch('delete', selectedIds); setSelected(new Set()) } }}>{t('批量删除')}</button>
+          <button onClick={() => setSelected(new Set())}>{t('取消选择')}</button>
         </div>
       )}
       {docs.length === 0 ? (
-        <p className="muted kb-empty">暂无资料——用上方导入区上传文件或导入 URL</p>
+        <p className="muted kb-empty">{t('暂无资料——用上方导入区上传文件或导入 URL')}</p>
       ) : (
         <div className="kb-doc-grid" ref={gridRef}>
           {docs.map((d) => (
@@ -85,7 +87,7 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
               className={`kb-doc-card fx-spot st-border-${d.status}${selected.has(d.id) ? ' selected' : ''}`}
               role="button"
               tabIndex={0}
-              aria-label={`预览 ${d.title}`}
+              aria-label={t('预览 {{title}}', { title: d.title })}
               onClick={() => onPreview(d.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') onPreview(d.id)
@@ -97,41 +99,41 @@ export default function DocGrid({ docs, statusFilter, onFilter, onPreview, onRep
                   checked={selected.has(d.id)}
                   onChange={() => toggleSelect(d.id)}
                   onClick={(e) => e.stopPropagation()}
-                  aria-label={`选择 ${d.title}`}
+                  aria-label={t('选择 {{title}}', { title: d.title })}
                 />
                 <FileIcon doc={d} />
                 <div className="kb-doc-title-wrap">
                   <span className="kb-doc-title" title={d.title}>{d.title}</span>
                   <span className="kb-doc-sub">
-                    {new Date(d.createdAt).toLocaleDateString()} · 版本 #{d.version}
+                    {new Date(d.createdAt).toLocaleDateString()} · {t('版本')} #{d.version}
                   </span>
                 </div>
                 <StatusBadge status={d.status} error={d.error} />
               </div>
               <div className="kb-doc-badges">
                 <TierBadge tier={d.sourceTier} access={d.access} />
-                <span className="kb-badge">{d.sourceType === 'file' ? '文件' : d.sourceType === 'url' ? 'URL' : '清单'}</span>
+                <span className="kb-badge">{d.sourceType === 'file' ? t('文件') : d.sourceType === 'url' ? 'URL' : t('清单')}</span>
               </div>
               {d.status === 'failed' && d.error !== undefined && d.error !== '' && (
                 <p className="kb-doc-error" title={d.error}>⚠ {d.error}</p>
               )}
               <div className="kb-doc-acts" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => onPreview(d.id)}>预览</button>
+                <button onClick={() => onPreview(d.id)}>{t('预览')}</button>
                 {(d.status === 'failed' || d.status === 'parsing' || d.status === 'uploaded' || d.status === 'parsed' || d.status === 'chunked') && (
-                  <button className={d.status === 'failed' ? 'kb-log-btn' : ''} onClick={() => onLogs(d.id)}>日志</button>
+                  <button className={d.status === 'failed' ? 'kb-log-btn' : ''} onClick={() => onLogs(d.id)}>{t('日志')}</button>
                 )}
-                {d.status !== 'parsing' && <button onClick={() => onReparse(d.id)}>重解析</button>}
+                {d.status !== 'parsing' && <button onClick={() => onReparse(d.id)}>{t('重解析')}</button>}
                 {d.status === 'indexed' && (
-                  <button className="btn-primary" onClick={() => onPublish(d.id)}>发布</button>
+                  <button className="btn-primary" onClick={() => onPublish(d.id)}>{t('发布')}</button>
                 )}
                 <button
                   className="danger"
                   onClick={() => {
-                    if (window.confirm(`确认删除「${d.title}」？\n\n默认归档（从当前发布集合移除，历史引用保留）。\n如需彻底清除（含切块与向量），请勾选 purge 后确认。`)) {
+                    if (window.confirm(t('确认删除「{{title}}」？\n\n默认归档（从当前发布集合移除，历史引用保留）。\n如需彻底清除（含切块与向量），请勾选 purge 后确认。', { title: d.title }))) {
                       onDelete(d.id)
                     }
                   }}
-                >删除</button>
+                >{t('删除')}</button>
               </div>
             </div>
           ))}

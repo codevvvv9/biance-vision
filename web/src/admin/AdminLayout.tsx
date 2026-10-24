@@ -1,6 +1,6 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { Navigate, NavLink, Outlet } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useAuth } from '@biance/shared-ui'
 import AiSettingsModal from './AiSettingsModal'
 import { ADMIN_MENU } from './menu'
@@ -10,7 +10,7 @@ const STANDALONE = import.meta.env.ADMIN_ENTRY === '1'
 
 /** 管理后台统一布局：superadmin 守卫 + 页头导航 + 子页面出口 */
 export default function AdminLayout(): JSX.Element {
-  const { t } = useTranslation()
+  const { t } = useTranslation('admin')
   const { user } = useAuth()
   const [aiOpen, setAiOpen] = useState(false)
 
@@ -22,11 +22,11 @@ export default function AdminLayout(): JSX.Element {
     <div className="admin-shell">
       <div className="admin-head">
         <div className="admin-head-side">
-          <span className="admin-head-title">{t('admin:layout.title')}</span>
+          <span className="admin-head-title">{t('layout.title')}</span>
           {/* 嵌入态（用户端构建）保留返回主站；独立 admin 入口下无主站可返 */}
           {!STANDALONE && (
             <NavLink to="/" className="admin-back">
-              ← {t('admin:layout.back')}
+              ← {t('layout.back')}
             </NavLink>
           )}
         </div>
@@ -43,7 +43,7 @@ export default function AdminLayout(): JSX.Element {
           ))}
           {/* AI 档案配置（多档案/用户绑定，仅超管）：主站 Header 的入口已随 admin 域名隔离移除，只在此处提供 */}
           <button type="button" className="admin-nav-action" onClick={() => setAiOpen(true)}>
-            {t('header.aiSettings')}
+            {t('common:header.aiSettings')}
           </button>
         </nav>
       </div>

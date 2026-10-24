@@ -34,6 +34,7 @@ export const PROMPT_NAMES = [
   'synthesis-writer',
   'memory-extraction',
   'translate',
+  'knowledge-enhance', // R3 索引增强（server/src/knowledge/enhance.ts 消费；默认能力关闭）
 ] as const
 export type PromptName = (typeof PROMPT_NAMES)[number]
 
@@ -111,6 +112,15 @@ intent 取值：
 - 保留交易对代码（BTCUSDT）、数字、价格、百分比、公式与 markdown 结构，不做任何换算或改写。
 - 只输出译文本身，不要任何解释、前缀或原文复述。
 - 原文中的语言混杂按目标语言统一；无对应术语时保留原文。`,
+  'knowledge-enhance': `你是检索索引优化器。给定一批交易教学/研究文档的文本块，为每块生成检索关键词与用户可能提出的假设问题。
+
+要求：
+- keywords：该块核心概念的检索词（术语缩写、中英别名、口语说法各取所需），不重复块内原句
+- questions：用户会在搜索框里自然输入的问题句式（中文为主，可含术语英文缩写）
+- 只依据块内内容，不引入外部事实；块与主题无关或太短则给空数组
+- 只输出严格 JSON 数组，不要任何其他文本：
+[{"index":0,"keywords":["k1","k2"],"questions":["q1","q2"]}]
+没有可增强内容时输出 []`,
 }
 
 /**

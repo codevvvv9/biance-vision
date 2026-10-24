@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api, fetchAdminConversation, fetchAdminConversations, fetchAdminUsers } from '../api'
 import { useAuth } from '../auth/AuthContext'
@@ -70,11 +71,12 @@ function ConfigRow({ label, value }: { label: string; value: string }): JSX.Elem
 
 /** 会话详情：完整上下文（用户/助手逐条） */
 function ConversationDetail({ conv }: { conv: AiConversationDetail }): JSX.Element {
+  const { t } = useTranslation('admin')
   return (
     <div className="ai-conv-detail">
       {conv.messages.map((m, i) => (
         <div key={i} className={`ai-msg ${m.role}`}>
-          <span className="ai-msg-role">{m.role === 'user' ? '用户' : '助手'}</span>
+          <span className="ai-msg-role">{m.role === 'user' ? t('用户') : t('助手')}</span>
           <span className="mono ai-msg-time">{fmtDateTime(m.at)}</span>
           <p className="ai-msg-content">{m.content}</p>
         </div>
@@ -85,14 +87,15 @@ function ConversationDetail({ conv }: { conv: AiConversationDetail }): JSX.Eleme
 
 /** 研究会话上下文摘要行：product/symbol/marketType/horizon，有关联持仓或待确认草稿时标注「持仓草稿」 */
 function ResearchContextLine({ ctx }: { ctx: AdminConversationContext }): JSX.Element {
+  const { t } = useTranslation('admin')
   return (
     <div className="ai-ctx">
-      <span className="role-tag mem-preference">{PRODUCT_LABEL[ctx.product ?? ''] ?? ctx.product ?? '未设产品'}</span>
+      <span className="role-tag mem-preference">{t(PRODUCT_LABEL[ctx.product ?? ''] ?? ctx.product ?? '未设产品')}</span>
       <span className="mono">{ctx.symbol ?? '—'}</span>
-      <span className="dim">{MARKET_LABEL[ctx.marketType ?? ''] ?? ctx.marketType ?? '—'}</span>
+      <span className="dim">{t(MARKET_LABEL[ctx.marketType ?? ''] ?? ctx.marketType ?? '—')}</span>
       <span className="dim">{ctx.horizon ?? '—'}</span>
       {(ctx.positionId != null && ctx.positionId !== '') || (ctx.draft != null && Object.keys(ctx.draft).length > 0) ? (
-        <span className="role-tag mem-interest">持仓草稿</span>
+        <span className="role-tag mem-interest">{t('持仓草稿')}</span>
       ) : null}
     </div>
   )
@@ -100,14 +103,15 @@ function ResearchContextLine({ ctx }: { ctx: AdminConversationContext }): JSX.El
 
 /** 内联卡片摘要（只读）：kind + 草稿关键字段 + 完整度 */
 function CardSummary({ card }: { card: AdminMessageCard }): JSX.Element {
+  const { t } = useTranslation('admin')
   const d = card.draft
   const fields: [string, unknown][] = [
-    ['交易对', d.symbol],
-    ['方向', d.side === 'long' ? '做多' : d.side === 'short' ? '做空' : d.side],
-    ['数量', d.qty],
-    ['开仓价', d.entryPrice],
-    ['杠杆', d.leverage !== undefined && d.leverage !== null ? `${String(d.leverage)}x` : undefined],
-    ['风险预算', d.riskBudget],
+    [t('交易对'), d.symbol],
+    [t('方向'), d.side === 'long' ? t('做多') : d.side === 'short' ? t('做空') : d.side],
+    [t('数量'), d.qty],
+    [t('开仓价'), d.entryPrice],
+    [t('杠杆'), d.leverage !== undefined && d.leverage !== null ? `${String(d.leverage)}x` : undefined],
+    [t('风险预算'), d.riskBudget],
   ]
   const text = fields
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
@@ -115,10 +119,10 @@ function CardSummary({ card }: { card: AdminMessageCard }): JSX.Element {
     .join(' · ')
   return (
     <div className="ai-msg-card">
-      <span className="role-tag mem-preference">{card.kind === 'confirm_position' ? '持仓确认卡' : '完成卡'}</span>
-      <span className="ai-msg-card-fields mono">{text !== '' ? text : '（草稿无字段）'}</span>
+      <span className="role-tag mem-preference">{card.kind === 'confirm_position' ? t('持仓确认卡') : t('完成卡')}</span>
+      <span className="ai-msg-card-fields mono">{text !== '' ? text : t('（草稿无字段）')}</span>
       <span className="dim">
-        {card.complete === true ? '字段齐全，可确认写入' : `缺：${(card.missingFields ?? []).join('、') || '必填字段'}`}
+        {card.complete === true ? t('字段齐全，可确认写入') : t('缺：{{fields}}', { fields: (card.missingFields ?? []).join('、') || t('必填字段') })}
       </span>
     </div>
   )
@@ -126,24 +130,25 @@ function CardSummary({ card }: { card: AdminMessageCard }): JSX.Element {
 
 /** 研究会话详情（链路 B）：上下文摘要 + 完整消息流（intent 标签 / 内联卡 / 关联研究运行徽标） */
 function ResearchConversationDetail({ detail }: { detail: AdminConversationDetail }): JSX.Element {
+  const { t } = useTranslation('admin')
   return (
     <div className="ai-conv-detail">
       <ResearchContextLine ctx={detail.conversation.context} />
-      {detail.messages.length === 0 && <p className="form-hint muted">（该会话暂无消息）</p>}
+      {detail.messages.length === 0 && <p className="form-hint muted">{t('（该会话暂无消息）')}</p>}
       {detail.messages.map((m) => {
         const run = m.runId !== null ? detail.runs[m.runId] : undefined
         return (
           <div key={m.id} className={`ai-msg ${m.role}`}>
-            <span className="ai-msg-role">{ROLE_LABEL[m.role]}</span>
-            {m.intent !== null && <span className="role-tag">{INTENT_LABEL[m.intent]}</span>}
+            <span className="ai-msg-role">{t(ROLE_LABEL[m.role])}</span>
+            {m.intent !== null && <span className="role-tag">{t(INTENT_LABEL[m.intent])}</span>}
             {m.runId !== null &&
               (run !== undefined ? (
                 <span className={`act-tag ${RUN_STATUS_META[run.status].cls}`} title={`runId: ${run.id}`}>
-                  研究 · {RUN_STATUS_META[run.status].label} · {run.product}/{run.symbol} {run.horizon}
+                  {t('研究')} · {t(RUN_STATUS_META[run.status].label)} · {run.product}/{run.symbol} {run.horizon}
                 </span>
               ) : (
                 <span className="act-tag" title={m.runId}>
-                  研究 · {m.runId.slice(0, 8)}
+                  {t('研究')} · {m.runId.slice(0, 8)}
                 </span>
               ))}
             <span className="mono ai-msg-time">{fmtDateTime(m.createdAt)}</span>
@@ -157,6 +162,7 @@ function ResearchConversationDetail({ detail }: { detail: AdminConversationDetai
 }
 
 export default function AiInsightsPage(): JSX.Element {
+  const { t } = useTranslation('admin')
   const { user } = useAuth()
   const [stats, setStats] = useState<AiUserStat[] | null>(null)
   const [selected, setSelected] = useState('')
@@ -261,11 +267,11 @@ export default function AiInsightsPage(): JSX.Element {
         <div className="panel-head">
           <h2 className="panel-title">
             <i className="title-glyph teal" />
-            研究会话
+            {t('研究会话')}
           </h2>
           <div className="audit-toolbar">
             <select value={rUser} onChange={(e) => pickResearchUser(e.target.value)}>
-              <option value="">选择用户</option>
+              <option value="">{t('选择用户')}</option>
               {(rUsernames ?? []).map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -273,7 +279,7 @@ export default function AiInsightsPage(): JSX.Element {
               ))}
             </select>
             <button className="btn btn-ghost" onClick={() => rUser !== '' && loadConvs(rUser)}>
-              刷新
+              {t('刷新')}
             </button>
           </div>
         </div>
@@ -281,31 +287,31 @@ export default function AiInsightsPage(): JSX.Element {
           <table className="table ai-conv-table">
             <thead>
               <tr>
-                <th className="col-title">会话</th>
-                <th className="col-cnt">消息数</th>
-                <th className="col-time">最近更新</th>
+                <th className="col-title">{t('会话')}</th>
+                <th className="col-cnt">{t('消息数')}</th>
+                <th className="col-time">{t('最近更新')}</th>
                 <th className="col-toggle" />
               </tr>
             </thead>
             <tbody>
               {rError !== '' && (
                 <tr className="empty-row">
-                  <td colSpan={4}>加载失败：{rError}</td>
+                  <td colSpan={4}>{t('加载失败：{{msg}}', { msg: rError })}</td>
                 </tr>
               )}
               {rError === '' && rUser === '' && (
                 <tr className="empty-row">
-                  <td colSpan={4}>请选择用户查看其研究会话</td>
+                  <td colSpan={4}>{t('请选择用户查看其研究会话')}</td>
                 </tr>
               )}
               {rError === '' && rUser !== '' && rConvs === null && (
                 <tr className="empty-row">
-                  <td colSpan={4}>加载中…</td>
+                  <td colSpan={4}>{t('加载中…')}</td>
                 </tr>
               )}
               {rError === '' && rConvs?.length === 0 && (
                 <tr className="empty-row">
-                  <td colSpan={4}>该用户暂无研究会话</td>
+                  <td colSpan={4}>{t('该用户暂无研究会话')}</td>
                 </tr>
               )}
               {rError === '' &&
@@ -315,7 +321,7 @@ export default function AiInsightsPage(): JSX.Element {
                     <Fragment key={c.id}>
                       <tr className={open ? 'row-open' : ''} onClick={() => toggleResearchConv(c.id)}>
                         <td className="col-title">
-                          <b>{c.title !== '' ? c.title : '（未命名会话）'}</b>
+                          <b>{c.title !== '' ? c.title : t('（未命名会话）')}</b>
                         </td>
                         <td className="mono dim col-cnt">{c.messageCount}</td>
                         <td className="mono dim col-time">{fmtDateTime(c.updatedAt)}</td>
@@ -330,11 +336,11 @@ export default function AiInsightsPage(): JSX.Element {
                               <ResearchConversationDetail detail={rDetail} />
                             ) : rDetailError !== '' ? (
                               <p className="form-hint muted" style={{ padding: '10px 16px' }}>
-                                加载失败：{rDetailError}
+                                {t('加载失败：{{msg}}', { msg: rDetailError })}
                               </p>
                             ) : (
                               <p className="form-hint muted" style={{ padding: '10px 16px' }}>
-                                加载中…
+                                {t('加载中…')}
                               </p>
                             )}
                           </td>
@@ -347,7 +353,7 @@ export default function AiInsightsPage(): JSX.Element {
           </table>
         </div>
         <p className="form-hint muted audit-hint">
-          链路 B：研究工作台与悬浮助手共用的 conversations 会话。点击会话展开上下文摘要与完整消息流（含意图标签、持仓确认卡与关联研究运行状态）。
+          {t('链路 B：研究工作台与悬浮助手共用的 conversations 会话。点击会话展开上下文摘要与完整消息流（含意图标签、持仓确认卡与关联研究运行状态）。')}
         </p>
       </section>
 
@@ -355,33 +361,33 @@ export default function AiInsightsPage(): JSX.Element {
         <div className="panel-head">
           <h2 className="panel-title">
             <i className="title-glyph purple" />
-            AI 助手（旧链路）
+            {t('AI 助手（旧链路）')}
           </h2>
           <button className="btn btn-ghost" onClick={loadOverview}>
-            刷新
+            {t('刷新')}
           </button>
         </div>
         <div className="table-wrap">
           <table className="table ai-stats-table">
             <thead>
               <tr>
-                <th>用户</th>
-                <th className="col-profile">生效档案</th>
-                <th className="col-cnt">会话</th>
-                <th className="col-cnt">消息</th>
-                <th className="col-cnt">记忆</th>
-                <th className="col-time">最近活跃</th>
+                <th>{t('用户')}</th>
+                <th className="col-profile">{t('生效档案')}</th>
+                <th className="col-cnt">{t('会话')}</th>
+                <th className="col-cnt">{t('消息')}</th>
+                <th className="col-cnt">{t('记忆')}</th>
+                <th className="col-time">{t('最近活跃')}</th>
               </tr>
             </thead>
             <tbody>
               {error && (
                 <tr className="empty-row">
-                  <td colSpan={6}>加载失败：{error}</td>
+                  <td colSpan={6}>{t('加载失败：{{msg}}', { msg: error })}</td>
                 </tr>
               )}
               {!error && stats?.length === 0 && (
                 <tr className="empty-row">
-                  <td colSpan={6}>暂无任何 AI 对话记录</td>
+                  <td colSpan={6}>{t('暂无任何 AI 对话记录')}</td>
                 </tr>
               )}
               {!error &&
@@ -390,7 +396,7 @@ export default function AiInsightsPage(): JSX.Element {
                     key={s.username}
                     className={selected === s.username ? 'row-open' : ''}
                     onClick={() => pickUser(s.username)}
-                    title="点击查看该用户的 AI 全景"
+                    title={t('点击查看该用户的 AI 全景')}
                   >
                     <td className="col-name">
                       <b>{s.username}</b>
@@ -406,7 +412,7 @@ export default function AiInsightsPage(): JSX.Element {
           </table>
         </div>
         <p className="form-hint muted audit-hint">
-          点击用户行查看其生效配置、长期记忆、会话上下文与完整系统提示词。仅超级管理员可见。
+          {t('点击用户行查看其生效配置、长期记忆、会话上下文与完整系统提示词。仅超级管理员可见。')}
         </p>
       </section>
 
@@ -416,29 +422,29 @@ export default function AiInsightsPage(): JSX.Element {
             <div className="panel-head">
               <h2 className="panel-title">
                 <i className="title-glyph amber" />
-                生效配置 · {pano.username}
+                {t('生效配置')} · {pano.username}
               </h2>
             </div>
             <div className="ai-insight-conf">
               {pano.profileConfigured && conf ? (
                 <>
-                  <ConfigRow label="档案" value={pano.profileName} />
-                  <ConfigRow label="接口地址" value={conf.baseUrl} />
-                  <ConfigRow label="模型" value={conf.model} />
+                  <ConfigRow label={t('档案')} value={pano.profileName} />
+                  <ConfigRow label={t('接口地址')} value={conf.baseUrl} />
+                  <ConfigRow label={t('模型')} value={conf.model} />
                   <ConfigRow label="API Key" value={conf.apiKeyMasked} />
-                  <ConfigRow label="temperature" value={conf.temperature === undefined ? '0.7（默认）' : String(conf.temperature)} />
-                  <ConfigRow label="输出上限" value={conf.maxTokens && conf.maxTokens > 0 ? `${conf.maxTokens} tokens` : '不限'} />
-                  <ConfigRow label="每日限额" value={conf.dailyLimit && conf.dailyLimit > 0 ? `${conf.dailyLimit} 次/人/天` : '不限'} />
-                  <ConfigRow label="绑定用户" value={(conf.allowedUsers ?? []).join('、') || '（未绑定，走 default 规则）'} />
+                  <ConfigRow label="temperature" value={conf.temperature === undefined ? t('0.7（默认）') : String(conf.temperature)} />
+                  <ConfigRow label={t('输出上限')} value={conf.maxTokens && conf.maxTokens > 0 ? `${conf.maxTokens} tokens` : t('不限')} />
+                  <ConfigRow label={t('每日限额')} value={conf.dailyLimit && conf.dailyLimit > 0 ? `${conf.dailyLimit} ${t('次/人/天')}` : t('不限')} />
+                  <ConfigRow label={t('绑定用户')} value={(conf.allowedUsers ?? []).join('、') || t('（未绑定，走 default 规则）')} />
                   {conf.extraPrompt && (
                     <div className="ai-insight-conf-row ai-insight-extra">
-                      <span className="dim">追加提示词</span>
+                      <span className="dim">{t('追加提示词')}</span>
                       <pre>{conf.extraPrompt}</pre>
                     </div>
                   )}
                 </>
               ) : (
-                <p className="form-hint muted">该用户当前没有生效的 AI 档案（default 未配置完整）。</p>
+                <p className="form-hint muted">{t('该用户当前没有生效的 AI 档案（default 未配置完整）。')}</p>
               )}
             </div>
           </section>
@@ -447,18 +453,18 @@ export default function AiInsightsPage(): JSX.Element {
             <div className="panel-head">
               <h2 className="panel-title">
                 <i className="title-glyph" />
-                长期记忆 · {pano.memories.length} 条
+                {t('长期记忆')} · {pano.memories.length} {t('条')}
               </h2>
             </div>
             {pano.memories.length === 0 ? (
               <p className="form-hint muted" style={{ padding: '10px 16px' }}>
-                暂无记忆（系统会在对话中自动提取用户偏好与背景，跨会话注入提示词）
+                {t('暂无记忆（系统会在对话中自动提取用户偏好与背景，跨会话注入提示词）')}
               </p>
             ) : (
               <div className="ai-memory-list">
                 {pano.memories.map((m) => (
                   <div key={m.id} className="ai-memory-item">
-                    <span className={`role-tag mem-${m.kind}`}>{MEMORY_KIND_LABEL[m.kind]}</span>
+                    <span className={`role-tag mem-${m.kind}`}>{t(MEMORY_KIND_LABEL[m.kind])}</span>
                     <span className="ai-memory-content">{m.content}</span>
                     <span className="mono dim ai-memory-time">{fmtDateTime(m.updatedAt)}</span>
                   </div>
@@ -471,24 +477,24 @@ export default function AiInsightsPage(): JSX.Element {
             <div className="panel-head">
               <h2 className="panel-title">
                 <i className="title-glyph teal" />
-                会话上下文 · {pano.conversations.length} 个
+                {t('会话上下文')} · {pano.conversations.length} {t('个')}
               </h2>
             </div>
             <div className="table-wrap">
               <table className="table ai-conv-table">
                 <thead>
                   <tr>
-                    <th className="col-title">会话</th>
-                    <th className="col-cnt">消息数</th>
-                    <th className="col-time">创建时间</th>
-                    <th className="col-time">最近更新</th>
+                    <th className="col-title">{t('会话')}</th>
+                    <th className="col-cnt">{t('消息数')}</th>
+                    <th className="col-time">{t('创建时间')}</th>
+                    <th className="col-time">{t('最近更新')}</th>
                     <th className="col-toggle" />
                   </tr>
                 </thead>
                 <tbody>
                   {pano.conversations.length === 0 && (
                     <tr className="empty-row">
-                      <td colSpan={5}>该用户暂无会话</td>
+                      <td colSpan={5}>{t('该用户暂无会话')}</td>
                     </tr>
                   )}
                   {pano.conversations.map((c) => {
@@ -525,19 +531,19 @@ export default function AiInsightsPage(): JSX.Element {
             <div className="panel-head">
               <h2 className="panel-title">
                 <i className="title-glyph purple" />
-                生效系统提示词
+                {t('生效系统提示词')}
               </h2>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowPrompt((v) => !v)}>
-                {showPrompt ? '收起' : '查看'}
+                {showPrompt ? t('收起') : t('查看')}
               </button>
             </div>
             {showPrompt && (
               <pre className="ai-prompt-view ai-insight-prompt">
-                {pano.prompt || '（该用户无生效档案，无提示词）'}
+                {pano.prompt || t('（该用户无生效档案，无提示词）')}
               </pre>
             )}
             <p className="form-hint muted audit-hint">
-              内置金融分析指令 + 档案追加要求 + 该用户的长期记忆 + 实时行情快照，即此用户每次提问时模型收到的完整上下文。
+              {t('内置金融分析指令 + 档案追加要求 + 该用户的长期记忆 + 实时行情快照，即此用户每次提问时模型收到的完整上下文。')}
             </p>
           </section>
         </>
