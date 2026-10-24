@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { cutOffUserChat, fetchAdminUsers, updateChatPolicy, api } from '../api'
 import { useAuth } from '../auth/AuthContext'
@@ -28,8 +29,9 @@ const STATUS_META: Record<NonNullable<AuditRecord['status']>, { label: string; c
 }
 
 function ActionTag({ entry }: { entry: AuditEntry }): JSX.Element {
+  const { t } = useTranslation('admin')
   const meta = ACTION_META[entry.action]
-  return <span className={`act-tag ${meta?.cls ?? ''} ${entry.ok ? '' : 'is-fail'}`}>{meta?.label ?? entry.action}</span>
+  return <span className={`act-tag ${meta?.cls ?? ''} ${entry.ok ? '' : 'is-fail'}`}>{t(meta?.label ?? entry.action)}</span>
 }
 
 function Timeline({ actions }: { actions: AuditEntry[] }): JSX.Element {
@@ -58,6 +60,7 @@ function LimitInput({
   onSubmit: (dailyLimit: number | null) => void
   onInvalid: (message: string) => void
 }): JSX.Element {
+  const { t } = useTranslation('admin')
   const [val, setVal] = useState(limit === null ? '' : String(limit))
   const commit = (): void => {
     const v = val.trim()
@@ -67,7 +70,7 @@ function LimitInput({
     }
     const n = Number(v)
     if (!Number.isInteger(n) || n <= 0) {
-      onInvalid('每日上限需为正整数，留空表示不限')
+      onInvalid(t('每日上限需为正整数，留空表示不限'))
       return
     }
     if (limit === n) return
@@ -82,21 +85,22 @@ function LimitInput({
         step={1}
         value={val}
         disabled={busy}
-        placeholder="不限"
-        title="每日聊天上限：留空 = 不限，Enter 或点「设」提交"
+        placeholder={t("不限")}
+        title={t("每日聊天上限：留空 = 不限，Enter 或点「设」提交")}
         onChange={(e) => setVal(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit()
         }}
       />
-      <button className="btn btn-ghost btn-sm" disabled={busy} onClick={commit} title="提交每日上限（空 = 不限）">
-        设
+      <button className="btn btn-ghost btn-sm" disabled={busy} onClick={commit} title={t("提交每日上限（空 = 不限）")}>
+        {t('设')}
       </button>
     </>
   )
 }
 
 export default function AdminPage(): JSX.Element {
+  const { t } = useTranslation('admin')
   const { user } = useAuth()
   const [records, setRecords] = useState<AuditRecord[] | null>(null)
   const [usernames, setUsernames] = useState<string[]>([])
@@ -159,12 +163,12 @@ export default function AdminPage(): JSX.Element {
   }
 
   const cutoff = (u: AdminUserRow): void => {
-    if (!window.confirm(`确认掐断用户「${u.username}」？\n将禁用该用户聊天并取消其全部进行中的研究任务。`)) return
+    if (!window.confirm(t('确认掐断用户「{{u}}」？\n将禁用该用户聊天并取消其全部进行中的研究任务。', { u: u.username }))) return
     runUserOp(u.username, async () => {
       const r = await cutOffUserChat(u.username)
       window.alert(
-        `已禁用「${u.username}」的聊天，并取消 ${r.cancelledRuns.length} 个进行中的研究任务。` +
-          (r.cancelDeferred === true ? '\n研究取消被延迟（数据库暂不可用），稍后可在 AI 会话页的研究会话追踪中复查。' : ''),
+        t('已禁用「{{u}}」的聊天，并取消 {{n}} 个进行中的研究任务。', { u: u.username, n: r.cancelledRuns.length }) +
+          (r.cancelDeferred === true ? t('研究取消被延迟（数据库暂不可用），稍后可在 AI 会话页的研究会话追踪中复查。') : ''),
       )
     })
   }
@@ -192,37 +196,37 @@ export default function AdminPage(): JSX.Element {
         <div className="panel-head">
           <h2 className="panel-title">
             <i className="title-glyph" />
-            用户列表
+            {t('用户列表')}
           </h2>
           <button className="btn btn-ghost" onClick={refreshUsers}>
-            刷新
+            {t('刷新')}
           </button>
         </div>
         <div className="table-wrap">
           <table className="table users-table">
             <thead>
               <tr>
-                <th>用户名</th>
-                <th className="col-role">角色</th>
-                <th className="col-chat">聊天</th>
-                <th className="col-time">创建时间</th>
-                <th className="col-copy">操作</th>
+                <th>{t('用户名')}</th>
+                <th className="col-role">{t("角色")}</th>
+                <th className="col-chat">{t("聊天")}</th>
+                <th className="col-time">{t("创建时间")}</th>
+                <th className="col-copy">{t("操作")}</th>
               </tr>
             </thead>
             <tbody>
               {error !== '' && users === null && (
                 <tr className="empty-row">
-                  <td colSpan={5}>加载失败：{error}</td>
+                  <td colSpan={5}>{t('加载失败：{{msg}}', { msg: error })}</td>
                 </tr>
               )}
               {users === null && !error && (
                 <tr className="empty-row">
-                  <td colSpan={5}>加载中…</td>
+                  <td colSpan={5}>{t('加载中…')}</td>
                 </tr>
               )}
               {users?.length === 0 && (
                 <tr className="empty-row">
-                  <td colSpan={5}>暂无用户</td>
+                  <td colSpan={5}>{t('暂无用户')}</td>
                 </tr>
               )}
               {(users ?? []).map((u) => (
@@ -232,23 +236,23 @@ export default function AdminPage(): JSX.Element {
                   </td>
                   <td className="col-role">
                     <span className={`role-tag ${u.role === 'superadmin' ? 'role-super' : ''}`}>
-                      {u.role === 'superadmin' ? '超级管理员' : '普通用户'}
+                      {u.role === 'superadmin' ? t('超级管理员') : t('普通用户')}
                     </span>
                   </td>
                   <td className="col-chat">
                     <span className="chat-cell">
                       <span className={`role-tag ${u.chatPolicy.disabled ? 'chat-off' : 'chat-ok'}`}>
-                        {u.chatPolicy.disabled ? '已禁用' : '正常'}
+                        {u.chatPolicy.disabled ? t('已禁用') : t('正常')}
                       </span>
-                      <span className="chat-usage mono dim" title="今日已用 / 每日上限">
-                        {u.chatUsage.today}/{u.chatUsage.limit === null ? '不限' : u.chatUsage.limit}
+                      <span className="chat-usage mono dim" title={t("今日已用 / 每日上限")}>
+                        {u.chatUsage.today}/{u.chatUsage.limit === null ? t('不限') : u.chatUsage.limit}
                       </span>
                       <span
                         className={`sess-status ${u.activeRecently ? 'st-active' : 'st-ended'}`}
-                        title={u.activeRecently ? '5 分钟内有操作（活跃近似）' : '5 分钟内无操作'}
+                        title={u.activeRecently ? t('5 分钟内有操作（活跃近似）') : t('5 分钟内无操作')}
                       >
                         <i />
-                        {u.activeRecently ? '在线' : '离线'}
+                        {u.activeRecently ? t('在线') : t('离线')}
                       </span>
                     </span>
                   </td>
@@ -258,17 +262,17 @@ export default function AdminPage(): JSX.Element {
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => copyName(u.username)}
-                        title="复制用户名（AI 档案绑定等场景需精准匹配，可直接粘贴）"
+                        title={t("复制用户名（AI 档案绑定等场景需精准匹配，可直接粘贴）")}
                       >
-                        {copied === u.username ? '✓ 已复制' : '复制'}
+                        {copied === u.username ? `✓ ${t('已复制')}` : t('复制')}
                       </button>
                       <button
                         className="btn btn-ghost btn-sm"
                         disabled={busyUser !== ''}
                         onClick={() => toggleDisabled(u)}
-                        title={u.chatPolicy.disabled ? '恢复该用户的 AI 聊天' : '禁用该用户的 AI 聊天（不影响登录）'}
+                        title={u.chatPolicy.disabled ? t('恢复该用户的 AI 聊天') : t('禁用该用户的 AI 聊天（不影响登录）')}
                       >
-                        {u.chatPolicy.disabled ? '启用' : '禁用'}
+                        {u.chatPolicy.disabled ? t('启用') : t('禁用')}
                       </button>
                       {u.role === 'user' && <button className="btn btn-ghost btn-sm" onClick={() => setAccessUser(u.username)}>额度 / 重置密码</button>}
                       <LimitInput
@@ -282,9 +286,9 @@ export default function AdminPage(): JSX.Element {
                         className="btn btn-ghost btn-sm danger"
                         disabled={busyUser !== ''}
                         onClick={() => cutoff(u)}
-                        title="一键掐断：禁用聊天并取消其全部进行中的研究任务"
+                        title={t("一键掐断：禁用聊天并取消其全部进行中的研究任务")}
                       >
-                        掐断
+                        {t('掐断')}
                       </button>
                     </span>
                   </td>
@@ -295,8 +299,8 @@ export default function AdminPage(): JSX.Element {
         </div>
         {accessUser && <UserAccessPanel key={accessUser} username={accessUser} onClose={() => setAccessUser(null)} />}
         <p className="form-hint muted audit-hint">
-          AI 配置档案的「绑定用户」需与上述用户名完全一致（区分大小写），可点击「复制」后直接粘贴；
-          「聊天」列展示禁用状态与今日用量（已用/上限），可对单个用户禁用/设每日上限/一键掐断（掐断同时取消其进行中的研究任务）。
+          {t('AI 配置档案的「绑定用户」需与上述用户名完全一致（区分大小写），可点击「复制」后直接粘贴；')}
+          {t('「聊天」列展示禁用状态与今日用量（已用/上限），可对单个用户禁用/设每日上限/一键掐断（掐断同时取消其进行中的研究任务）。')}
         </p>
       </section>
 
@@ -304,7 +308,7 @@ export default function AdminPage(): JSX.Element {
         <div className="panel-head">
           <h2 className="panel-title">
             <i className="title-glyph amber" />
-            操作日志
+            {t('操作日志')}
           </h2>
           <div className="audit-toolbar">
             <select
@@ -314,7 +318,7 @@ export default function AdminPage(): JSX.Element {
                 load(e.target.value)
               }}
             >
-              <option value="">全部用户</option>
+              <option value="">{t("全部用户")}</option>
               {filterNames.map((u) => (
                 <option key={u} value={u}>
                   {u}
@@ -322,7 +326,7 @@ export default function AdminPage(): JSX.Element {
               ))}
             </select>
             <button className="btn btn-ghost" onClick={() => load(username)}>
-              刷新
+              {t('刷新')}
             </button>
           </div>
         </div>
@@ -331,25 +335,25 @@ export default function AdminPage(): JSX.Element {
           <table className="table audit-table">
             <thead>
               <tr>
-                <th className="col-user">用户</th>
-                <th className="col-kind">类型</th>
-                <th className="col-ip" title="悬停查看设备信息">IP</th>
-                <th className="col-time">登录 / 发生时间</th>
-                <th className="col-time">结束时间</th>
-                <th className="col-cnt">操作数</th>
-                <th className="col-status">状态</th>
+                <th className="col-user">{t("用户")}</th>
+                <th className="col-kind">{t("类型")}</th>
+                <th className="col-ip" title={t("悬停查看设备信息")}>IP</th>
+                <th className="col-time">{t("登录 / 发生时间")}</th>
+                <th className="col-time">{t("结束时间")}</th>
+                <th className="col-cnt">{t("操作数")}</th>
+                <th className="col-status">{t("状态")}</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {error && (
                 <tr className="empty-row">
-                  <td colSpan={8}>加载失败：{error}</td>
+                  <td colSpan={8}>{t('加载失败：{{msg}}', { msg: error })}</td>
                 </tr>
               )}
               {!error && records?.length === 0 && (
                 <tr className="empty-row">
-                  <td colSpan={8}>暂无操作记录</td>
+                  <td colSpan={8}>{t('暂无操作记录')}</td>
                 </tr>
               )}
               {!error &&
@@ -361,14 +365,14 @@ export default function AdminPage(): JSX.Element {
                       key={r.id}
                       className={`${failed ? 'row-fail' : ''} ${open ? 'row-open' : ''}`}
                       onClick={() => !failed && setExpanded(open ? null : r.id)}
-                      title={r.userAgent ? `设备：${r.userAgent}` : undefined}
+                      title={r.userAgent ? t('设备：{{ua}}', { ua: r.userAgent }) : undefined}
                     >
                       <td className="col-user">
                         <b>{r.username}</b>
                       </td>
                       <td className="col-kind">
                         <span className={`act-tag ${failed ? 'act-fail' : 'act-rule'}`}>
-                          {failed ? '登录失败' : '登录会话'}
+                          {failed ? t('登录失败') : t('登录会话')}
                         </span>
                       </td>
                       <td className="mono dim col-ip">{r.ip || '—'}</td>
@@ -377,11 +381,11 @@ export default function AdminPage(): JSX.Element {
                       <td className="mono dim col-cnt">{failed ? '—' : r.actions.length}</td>
                       <td className="col-status">
                         {failed ? (
-                          <span className="down">失败</span>
+                          <span className="down">{t('失败')}</span>
                         ) : (
                           <span className={`sess-status ${STATUS_META[r.status ?? 'ended'].cls}`}>
                             <i />
-                            {STATUS_META[r.status ?? 'ended'].label}
+                            {t(STATUS_META[r.status ?? 'ended'].label)}
                           </span>
                         )}
                       </td>
@@ -404,8 +408,8 @@ export default function AdminPage(): JSX.Element {
         </div>
         {accessUser && <UserAccessPanel key={accessUser} username={accessUser} onClose={() => setAccessUser(null)} />}
         <p className="form-hint muted audit-hint">
-          一次登录即一条会话记录，展开可查看该次登录后的完整操作路径（含登录来源 IP 与设备）；
-          登录失败单独记录。保留最近 200 条会话，仅超级管理员可见。
+          {t('一次登录即一条会话记录，展开可查看该次登录后的完整操作路径（含登录来源 IP 与设备）；')}
+          {t('登录失败单独记录。保留最近 200 条会话，仅超级管理员可见。')}
         </p>
       </section>
     </div>

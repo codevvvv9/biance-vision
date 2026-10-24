@@ -6,6 +6,7 @@
  * W2 第二批：3s 全量轮询替换为差异轮询（useDocPolling——2s 轻量 statuses，
  * 状态翻转才全量刷新，全终态自动停；worker 心跳缺失时顶部黄条）。
  */
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import type { KnowledgeDocument } from 'biance-vision-brooks'
@@ -21,6 +22,7 @@ import VersionHistoryDialog from './knowledge/VersionHistoryDialog'
 import { useDocPolling } from './knowledge/hooks/useDocPolling'
 
 export default function AdminKnowledgePage(): JSX.Element {
+  const { t } = useTranslation('admin')
   const [docs, setDocs] = useState<KnowledgeDocument[]>([])
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -96,7 +98,7 @@ export default function AdminKnowledgePage(): JSX.Element {
         method: 'POST',
         body: { action, ids },
       })
-      const msg = `成功 ${r.succeeded.length}` + (r.failed.length > 0 ? `，失败 ${r.failed.length}（${r.failed[0]?.error.slice(0, 100)}）` : '')
+      const msg = t('成功 {{n}}', { n: r.succeeded.length }) + (r.failed.length > 0 ? t('，失败 {{m}}（{{e}}）', { m: r.failed.length, e: r.failed[0]?.error.slice(0, 100) ?? '' }) : '')
       setError(msg)
       await refresh()
       if (action === 'reparse') refreshSoon()
@@ -111,24 +113,24 @@ export default function AdminKnowledgePage(): JSX.Element {
     <div className="admin-page">
       <div className="admin-head fx-in">
         <div className="admin-head-side">
-          <span className="admin-head-title">知识库管理</span>
+          <span className="admin-head-title">{t('知识库管理')}</span>
           <div className="kb-stats">
             {stats.map((s) => (
               <span key={s.label} className={`kb-stat ${s.cls}`}>
-                <b>{s.value}</b> {s.label}
+                <b>{s.value}</b> {t(s.label)}
               </span>
             ))}
           </div>
         </div>
         <div className="admin-head-actions">
-          <button className="btn btn-primary" onClick={() => setShowUpload(true)}>+ 上传资料</button>
-          <button className="btn" onClick={() => setShowManifest(true)}>清单导入</button>
+          <button className="btn btn-primary" onClick={() => setShowUpload(true)}>{t('+ 上传资料')}</button>
+          <button className="btn" onClick={() => setShowManifest(true)}>{t('清单导入')}</button>
         </div>
       </div>
       {error !== '' && <p className="err-text">{error}</p>}
       {workerDead && (
         <div className="kb-warn-bar" role="alert">
-          解析队列不可用：worker 未运行（心跳缺失）。新上传的文档会停留在「待解析」，请启动 worker 后自动恢复。
+          {t('解析队列不可用：worker 未运行（心跳缺失）。新上传的文档会停留在「待解析」，请启动 worker 后自动恢复。')}
         </div>
       )}
 
@@ -157,7 +159,7 @@ export default function AdminKnowledgePage(): JSX.Element {
         <VersionHistoryDialog
           onClose={() => setShowVersions(false)}
           onRestored={() => {
-            setError('已切回旧版本（以旧集合生成了新版本）')
+            setError(t('已切回旧版本（以旧集合生成了新版本）'))
             void refresh()
           }}
         />

@@ -37,5 +37,5 @@ const updated = await saveCapabilities({
   ...(embedding ? { embedding } : {}),
   ...(rerank ? { rerank } : {}),
 })
-console.log('已保存能力配置：', Object.entries(updated).map(([k, v]) => `${k}=${v.enabled ? 'on' : '待配置'}`).join(' '))
+console.log('已保存能力配置：', Object.entries(updated).filter(([, v]) => typeof v === 'object' && v !== null && 'enabled' in v).map(([k, v]) => `${k}=${(v as { enabled: boolean }).enabled ? 'on' : '待配置'}`).join(' '))
 process.exit(0)

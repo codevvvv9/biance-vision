@@ -316,9 +316,31 @@ export async function processDocument(docId: string): Promise<KnowledgeDocumentR
     const chunkingAt = Date.now()
     const chunks = chunkBlocks(cleaned.blocks)
     if (chunks.length === 0) throw new Error('切分结果为空')
-    await replaceChunks(doc, chunks)
+    const chunkRows = await replaceChunks(doc, chunks)
     await setDocStatus(docId, 'chunked')
     await appendParseEvent(docId, 'chunking', `切分完成：${chunks.length} 块`, Date.now() - chunkingAt).catch(() => {})
+
+    // R3 LLM 索引增强（默认关闭；capabilities.knowledge.enhance 开启时生效）：
+    // 词项合并写入各块 terms、问题存 parseMeta.enhancedQuestions；失败不阻塞索引
+    const { enhanceDocument, enhanceConfig } = await import('./enhance.js')
+    if (enhanceConfig().enabled) {
+      const { updateChunkTerms } = await import('./store.js')
+      const enhanceAt = Date.now()
+      const enhanced = await enhanceDocument(docId, chunkRows, updateChunkTerms)
+      const enhanceMeta = 'termsAdded' in enhanced
+        ? { enhancedTerms: enhanced.termsAdded, enhancedQuestions: enhanced.enhancedQuestions.slice(0, 200) }
+        : { enhance_failed: enhanced.enhance_failed }
+      await appendParseEvent(
+        docId,
+        'enhance',
+        'termsAdded' in enhanced
+          ? `索引增强完成：+${enhanced.termsAdded} 词项（跳过 ${enhanced.skipped} 块）`
+          : `索引增强跳过（${enhanced.enhance_failed}）`,
+        Date.now() - enhanceAt,
+      ).catch(() => {})
+      const docNow = (await getDocument(docId))!
+      await setDocStatus(docId, docNow.status, { parseMeta: { ...docNow.parseMeta, ...enhanceMeta } })
+    }
 
     doc = (await getDocument(docId))!
     const embeddingAt = Date.now()

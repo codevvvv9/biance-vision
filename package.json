@@ -51,7 +51,8 @@
     "build:website": "pnpm --filter @biance/website build",
     "website:check": "pnpm --filter @biance/website test",
     "website:browser-check": "pnpm --filter @biance/website test:browser",
-    "access:check": "tsx scripts/ai-access-check.ts"
+    "access:check": "tsx scripts/ai-access-check.ts",
+    "knowledge:enhance-eval": "tsx scripts/knowledge-enhance-eval.ts"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",

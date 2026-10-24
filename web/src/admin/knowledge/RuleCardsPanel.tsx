@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { CSSProperties } from 'react'
 /**
  * 规则卡（一概念一卡：LLM 草拟 → 人工审核 → 发布）。
@@ -16,6 +17,7 @@ interface RuleCard {
 }
 
 export default function RuleCardsPanel({ onError }: { onError: (msg: string) => void }): JSX.Element {
+  const { t } = useTranslation('admin')
   const [cards, setCards] = useState<RuleCard[]>([])
   const [concept, setConcept] = useState('')
   const [editing, setEditing] = useState<RuleCard | null>(null)
@@ -72,7 +74,7 @@ export default function RuleCardsPanel({ onError }: { onError: (msg: string) => 
             confusable: editing.content.confusable ?? [],
             counterExamples: editing.content.counterExamples ?? [],
             ruleId: editing.content.ruleId ?? '',
-            sourceNote: '人工补全',
+            sourceNote: t('人工补全'),
           },
         },
       })
@@ -96,15 +98,15 @@ export default function RuleCardsPanel({ onError }: { onError: (msg: string) => 
 
   return (
     <div className="panel fx-in" style={{ '--fx-i': 4 } as CSSProperties}>
-      <h4>规则卡（一概念一卡：草拟 → 人工审核 → 发布）</h4>
+      <h4>{t('规则卡（一概念一卡：草拟 → 人工审核 → 发布）')}</h4>
       <div className="kb-rule-bar">
-        <input value={concept} onChange={(e) => setConcept(e.target.value)} placeholder="概念，如 h2 / barbwire / mtr" />
+        <input value={concept} onChange={(e) => setConcept(e.target.value)} placeholder={t("概念，如 h2 / barbwire / mtr")} />
         <button className="btn btn-primary" disabled={busy || concept === ''} onClick={() => void draft()}>
-          {busy ? '草拟中…' : '草拟（LLM/模板）'}
+          {busy ? t('草拟中…') : t('草拟（LLM/模板）')}
         </button>
       </div>
       {cards.length === 0 ? (
-        <p className="muted kb-empty">暂无规则卡——输入概念生成草稿，审核后发布供检索引用</p>
+        <p className="muted kb-empty">{t('暂无规则卡——输入概念生成草稿，审核后发布供检索引用')}</p>
       ) : (
         <div className="kb-rule-grid">
           {cards.map((c) => (
@@ -112,36 +114,36 @@ export default function RuleCardsPanel({ onError }: { onError: (msg: string) => 
               <div className="kb-rule-head">
                 <strong>{c.concept}</strong>
                 <span className={`kb-badge ${c.status === 'published' ? 'ok' : c.status === 'draft' ? 'warn' : ''}`}>
-                  {c.status === 'published' ? '已发布' : c.status === 'draft' ? '草稿' : c.status}
+                  {c.status === 'published' ? t('已发布') : c.status === 'draft' ? t('草稿') : c.status}
                 </span>
               </div>
               <p className="kb-rule-def" title={c.content.definition ?? ''}>
-                {c.content.definition ?? '（定义待补全）'}
+                {c.content.definition ?? t('（定义待补全）')}
               </p>
               {(c.content.conditions ?? []).length > 0 && (
-                <p className="kb-rule-cond">条件：{(c.content.conditions ?? []).join('；')}</p>
+                <p className="kb-rule-cond">{t('条件：{{list}}', { list: (c.content.conditions ?? []).join('；') })}</p>
               )}
               <div className="kb-rule-acts">
                 <span className="kb-rule-meta">v{c.version} · {c.draftedBy}</span>
                 {c.status === 'draft' && (
                   <>
-                    <button onClick={() => startEdit(c)}>编辑</button>
-                    <button className="btn-primary" onClick={() => void act(c.id, 'publish')}>发布</button>
-                    <button onClick={() => void act(c.id, 'delete')}>删除</button>
+                    <button onClick={() => startEdit(c)}>{t('编辑')}</button>
+                    <button className="btn-primary" onClick={() => void act(c.id, 'publish')}>{t('发布')}</button>
+                    <button onClick={() => void act(c.id, 'delete')}>{t('删除')}</button>
                   </>
                 )}
               </div>
               {editing !== null && editing.id === c.id && (
                 <div className="kb-rule-editor">
-                  <label className="field"><span className="field-label">定义</span>
+                  <label className="field"><span className="field-label">{t('定义')}</span>
                     <textarea value={definition} onChange={(e) => setDefinition(e.target.value)} rows={3} /></label>
-                  <label className="field"><span className="field-label">成立条件（；分隔）</span>
+                  <label className="field"><span className="field-label">{t('成立条件（；分隔）')}</span>
                     <input value={conditions} onChange={(e) => setConditions(e.target.value)} /></label>
-                  <label className="field"><span className="field-label">失效条件</span>
+                  <label className="field"><span className="field-label">{t('失效条件')}</span>
                     <input value={invalidation} onChange={(e) => setInvalidation(e.target.value)} /></label>
                   <div className="admin-row">
-                    <button className="btn btn-primary" onClick={() => void saveDraft()}>保存草稿</button>
-                    <button className="btn btn-ghost" onClick={() => setEditing(null)}>取消</button>
+                    <button className="btn btn-primary" onClick={() => void saveDraft()}>{t('保存草稿')}</button>
+                    <button className="btn btn-ghost" onClick={() => setEditing(null)}>{t('取消')}</button>
                   </div>
                 </div>
               )}

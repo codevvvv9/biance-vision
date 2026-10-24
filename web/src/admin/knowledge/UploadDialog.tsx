@@ -9,6 +9,7 @@
  *   完成（有成功且无失败无进行中才可用）；
  * - URL 导入与清单批量导入在第二/三个 Tab（清单明细走 ManifestDialog 独立弹窗，流程 6）。
  */
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { api } from '../../api'
 import { Dropdown } from '../../research/Dropdown'
@@ -69,7 +70,7 @@ function xhrUpload(
       if (xhr.status >= 200 && xhr.status < 300) resolve(data)
       else reject(new Error(data.message ?? `HTTP ${xhr.status}`))
     })
-    xhr.addEventListener('error', () => reject(new Error('网络错误')))
+    xhr.addEventListener('error', () => reject(Object.assign(new Error('network'), { name: 'NetworkError' })))
     xhr.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
     const form = new FormData()
     form.append('file', file)
@@ -101,6 +102,7 @@ const STATE_LABEL: Record<ItemState, string> = {
   uploading: '上传中',
   done: '已入队解析',
   error: '失败',
+  // ↑ 模块级常量:词典 key(渲染处经 t() 翻译)
 }
 
 export default function UploadDialog({
@@ -112,6 +114,7 @@ export default function UploadDialog({
   onDone: () => void
   onOpenManifest: () => void
 }): JSX.Element | null {
+  const { t } = useTranslation('admin')
   const [tab, setTab] = useState<'files' | 'url' | 'manifest'>('files')
   const [items, setItems] = useState<QueueItem[]>([])
   const [sourceTier, setSourceTier] = useState<'community' | 'official' | 'official_derivative'>('community')
@@ -144,15 +147,15 @@ export default function UploadDialog({
       const ext = (file.name.split('.').pop() ?? '').toLowerCase()
       const key = `${file.name}:${file.size}:${(seqRef.current += 1)}`
       if (!ALLOWED_EXT.includes(ext)) {
-        additions.push({ key, file, state: 'invalid', progress: 0, message: `不支持的格式 .${ext}（支持 ${ACCEPT.split(',').join(' / ')}）` })
+        additions.push({ key, file, state: 'invalid', progress: 0, message: t('不支持的格式 .{{ext}}（支持 {{ok}}）', { ext, ok: ACCEPT.split(',').join(' / ') }) })
         continue
       }
       if (file.size > MAX_BYTES) {
-        additions.push({ key, file, state: 'invalid', progress: 0, message: `超过 50MB（${formatBytes(file.size)}）` })
+        additions.push({ key, file, state: 'invalid', progress: 0, message: t('超过 50MB（{{size}}）', { size: formatBytes(file.size) }) })
         continue
       }
       if ([...nextItems, ...additions].some((it) => it.file.name === file.name && it.file.size === file.size && it.state !== 'invalid')) {
-        additions.push({ key, file, state: 'invalid', progress: 0, message: '与队列中已有文件同名同大小' })
+        additions.push({ key, file, state: 'invalid', progress: 0, message: t('与队列中已有文件同名同大小') })
         continue
       }
       additions.push({ key, file, state: 'checking', progress: 0 })
@@ -179,7 +182,7 @@ export default function UploadDialog({
         setItems((prev) =>
           prev.map((it) =>
             it.key === item.key && it.state === 'checking'
-              ? { ...it, state: duplicate ? 'duplicate' : 'ready', message: duplicate ? `已有相同内容：${existingTitle ?? ''}` : undefined }
+              ? { ...it, state: duplicate ? 'duplicate' : 'ready', message: duplicate ? t('已有相同内容：{{title}}', { title: existingTitle ?? '' }) : undefined }
               : it,
           ),
         )
@@ -210,14 +213,14 @@ export default function UploadDialog({
                     state: r.status === 'duplicate' ? 'duplicate' : 'done',
                     progress: 100,
                     docId: r.status === 'duplicate' ? undefined : (r.document?.id ?? undefined),
-                    message: r.status === 'duplicate' ? '服务端判重：已有相同内容' : undefined,
+                    message: r.status === 'duplicate' ? t('服务端判重：已有相同内容') : undefined,
                   }
                 : it,
             ),
           )        } catch (e) {
           const err = e as Error
           setItems((prev) =>
-            prev.map((it) => (it.key === target.key ? { ...it, state: 'error', message: err.name === 'AbortError' ? '已中止' : err.message } : it)),
+            prev.map((it) => (it.key === target.key ? { ...it, state: 'error', message: err.name === 'AbortError' ? t('已中止') : err.name === 'NetworkError' ? t('网络错误') : err.message } : it)),
           )
           if (err.name === 'AbortError') break
         } finally {
@@ -258,7 +261,7 @@ export default function UploadDialog({
         method: 'POST',
         body: { url, sourceTier, access },
       })
-      setUrlMsg(r.status === 'duplicate' ? '重复资料，未新建' : '已导入并入队解析')
+      setUrlMsg(r.status === 'duplicate' ? t('重复资料，未新建') : t('已导入并入队解析'))
       setUrl('')
       onDone()
     } catch (e) {
@@ -286,16 +289,16 @@ export default function UploadDialog({
 
   return (
     <div className="kb-modal-overlay" onClick={uploading ? undefined : onClose} role="presentation">
-      <div className="kb-modal kb-upload-modal" role="dialog" aria-label="上传资料" onClick={(e) => e.stopPropagation()}>
+      <div className="kb-modal kb-upload-modal" role="dialog" aria-label={t("上传资料")} onClick={(e) => e.stopPropagation()}>
         <div className="kb-modal-head">
-          <strong>上传资料</strong>
+          <strong>{t('上传资料')}</strong>
           <div className="kb-tabs" role="tablist">
-            <button role="tab" aria-selected={tab === 'files'} className={tab === 'files' ? 'on' : ''} onClick={() => setTab('files')}>文件</button>
+            <button role="tab" aria-selected={tab === 'files'} className={tab === 'files' ? 'on' : ''} onClick={() => setTab('files')}>{t('文件')}</button>
             <button role="tab" aria-selected={tab === 'url'} className={tab === 'url' ? 'on' : ''} onClick={() => setTab('url')}>URL</button>
-            <button role="tab" aria-selected={tab === 'manifest'} className={tab === 'manifest' ? 'on' : ''} onClick={() => setTab('manifest')}>清单</button>
+            <button role="tab" aria-selected={tab === 'manifest'} className={tab === 'manifest' ? 'on' : ''} onClick={() => setTab('manifest')}>{t('清单')}</button>
           </div>
           {!uploading && (
-            <button className="icon-btn" onClick={onClose} aria-label="关闭">✕</button>
+            <button className="icon-btn" onClick={onClose} aria-label={t("关闭")}>✕</button>
           )}
         </div>
 
@@ -303,22 +306,22 @@ export default function UploadDialog({
           <>
             <div className="kb-meta-row">
               <label>
-                来源
-                <Dropdown value={sourceTier} options={TIER_OPTIONS} onChange={setSourceTier} ariaLabel="来源等级" disabled={uploading} />
+                {t('来源')}
+                <Dropdown value={sourceTier} options={TIER_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))} onChange={setSourceTier} ariaLabel={t("来源等级")} disabled={uploading} />
               </label>
               <label>
-                访问
-                <Dropdown value={access} options={ACCESS_OPTIONS} onChange={setAccess} ariaLabel="访问级别" disabled={uploading} />
+                {t('访问')}
+                <Dropdown value={access} options={ACCESS_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))} onChange={setAccess} ariaLabel={t("访问级别")} disabled={uploading} />
               </label>
               {access !== 'public' && (
-                <span className="kb-access-note">⚠ {access === 'purchase' ? '购买' : '会员'}资料对普通用户不可见（方案甲过滤）</span>
+                <span className="kb-access-note">⚠ {access === 'purchase' ? t('购买') : t('会员')}{t('资料对普通用户不可见（方案甲过滤）')}</span>
               )}
             </div>
             <div
               className={`kb-dropzone compact${dragging ? ' drag' : ''}`}
               role="button"
               tabIndex={0}
-              aria-label="添加文件到上传队列"
+              aria-label={t("添加文件到上传队列")}
               onClick={() => inputRef.current?.click()}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
@@ -341,8 +344,8 @@ export default function UploadDialog({
                   e.target.value = ''
                 }}
               />
-              <div className="kb-drop-main">拖拽文件到此处入队，或点击选择</div>
-              <div className="kb-drop-sub">PDF / DOCX / TXT / MD / HTML，单文件 ≤50MB，可多选；上传前先查重；商业书籍仅上传有使用权的文件</div>
+              <div className="kb-drop-main">{t('拖拽文件到此处入队，或点击选择')}</div>
+              <div className="kb-drop-sub">{t('PDF / DOCX / TXT / MD / HTML，单文件 ≤50MB，可多选；上传前先查重；商业书籍仅上传有使用权的文件')}</div>
             </div>
             {items.length > 0 && (
               <ul className="kb-queue-list" ref={listRef}>
@@ -352,7 +355,7 @@ export default function UploadDialog({
                     <span className="kb-upload-name" title={it.file.name}>{it.file.name}</span>
                     <span className="kb-queue-size">{formatBytes(it.file.size)}</span>
                     <span className="kb-upload-state" title={it.message ?? ''}>
-                      {it.state === 'uploading' ? `上传中 ${it.progress}%` : STATE_LABEL[it.state]}
+                      {it.state === 'uploading' ? t('上传中 {{p}}%', { p: it.progress }) : t(STATE_LABEL[it.state])}
                       {it.state === 'error' && it.message !== undefined && it.message !== '' ? ` · ${it.message}` : ''}
                     </span>
                     {it.state === 'uploading' && (
@@ -361,7 +364,7 @@ export default function UploadDialog({
                       </span>
                     )}
                     {(it.state === 'checking' || it.state === 'ready' || it.state === 'duplicate' || it.state === 'invalid' || it.state === 'error') && (
-                      <button className="kb-queue-remove" onClick={() => removeItem(it.key)} aria-label={`移除 ${it.file.name}`}>移除</button>
+                      <button className="kb-queue-remove" onClick={() => removeItem(it.key)} aria-label={t('移除 {{name}}', { name: it.file.name })}>{t('移除')}</button>
                     )}
                   </li>
                 ))}
@@ -369,16 +372,16 @@ export default function UploadDialog({
             )}
             <div className="kb-upload-footer">
               <button className="btn" onClick={() => void cancelAndRollback()}>
-                取消{items.some((it) => it.docId !== undefined) ? '（回滚已传文档）' : ''}
+                {t('取消')}{items.some((it) => it.docId !== undefined) ? t('（回滚已传文档）') : ''}
               </button>
               <button
                 className="btn btn-primary"
                 disabled={uploading || readyCount === 0}
                 onClick={() => void startUpload()}
               >
-                {uploading ? '上传中…' : `开始上传${readyCount > 0 ? `（${readyCount}）` : ''}`}
+                {uploading ? t('上传中…') : t('开始上传{{n}}', { n: readyCount > 0 ? `（${readyCount}）` : '' })}
               </button>
-              <button className="btn" disabled={!canFinish} onClick={onClose}>完成</button>
+              <button className="btn" disabled={!canFinish} onClick={onClose}>{t('完成')}</button>
             </div>
           </>
         )}
@@ -389,36 +392,36 @@ export default function UploadDialog({
               <input
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://…（官方公开资料）"
+                placeholder={t('https://…（官方公开资料）')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && url !== '' && !urlBusy) void importUrl()
                 }}
               />
               <button className="btn btn-primary" disabled={urlBusy || url === ''} onClick={() => void importUrl()}>
-                {urlBusy ? '抓取中…' : '导入'}
+                {urlBusy ? t('抓取中…') : t('导入')}
               </button>
             </div>
             {urlMsg !== '' && <p className="kb-side-msg">{urlMsg}</p>}
             <div className="kb-meta-row">
               <label>
-                来源
-                <Dropdown value={sourceTier} options={TIER_OPTIONS} onChange={setSourceTier} ariaLabel="来源等级" />
+                {t('来源')}
+                <Dropdown value={sourceTier} options={TIER_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))} onChange={setSourceTier} ariaLabel={t('来源等级')} />
               </label>
               <label>
-                访问
-                <Dropdown value={access} options={ACCESS_OPTIONS} onChange={setAccess} ariaLabel="访问级别" />
+                {t('访问')}
+                <Dropdown value={access} options={ACCESS_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))} onChange={setAccess} ariaLabel={t('访问级别')} />
               </label>
             </div>
-            <p className="muted">遇访问限制如实失败，不绕过；purchase/member 的 URL 同样不会绕过限制（自动跳过）。</p>
+            <p className="muted">{t('遇访问限制如实失败，不绕过；purchase/member 的 URL 同样不会绕过限制（自动跳过）。')}</p>
           </div>
         )}
 
         {tab === 'manifest' && (
           <div className="kb-url-pane">
             <p className="muted">
-              从维护清单批量导入（docs/references/knowledge-source-manifest.json）：查看每条状态、失败原因、单条重试与勾选导入，都在清单管理弹窗中完成。
+              {t('从维护清单批量导入（docs/references/knowledge-source-manifest.json）：查看每条状态、失败原因、单条重试与勾选导入，都在清单管理弹窗中完成。')}
             </p>
-            <button className="btn btn-primary" onClick={onOpenManifest}>打开清单管理</button>
+            <button className="btn btn-primary" onClick={onOpenManifest}>{t('打开清单管理')}</button>
           </div>
         )}
       </div>

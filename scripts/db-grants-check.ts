@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     const dcl = postgres(dclUrl.toString(), { max: 1, onnotice: () => {} })
     const stmts = await syncDbUserRole(dcl)
     await dcl.end({ timeout: 1 })
-    check('G2 角色同步执行（biance_user 白名单 GRANT）', stmts >= 7, `语句=${stmts}`)
+    check('G2 角色同步执行（biance_user 白名单 GRANT）', stmts >= 8, `语句=${stmts}`)
     void getDb
 
     // 3) 以 biance_user 直连断言权限矩阵
@@ -114,6 +114,26 @@ async function main(): Promise<void> {
       const r = await u.unsafe(`insert into ${t} default values`)
         .then(() => 'allowed', (e: { code?: string }) => e.code)
       check(`G9 ${t} INSERT 被拒（42501，管理域）`, r === '42501' || r === '42501', String(r))
+    }
+
+    // G11 pgboss 队列 schema 授权（v0.17.1 修复：app 以 biance_user 入队；
+    // 此前 DCL 漏授 → user-api startQueue 42501 降级、知识库解析/研究 run 入队断）
+    {
+      const dclq = postgres(dclUrl.toString(), { max: 1, onnotice: () => {} })
+      await dclq.unsafe(`CREATE SCHEMA IF NOT EXISTS pgboss AUTHORIZATION biance_app`)
+      await dclq.unsafe(`SET ROLE biance_app`)
+      await dclq.unsafe(`DROP TABLE IF EXISTS pgboss.g11_new`)
+      await dclq.unsafe(`CREATE TABLE pgboss.g11_new (id int)`) // 以 biance_app 建：测 DEFAULT PRIVILEGES 继承
+      await dclq.unsafe(`RESET ROLE`)
+      await dclq.end({ timeout: 1 })
+      const dclr = postgres(dclUrl.toString(), { max: 1, onnotice: () => {} })
+      const stmts2 = await syncDbUserRole(dclr).finally(() => { void dclr.end({ timeout: 1 }) })
+      const qIns = await u.unsafe(`insert into pgboss.g11_new values (1)`)
+        .then(() => true, () => false)
+      check('G11 pgboss 表可写（biance_user 入队链路；DCL 重放+DEFAULT PRIVILEGES）', qIns && stmts2 >= 8, `写入=${qIns} 语句=${stmts2}`)
+      const dclq2 = postgres(dclUrl.toString(), { max: 1, onnotice: () => {} })
+      await dclq2.unsafe(`DROP TABLE IF EXISTS pgboss.g11_new`)
+      await dclq2.end({ timeout: 1 })
     }
 
     // 密码轮换语义：ALTER ROLE 后旧密码失效
