@@ -552,7 +552,9 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
       profileConfigured: !!profile,
       profileMasked: getAiProfilesMasked()[profileName] ?? null,
       prompt: profile ? buildSystemPrompt(profile, await memoriesPromptBlock(username)) : '',
-      conversations: listAiConversations(username),
+      // listAiConversations 是 async（内部 ensureFresh）——漏 await 会把 Promise 序列化成 {}
+      // 发给前端，antd Table 拿到非数组直接崩（be.some is not a function）
+      conversations: await listAiConversations(username),
       memories: await listMemories(username),
     }
   })
