@@ -91,5 +91,23 @@ export async function syncDbUserRole(db: {
   n += 1
   await db.unsafe(`GRANT SELECT ON TABLE ${RO_TABLES.join(', ')} TO ${DB_USER_ROLE};`)
   n += 1
+  // pgboss 队列 schema（owner=biance_app，由 worker 侧 pg-boss 建表/迁移）：
+  // user-api 以 biance_user 入队/查询需要 USAGE+DML；schema 尚未建（全新库首启
+  // migrate 先于 worker）时整段跳过，下次 migrate 重放补上（幂等）。
+  // DEFAULT PRIVILEGES 让 pg-boss 后续迁移新建的表自动继承同款授权，
+  // 否则 app 侧 startQueue 42501 降级、入队链路（知识库解析/研究 run）断。
+  const queueSchema = process.env.QUEUE_SCHEMA ?? 'pgboss'
+  await db.unsafe(
+    `DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '${queueSchema}') THEN
+        GRANT USAGE ON SCHEMA ${queueSchema} TO ${DB_USER_ROLE};
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${queueSchema} TO ${DB_USER_ROLE};
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${queueSchema} TO ${DB_USER_ROLE};
+        ALTER DEFAULT PRIVILEGES FOR ROLE biance_app IN SCHEMA ${queueSchema} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${DB_USER_ROLE};
+        ALTER DEFAULT PRIVILEGES FOR ROLE biance_app IN SCHEMA ${queueSchema} GRANT USAGE, SELECT ON SEQUENCES TO ${DB_USER_ROLE};
+      END IF;
+    END $$;`,
+  )
+  n += 1
   return n
 }
