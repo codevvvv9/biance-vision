@@ -31,9 +31,14 @@ jobs:
 
       # server tsc 编译 + web vite 生产构建
       - run: pnpm build
+        # Both Vite builds enforce module-graph isolation (Ant Design stays admin-only).
+      - run: pnpm --dir web exec playwright install --with-deps chromium
+      - run: pnpm --dir web test:admin
 
       - uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: web/dist/
+          path: |
+            web/dist/
+            web/dist-admin/
           retention-days: 7

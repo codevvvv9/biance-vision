@@ -29,6 +29,7 @@ const steps: Step[] = [
   { name: '双入口切分（W3-S3，21 项，需 PG）', cmd: 'pnpm admin:dual-check', skip: skipDb },
   { name: '数据库分权（W3-S4，12 项，需 PG）', cmd: 'pnpm db:grants-check', skip: skipDb },
   { name: '研究流程集成（需 PG+行情）', cmd: 'pnpm research:smoke', skip: skipDb },
+  { name: '管理端受控浏览器回归', cmd: 'pnpm --dir web test:admin' },
   { name: 'web 生产构建', cmd: 'pnpm --dir web build' },
 ]
 

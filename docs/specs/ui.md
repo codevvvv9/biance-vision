@@ -151,3 +151,14 @@
 
 - 仓库内：`web/src/styles/`（token 在 `base.css`，`.panel`/按钮在 `components.css`）、`web/src/components/Header.tsx`（TABS）、`web/src/brooks/BrooksChart.tsx` 与 `web/src/brooks/indicator.ts`（研究/复盘共用图表与指标层）、`web/src/research/`（ResearchPage + useResearchRun/useResearchConversation/useResearchCandles + RunBubble/PositionConfirmCard）、`web/src/ai/`（AiAssistant FAB + AiChat + AiContext）、`web/src/pages/AdminPage.tsx`、docs/specs/api-storage.md、docs/specs/perpetual.md、docs/specs/event-contracts.md、docs/specs/knowledge-rag.md。
 - 交互模式参考（模式研究，非完整审计；核验日期 2026-09-30 / 2026-10-09，详见 docs/references/financial-agent-patterns.md §2）：[FinRobot](https://github.com/AI4Finance-Foundation/FinRobot)（数据与结论并排）、[AlphaSense](https://developer.alpha-sense.com/agent-api/response-parsing)（引用定位来源片段）、[Fiscal.ai](https://docs.fiscal.ai/docs/guides/mcp-skills)（数值可追溯到原始资料）、[Perplexity 官方开发文档](https://docs.perplexity.ai/)（回答内建引用）、[Bloomberg Terminal 公开入门指南](https://guides.library.yale.edu/Bloomberg/Bloomberg_Basics)（多面板多任务）、[OpenBB Workspace Copilot 文档](https://docs.openbb.co/workspace/analysts/ai-features/copilot-basics)（仪表盘 + AI 侧栏）、[Daloopa](https://daloopa.com/benefits/deepest-dataset)（数值单击溯源原文）、[LangGraph Streaming](https://docs.langchain.com/oss/python/langgraph/streaming) 与 [LangGraph Interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)（流式步骤与人在回路确认）、[Kalshi](https://kalshi.com/learn)（概率作为一等展示对象）。
+
+
+## 管理端组件化迁移（独立前端）
+
+状态：`implemented`（独立基础设施与五个领域页面迁移中；W4 管理首页整合待其合并。验收记录见 docs/admin-ui/implementation.md，完整状态尚非 verified）。
+
+- 管理端使用独立主题、样式入口和数据路由；路由/菜单/标题共享注册模型，basename 派生自 Vite BASE_URL。
+- 侧栏桌面 240/64px，<768px 使用抽屉导航；登录保持深链，退出回登录，未保存表单有放弃确认。
+- 页内业务标签写入 view 查询参数。资料默认表格，其他领域按各自操作组织标签与弹层。
+- 知识库 W2 的上传校验、串行队列、取消回滚、差异轮询、日志/预览/版本恢复保留；完整统计不随过滤结果重算。
+- Ant Design 仅进入管理构建，实际模块图隔离与受控浏览器回归纳入 CI；不以构建通过代替浏览器验收。

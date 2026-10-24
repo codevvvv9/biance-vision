@@ -50,3 +50,7 @@ docs/references/antafu-*.md
 # Agent 工具本地目录（不入库）
 .omo/
 .zcode/
+
+# Browser test artifacts
+web/test-results/
+web/playwright-report/

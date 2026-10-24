@@ -32,7 +32,7 @@ admin.example.com {
 	basic_auth {
 		bvadmin <bcrypt哈希，caddy hash-password 生成后替换>
 	}
-	reverse_proxy 127.0.0.1:3200 {
+	reverse_proxy 127.0.0.1:3201 {
 		flush_interval -1
 	}
 	header {

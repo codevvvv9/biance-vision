@@ -1,0 +1,7 @@
+/* Only imported by admin-main. No business-page selectors or user reset. */
+html { color-scheme: dark; }
+body { background: var(--bg-0); }
+#admin-overlays { position: relative; z-index: 1000; }
+@media (prefers-reduced-motion: reduce) {
+  #root *, #admin-overlays * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

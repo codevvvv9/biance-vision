@@ -1,13 +1,6 @@
-/** 管理后台菜单配置：AdminLayout 内部导航数据源（含图标）。
- * 主站 Header 的超管菜单入口已随 admin 域名隔离整体移除（主域名 /admin 双层 404），本表只服务管理域名。 */
-export interface AdminMenuItem {
-  path: string
-  /** admin:* 词典 key（消费方用 t() 取当前语言；单一数据源不变） */
-  labelKey: string
-  hintKey: string
-  icon: JSX.Element
-}
-
+import type { ComponentType } from 'react'
+interface RouteMeta { id: string; labelKey: string; hintKey: string; icon: JSX.Element; legacy?: boolean; load: () => Promise<{ default: ComponentType }> }
+export type AdminRouteDef = RouteMeta & ({ index: true; path?: never } | { path: string; index?: never })
 function LogIcon(): JSX.Element {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -66,11 +59,12 @@ function PromptIcon(): JSX.Element {
   )
 }
 
-export const ADMIN_MENU: AdminMenuItem[] = [
-  { path: '/admin', labelKey: 'admin:menu.panel', hintKey: 'admin:menu.panelHint', icon: <LogIcon /> },
-  { path: '/admin/ai', labelKey: 'admin:menu.ai', hintKey: 'admin:menu.aiHint', icon: <ChatLogIcon /> },
-  { path: '/admin/knowledge', labelKey: 'admin:menu.knowledge', hintKey: 'admin:menu.knowledgeHint', icon: <BookIcon /> },
-  { path: '/admin/agents', labelKey: 'admin:menu.agents', hintKey: 'admin:menu.agentsHint', icon: <TuneIcon /> },
-  { path: '/admin/prompts', labelKey: 'admin:menu.prompts', hintKey: 'admin:menu.promptsHint', icon: <PromptIcon /> },
-  { path: '/admin/evals', labelKey: 'admin:menu.evals', hintKey: 'admin:menu.evalsHint', icon: <ChartIcon /> },
+/** Paths are internal to the router basename; no deployment prefixes. */
+export const ADMIN_ROUTES: AdminRouteDef[] = [
+  { id: 'panel', legacy: true, index: true, labelKey: 'menu.panel', hintKey: 'menu.panelHint', icon: <LogIcon />, load: () => import('./AdminPage') },
+  { id: 'ai', legacy: true, path: 'ai', labelKey: 'menu.ai', hintKey: 'menu.aiHint', icon: <ChatLogIcon />, load: () => import('./AiInsightsPage') },
+  { id: 'knowledge', legacy: true, path: 'knowledge', labelKey: 'menu.knowledge', hintKey: 'menu.knowledgeHint', icon: <BookIcon />, load: () => import('./AdminKnowledgePage') },
+  { id: 'agents', legacy: true, path: 'agents', labelKey: 'menu.agents', hintKey: 'menu.agentsHint', icon: <TuneIcon />, load: () => import('./AdminAgentsPage') },
+  { id: 'prompts', legacy: true, path: 'prompts', labelKey: 'menu.prompts', hintKey: 'menu.promptsHint', icon: <PromptIcon />, load: () => import('./AdminPromptsPage') },
+  { id: 'evals', legacy: true, path: 'evals', labelKey: 'menu.evals', hintKey: 'menu.evalsHint', icon: <ChartIcon />, load: () => import('./AdminEvalsPage') },
 ]
