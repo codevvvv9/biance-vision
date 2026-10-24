@@ -1,3 +1,4 @@
+import { buildIsolation } from './build-isolation'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -11,7 +12,7 @@ const webPort = Number(process.env.BV_WEB_PORT || 17834)
 const webDir = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), buildIsolation('user')],
   // W3-S1：共享 UI 基建源码直消费（packages/shared-ui，无构建产物）
   resolve: {
     alias: { '@biance/shared-ui': path.resolve(webDir, '../packages/shared-ui/src') },

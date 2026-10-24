@@ -27,7 +27,7 @@ import {
   canSeeAccess,
   isRestrictedAccess,
 } from '../server/src/knowledge/access.js'
-import { draftRuleCard, publishRuleCard, getRuleCard } from '../server/src/knowledge/ruleCards.js'
+import { draftRuleCard, updateRuleCardDraft, publishRuleCard, getRuleCard } from '../server/src/knowledge/ruleCards.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {
@@ -117,6 +117,13 @@ const draft = await draftRuleCard('accesscheck-beta', 'knowledge-access-check')
 const draftCitedPur = draft.card.citations.some((c) => c.docVersionId.startsWith(`${purDoc.docId}#`))
 check('C1 草拟引用确实指向受限源（citations）', draftCitedPur, draft.card.citations.map((c) => c.docVersionId).join(','))
 if (draftCitedPur) {
+  // Exercise access control without depending on an external LLM to complete the draft.
+  // This updates content only; citations still point to the restricted source above.
+  await updateRuleCardDraft(draft.card.id, {
+    definition: 'accesscheck-beta restricted source rule', conditions: ['Source evidence reviewed'],
+    context: 'Access-control regression', invalidation: 'Source evidence invalidated',
+    confusable: [], counterExamples: [], ruleId: '', sourceNote: 'Reviewed test fixture',
+  })
   await publishRuleCard(draft.card.id)
   const cardAdmin = await searchHybrid('accesscheck-beta', { access: ADMIN_VIEWER })
   check('C2 超管可召回受限源规则卡', cardAdmin.hits.some((h) => h.chunk.id.startsWith('rulecard:')), cardAdmin.hits.map((h) => h.chunk.id).join(','))

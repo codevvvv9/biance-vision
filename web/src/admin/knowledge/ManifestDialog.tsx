@@ -1,3 +1,10 @@
+import { Alert } from "antd";
+import { Feedback } from "../ui/feedback";
+import styles from "../ui/admin.module.css";
+import { Space, Table, Tag, Typography } from "antd";
+import { Modal } from "../ui/overlays";
+import { useAdminText } from "../ui/text";
+import { Button } from "antd";
 /**
  * W2 清单批量导入弹窗（docs/knowledge-ui-redesign-plan.md 流程 6，修 G1）：
  * - 展示 knowledge_manifest_entries 全部条目（标题/URL/导入状态/最近错误）——
@@ -7,96 +14,108 @@
  *   仅 enabled + url_fetch + public 的条目可勾选/单条重试（受限资料走文件上传，不绕过）；
  * - 导入结果部分失败汇报（新/重复/失败/待上传 + 失败明细）。
  */
-import { useTranslation } from 'react-i18next'
-import { useEffect, useState } from 'react'
-import { api } from '../../api'
-import type { KnowledgeManifestEntryStatus } from 'biance-vision-brooks'
-import defaultManifest from './default-manifest.json'
+import { useEffect, useState } from "react";
+import { api } from "../../api";
+import type { KnowledgeManifestEntryStatus } from "biance-vision-brooks";
+import defaultManifest from "./default-manifest.json";
 
 interface ManifestEntryInput {
-  id: string
-  url: string
-  type: string
-  title: string
-  topics: string[]
-  access: string
-  sourceTier: string
-  importMethod: string
-  enabled: boolean
-  notes?: string
+  id: string;
+  url: string;
+  type: string;
+  title: string;
+  topics: string[];
+  access: string;
+  sourceTier: string;
+  importMethod: string;
+  enabled: boolean;
+  notes?: string;
 }
 
-const DEFAULT_ENTRIES = (defaultManifest as { entries: ManifestEntryInput[] }).entries
-
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  pending: { label: '待导入', cls: 'st-uploaded' },
-  imported: { label: '已导入', cls: 'st-published' },
-  skipped: { label: '跳过', cls: 'st-parsed' },
-  failed: { label: '失败', cls: 'st-failed' },
-}
+const DEFAULT_ENTRIES = (defaultManifest as { entries: ManifestEntryInput[] })
+  .entries;
 
 /** 可导入判定：启用 + 自动抓取 + 公开（与后端 import-manifest 的放行分支一致） */
 function importable(e: KnowledgeManifestEntryStatus): boolean {
-  return e.enabled && e.importMethod === 'url_fetch' && e.access === 'public'
+  return e.enabled && e.importMethod === "url_fetch" && e.access === "public";
 }
 
-export default function ManifestDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }): JSX.Element | null {
-  const { t } = useTranslation('admin')
-  const [entries, setEntries] = useState<KnowledgeManifestEntryStatus[] | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [summaryMsg, setSummaryMsg] = useState('')
+export default function ManifestDialog({
+  onClose,
+  onImported,
+}: {
+  onClose: () => void;
+  onImported: () => void;
+}): JSX.Element | null {
+  const text = useAdminText();
+  const [entries, setEntries] = useState<KnowledgeManifestEntryStatus[] | null>(
+    null,
+  );
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [summaryMsg, setSummaryMsg] = useState("");
+  const [partial, setPartial] = useState(false);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, busy])
-
-  useEffect(() => {
-    let alive = true
-    api<{ entries: KnowledgeManifestEntryStatus[] }>('/admin/knowledge/manifest-entries')
+    let alive = true;
+    api<{ entries: KnowledgeManifestEntryStatus[] }>(
+      "/admin/knowledge/manifest-entries",
+    )
       .then((r) => {
-        if (!alive) return
-        setEntries(r.entries)
-        setSelected(new Set(r.entries.filter(importable).filter((e) => e.status !== 'imported').map((e) => e.id)))
+        if (!alive) return;
+        setEntries(r.entries);
+        setSelected(
+          new Set(
+            r.entries
+              .filter(importable)
+              .filter((e) => e.status !== "imported")
+              .map((e) => e.id),
+          ),
+        );
       })
-      .catch((e: Error) => alive && setError(e.message))
+      .catch((e: Error) => alive && setError(e.message));
     return () => {
-      alive = false
-    }
-  }, [])
+      alive = false;
+    };
+  }, []);
 
   const reload = async (): Promise<void> => {
-    const r = await api<{ entries: KnowledgeManifestEntryStatus[] }>('/admin/knowledge/manifest-entries')
-    setEntries(r.entries)
-  }
+    const r = await api<{ entries: KnowledgeManifestEntryStatus[] }>(
+      "/admin/knowledge/manifest-entries",
+    );
+    setEntries(r.entries);
+  };
 
   const syncFromDefault = async (): Promise<void> => {
-    setBusy(true)
-    setError('')
+    setBusy(true);
+    setError("");
     try {
-      const r = await api<{ synced: number; entries: KnowledgeManifestEntryStatus[] }>('/admin/knowledge/manifest-entries/sync', {
-        method: 'POST',
+      const r = await api<{
+        synced: number;
+        entries: KnowledgeManifestEntryStatus[];
+      }>("/admin/knowledge/manifest-entries/sync", {
+        method: "POST",
         body: { entries: DEFAULT_ENTRIES },
-      })
-      setEntries(r.entries)
-      setSummaryMsg(t('已从默认清单同步 {{n}} 条（仅更新条目，未抓取内容）', { n: r.synced }))
+      });
+      setEntries(r.entries);
+      setPartial(false);
+      setSummaryMsg(text("manifestSynced", { count: r.synced }));
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
-  const importEntries = async (targets: KnowledgeManifestEntryStatus[]): Promise<void> => {
-    if (targets.length === 0) return
-    setBusy(true)
-    setError('')
-    setSummaryMsg(t('导入中（逐条抓取，可能较慢）…'))
+  const importEntries = async (
+    targets: KnowledgeManifestEntryStatus[],
+  ): Promise<void> => {
+    if (targets.length === 0) return;
+    setBusy(true);
+    setError("");
+    setPartial(false);
+    setSummaryMsg(text("manifestImporting"));
     try {
       // 提交勾选条目的完整字段（与 default-manifest 同构；url_fetch 自动抓取）——DB 行即真源
       const payload = targets.map((e) => ({
@@ -109,116 +128,156 @@ export default function ManifestDialog({ onClose, onImported }: { onClose: () =>
         sourceTier: e.sourceTier,
         importMethod: e.importMethod,
         enabled: e.enabled,
-        ...(e.notes !== null && e.notes !== '' ? { notes: e.notes } : {}),
-      }))
-      const r = await api<{ summary: { imported: number; duplicates: number; failed: number; pendingUpload: number }; failures: { id: string; error: string }[] }>(
-        '/admin/knowledge/documents/import-manifest',
-        { method: 'POST', body: { entries: payload } },
-      )
-      const s = r.summary
+        ...(e.notes !== null && e.notes !== "" ? { notes: e.notes } : {}),
+      }));
+      const r = await api<{
+        summary: {
+          imported: number;
+          duplicates: number;
+          failed: number;
+          pendingUpload: number;
+        };
+        failures: { id: string; error: string }[];
+      }>("/admin/knowledge/documents/import-manifest", {
+        method: "POST",
+        body: { entries: payload },
+      });
+      const s = r.summary;
+      setPartial(s.failed > 0);
       setSummaryMsg(
-        t('新 {{a}} · 重复 {{b}} · 失败 {{c}} · 待上传 {{d}}', { a: s.imported, b: s.duplicates, c: s.failed, d: s.pendingUpload })
-        + (r.failures.length > 0 ? t('；失败明细：{{list}}', { list: r.failures.map((f) => `${f.id}（${f.error.slice(0, 80)}）`).join('；') }) : ''),
-      )
-      await reload()
-      onImported()
+        text("manifestSummary", s) +
+          (r.failures.length
+            ? ` · ${r.failures.map((f) => `${f.id}: ${f.error.slice(0, 80)}`).join("; ")}`
+            : ""),
+      );
+      await reload();
+      onImported();
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
-  const toggle = (id: string): void => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const importableEntries = (entries ?? []).filter(importable)
-  const selectedEntries = importableEntries.filter((e) => selected.has(e.id))
+  const importableEntries = (entries ?? []).filter(importable);
+  const selectedEntries = importableEntries.filter((e) => selected.has(e.id));
 
   return (
-    <div className="kb-modal-overlay" onClick={busy ? undefined : onClose} role="presentation">
-      <div className="kb-modal kb-manifest-modal" role="dialog" aria-label={t("清单批量导入")} onClick={(e) => e.stopPropagation()}>
-        <div className="kb-modal-head">
-          <strong>{t('清单批量导入')}</strong>
-          <div className="kb-side-row">
-            <button className="btn" disabled={busy} onClick={() => void syncFromDefault()}>{t('从默认清单重新同步')}</button>
-            <button className="icon-btn" onClick={onClose} aria-label={t("关闭")}>✕</button>
-          </div>
+    <Modal
+      open
+      title={text("manifestImport")}
+      width={1100}
+      footer={null}
+      onCancel={busy ? undefined : onClose}
+      keyboard={!busy}
+      maskClosable={!busy}
+    >
+      <div className={styles.stack}>
+        <Feedback error={error} />
+        <div className={styles.toolbar}>
+          <Typography.Text type="secondary">
+            {text("manifestAccessHint")}
+          </Typography.Text>
+          <Button disabled={busy} onClick={() => void syncFromDefault()}>
+            {text("syncManifest")}
+          </Button>
         </div>
-        {error !== '' && <p className="err-text">{error}</p>}
-        {summaryMsg !== '' && <p className="kb-side-msg">{summaryMsg}</p>}
-        {entries === null && error === '' && <p className="muted">{t('加载中…')}</p>}
-        {entries !== null && entries.length === 0 && (
-          <p className="muted">{t('清单为空——先「从默认清单重新同步」入库（维护 docs/references/knowledge-source-manifest.json）。')}</p>
+        {summaryMsg && (
+          <Alert type={partial ? "warning" : "success"} title={summaryMsg} />
         )}
-        {entries !== null && entries.length > 0 && (
-          <table className="kb-ver-table kb-manifest-table">
-            <thead>
-              <tr>
-                <th />
-                <th>{t('条目')}</th>
-                <th>{t('方式/级别')}</th>
-                <th>{t('状态')}</th>
-                <th>{t('最近错误')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e) => {
-                const meta = STATUS_META[e.status] ?? { label: e.status, cls: 'st-uploaded' }
-                const can = importable(e)
-                return (
-                  <tr key={e.id} className={!e.enabled ? 'kb-row-disabled' : ''}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(e.id)}
-                        disabled={!can || busy}
-                        onChange={() => toggle(e.id)}
-                        aria-label={t('选择 {{title}}', { title: e.title })}
-                      />
-                    </td>
-                    <td className="kb-manifest-cell-title">
-                      <span className="kb-manifest-title" title={e.url}>{e.title}</span>
-                      <span className="kb-manifest-meta">{e.url}</span>
-                    </td>
-                    <td>
-                      {e.importMethod === 'url_fetch' ? t('自动抓取') : t('需手动上传')} · {e.access}
-                      {!e.enabled && ` · ${t('未启用')}`}
-                    </td>
-                    <td>
-                      <span className={`kb-status ${meta.cls}`}><i />{t(meta.label)}</span>
-                    </td>
-                    <td className="kb-manifest-cell-err" title={e.lastError ?? ''}>{e.lastError ?? '—'}</td>
-                    <td>
-                      {can && (e.status === 'failed' || e.status === 'skipped') && (
-                        <button disabled={busy} onClick={() => void importEntries([e])}>{t('重试')}</button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-        <div className="kb-upload-footer">
-          <span className="muted">{t('已选 {{a}} / 可导入 {{b}} 条（受限资料走文件上传，不在此列）', { a: selectedEntries.length, b: importableEntries.length })}</span>
-          <button
-            className="btn btn-primary"
-            disabled={busy || selectedEntries.length === 0}
+        <Table<KnowledgeManifestEntryStatus>
+          rowKey="id"
+          dataSource={entries ?? []}
+          loading={entries === null || busy}
+          scroll={{ x: 950 }}
+          rowSelection={{
+            selectedRowKeys: [...selected],
+            onChange: (keys) => setSelected(new Set(keys.map(String))),
+            getCheckboxProps: (entry) => ({
+              disabled: !importable(entry) || busy,
+            }),
+          }}
+          columns={[
+            {
+              title: text("document"),
+              width: 330,
+              render: (_, entry) => (
+                <div className={styles.titleCell}>
+                  <Typography.Text strong>{entry.title}</Typography.Text>
+                  <br />
+                  <Typography.Text type="secondary">
+                    {entry.url}
+                  </Typography.Text>
+                </div>
+              ),
+            },
+            {
+              title: text("source"),
+              render: (_, entry) => (
+                <Space orientation="vertical" size={2}>
+                  <span>{entry.importMethod}</span>
+                  <span>
+                    {text(`access_${entry.access}`)}
+                    {!entry.enabled && ` · ${text("disabled")}`}
+                  </span>
+                </Space>
+              ),
+            },
+            {
+              title: text("status"),
+              dataIndex: "status",
+              render: (status) => (
+                <Tag
+                  color={
+                    status === "failed"
+                      ? "error"
+                      : status === "imported"
+                        ? "success"
+                        : undefined
+                  }
+                >
+                  {text(`manifest_${status}`)}
+                </Tag>
+              ),
+            },
+            {
+              title: text("lastError"),
+              dataIndex: "lastError",
+              ellipsis: true,
+            },
+            {
+              title: text("actions"),
+              render: (_, entry) =>
+                importable(entry) &&
+                (entry.status === "failed" || entry.status === "skipped") && (
+                  <Button
+                    size="small"
+                    disabled={busy}
+                    onClick={() => void importEntries([entry])}
+                  >
+                    {text("retry")}
+                  </Button>
+                ),
+            },
+          ]}
+        />
+        <div className={styles.toolbar}>
+          <Typography.Text>
+            {text("manifestSelected", {
+              selected: selectedEntries.length,
+              available: importableEntries.length,
+            })}
+          </Typography.Text>
+          <Button
+            type="primary"
+            loading={busy}
+            disabled={!selectedEntries.length}
             onClick={() => void importEntries(selectedEntries)}
           >
-            {busy ? t('导入中…') : t('导入勾选条目（{{n}}）', { n: selectedEntries.length })}
-          </button>
+            {text("importSelected")}
+          </Button>
         </div>
-        <p className="kb-modal-note">{t('导入即逐条抓取 URL（服务端判重/失败落状态）；user_upload 与非 public 条目保持跳过——商业资料仅上传有使用权的文件。')}</p>
       </div>
-    </div>
-  )
+    </Modal>
+  );
 }

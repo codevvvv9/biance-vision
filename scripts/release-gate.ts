@@ -32,6 +32,7 @@ const steps: Step[] = [
   { name: '官网入口契约', cmd: 'pnpm website:check' },
   { name: '人工开通与 AI 硬额度（独立测试库）', cmd: 'pnpm access:check', skip: skipDb },
   { name: '官网生产构建', cmd: 'pnpm build:website' },
+  { name: '管理端受控浏览器回归', cmd: 'pnpm --dir web test:admin' },
   { name: 'web 生产构建', cmd: 'pnpm --dir web build' },
 ]
 

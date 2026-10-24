@@ -1,191 +1,196 @@
-/**
- * /admin/knowledge 知识库管理（超管）：
- * 上传队列弹窗（W2 第三批：三道校验/串行/放弃回滚；URL/清单同窗 Tab）→ 文档卡片栅格
- * （状态机流转）→ 预览抽屉（分块 md / 原文原生渲染）→ 解析日志抽屉（stage 时间线失败下钻）
- * → 检索调试 → 规则卡 / 案例窗 → 版本历史弹窗 + 清单批量导入弹窗（条目状态/重试/勾选导入）。
- * W2 第二批：3s 全量轮询替换为差异轮询（useDocPolling——2s 轻量 statuses，
- * 状态翻转才全量刷新，全终态自动停；worker 心跳缺失时顶部黄条）。
- */
-import { useTranslation } from 'react-i18next'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api } from '../api'
-import type { KnowledgeDocument } from 'biance-vision-brooks'
-import CasesPanel from './knowledge/CasesPanel'
-import DocGrid from './knowledge/DocGrid'
-import ManifestDialog from './knowledge/ManifestDialog'
-import ParseLogDrawer from './knowledge/ParseLogDrawer'
-import PreviewDrawer from './knowledge/PreviewDrawer'
-import RuleCardsPanel from './knowledge/RuleCardsPanel'
-import SearchDebugPanel from './knowledge/SearchDebugPanel'
-import UploadDialog from './knowledge/UploadDialog'
-import VersionHistoryDialog from './knowledge/VersionHistoryDialog'
-import { useDocPolling } from './knowledge/hooks/useDocPolling'
-
+import { useEffect, useRef, useState } from "react";
+import { Alert, Button, Card, Space, Tag } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
+import { Documents } from "./features/knowledge/Documents";
+import {
+  batchDocuments,
+  deleteDocument,
+  documentAction,
+  loadDocuments,
+  type BatchResult,
+} from "./features/knowledge/api";
+import { useResource } from "./ui/resource";
+import { useAdminText } from "./ui/text";
+import { AdminViews } from "./ui/views";
+import { Feedback } from "./ui/feedback";
+import CasesPanel from "./knowledge/CasesPanel";
+import RuleCardsPanel from "./knowledge/RuleCardsPanel";
+import SearchDebugPanel from "./knowledge/SearchDebugPanel";
+import UploadDialog from "./knowledge/UploadDialog";
+import ManifestDialog from "./knowledge/ManifestDialog";
+import ParseLogDrawer from "./knowledge/ParseLogDrawer";
+import PreviewDrawer from "./knowledge/PreviewDrawer";
+import VersionHistoryDialog from "./knowledge/VersionHistoryDialog";
+import { useDocPolling } from "./knowledge/hooks/useDocPolling";
+import styles from "./ui/admin.module.css";
 export default function AdminKnowledgePage(): JSX.Element {
-  const { t } = useTranslation('admin')
-  const [docs, setDocs] = useState<KnowledgeDocument[]>([])
-  const [error, setError] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [previewId, setPreviewId] = useState<string | null>(null)
-  const [logsId, setLogsId] = useState<string | null>(null)
-  const [showVersions, setShowVersions] = useState(false)
-  const [showUpload, setShowUpload] = useState(false)
-  const [showManifest, setShowManifest] = useState(false)
-
-  const refresh = useCallback(async (): Promise<void> => {
+  const text = useAdminText();
+  const resource = useResource(loadDocuments);
+  const docs = resource.data?.documents ?? [];
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [partial, setPartial] = useState("");
+  const [dialog, setDialog] = useState<
+    "upload" | "manifest" | "versions" | null
+  >(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [logsId, setLogsId] = useState<string | null>(null);
+  const delayed = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(delayed.current), []);
+  const refreshSoon = () => {
+    clearTimeout(delayed.current);
+    delayed.current = setTimeout(() => void resource.reload(), 1500);
+  };
+  const refresh = () => {
+    void resource.reload();
+    refreshSoon();
+  };
+  const { workerDead } = useDocPolling(docs, () => void resource.reload());
+  const run = async (operation: () => Promise<unknown>) => {
+    setError("");
+    setSuccess("");
+    setPartial("");
     try {
-      const r = await api<{ documents: KnowledgeDocument[] }>('/admin/knowledge/documents')
-      setDocs(r.documents)
+      await operation();
+      setSuccess(text("operationDone"));
+      await resource.reload();
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     }
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  // W2 差异轮询（流程 2）：轻量 statuses 检测翻转；全终态自动停；worker 失联黄条
-  const { workerDead } = useDocPolling(docs, () => void refresh())
-
-  /** 操作后 1.5s 补刷一次（覆盖 pending→parsing 亚秒窗口，流程 2） */
-  const refreshSoon = useCallback((): void => {
-    setTimeout(() => void refresh(), 1500)
-  }, [refresh])
-
-  const stats = useMemo(() => {
-    const by = (s: string): number => docs.filter((d) => d.status === s).length
-    return [
-      { label: '资料', value: docs.length, cls: '' },
-      { label: '已发布', value: by('published'), cls: 'ok' },
-      { label: '待发布', value: by('indexed'), cls: 'warn' },
-      { label: '解析中', value: by('parsing'), cls: 'info' },
-      { label: '失败', value: by('failed'), cls: 'bad' },
-    ]
-  }, [docs])
-
-  const reparse = async (id: string): Promise<void> => {
+  };
+  const batch = async (
+    action: "publish" | "reparse" | "delete",
+    ids: string[],
+  ): Promise<BatchResult | undefined> => {
+    setError("");
+    setSuccess("");
+    setPartial("");
     try {
-      await api(`/admin/knowledge/documents/${id}/reparse`, { method: 'POST' })
-      await refresh()
-      refreshSoon()
+      const result = await batchDocuments(action, ids);
+      const message = text("batchResult", {
+        succeeded: result.succeeded.length,
+        failed: result.failed.length,
+      });
+      if (result.failed.length)
+        setPartial(
+          `${message} · ${result.failed.map((item) => `${item.id}: ${item.error}`).join("; ")}`,
+        );
+      else setSuccess(message);
+      await resource.reload();
+      if (action === "reparse") refreshSoon();
+      return result;
     } catch (e) {
-      setError((e as Error).message)
+      setError((e as Error).message);
     }
-  }
-
-  const publish = async (id: string): Promise<void> => {
-    try {
-      await api(`/admin/knowledge/documents/${id}/publish`, { method: 'POST', body: {} })
-      await refresh()
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  const deleteDoc = async (id: string, purge = false): Promise<void> => {
-    try {
-      await api(`/admin/knowledge/documents/${id}${purge ? '?purge=1' : ''}`, { method: 'DELETE' })
-      await refresh()
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  const batchAction = async (action: 'publish' | 'reparse' | 'delete', ids: string[]): Promise<void> => {
-    try {
-      const r = await api<{ succeeded: string[]; failed: { id: string; error: string }[] }>('/admin/knowledge/documents/batch', {
-        method: 'POST',
-        body: { action, ids },
-      })
-      const msg = t('成功 {{n}}', { n: r.succeeded.length }) + (r.failed.length > 0 ? t('，失败 {{m}}（{{e}}）', { m: r.failed.length, e: r.failed[0]?.error.slice(0, 100) ?? '' }) : '')
-      setError(msg)
-      await refresh()
-      if (action === 'reparse') refreshSoon()
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  const shown = statusFilter === '' ? docs : docs.filter((d) => d.status === statusFilter)
-
+  };
   return (
-    <div className="admin-page">
-      <div className="admin-head fx-in">
-        <div className="admin-head-side">
-          <span className="admin-head-title">{t('知识库管理')}</span>
-          <div className="kb-stats">
-            {stats.map((s) => (
-              <span key={s.label} className={`kb-stat ${s.cls}`}>
-                <b>{s.value}</b> {t(s.label)}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="admin-head-actions">
-          <button className="btn btn-primary" onClick={() => setShowUpload(true)}>{t('+ 上传资料')}</button>
-          <button className="btn" onClick={() => setShowManifest(true)}>{t('清单导入')}</button>
-        </div>
-      </div>
-      {error !== '' && <p className="err-text">{error}</p>}
+    <div className={styles.stack}>
+      <Feedback error={error || resource.error} success={success} />
+      {partial && <Alert type="warning" title={partial} showIcon />}
       {workerDead && (
-        <div className="kb-warn-bar" role="alert">
-          {t('解析队列不可用：worker 未运行（心跳缺失）。新上传的文档会停留在「待解析」，请启动 worker 后自动恢复。')}
-        </div>
+        <Alert type="warning" title={text("workerUnavailable")} showIcon />
       )}
-
-      <DocGrid
-        docs={shown}
-        statusFilter={statusFilter}
-        onFilter={setStatusFilter}
-        onPreview={setPreviewId}
-        onReparse={(id) => void reparse(id)}
-        onPublish={(id) => void publish(id)}
-        onDelete={(id, purge) => void deleteDoc(id, purge)}
-        onBatch={(action, ids) => void batchAction(action, ids)}
-        onLogs={setLogsId}
-        onVersions={() => setShowVersions(true)}
+      <AdminViews
+        items={[
+          {
+            key: "documents",
+            label: "documents",
+            children: (
+              <Card>
+                <div className={styles.toolbar}>
+                  <Space wrap>
+                    <Tag>{text("documentCount", { count: docs.length })}</Tag>
+                    <Tag color="success">
+                      {text("publishedCount", {
+                        count: docs.filter((doc) => doc.status === "published")
+                          .length,
+                      })}
+                    </Tag>
+                  </Space>
+                  <Space wrap>
+                    <Button onClick={() => setDialog("manifest")}>
+                      {text("manifestImport")}
+                    </Button>
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined aria-hidden />}
+                      onClick={() => setDialog("upload")}
+                    >
+                      {text("uploadDocuments")}
+                    </Button>
+                  </Space>
+                </div>
+                <Documents
+                  docs={docs}
+                  loading={resource.loading}
+                  onPreview={setPreviewId}
+                  onLogs={setLogsId}
+                  onVersions={() => setDialog("versions")}
+                  onAction={(id, action) =>
+                    run(async () => {
+                      await documentAction(id, action);
+                      if (action === "reparse") refreshSoon();
+                    })
+                  }
+                  onDelete={(id, purge) => run(() => deleteDocument(id, purge))}
+                  onBatch={batch}
+                />
+              </Card>
+            ),
+          },
+          {
+            key: "rules",
+            label: "ruleCards",
+            children: <RuleCardsPanel onError={setError} />,
+          },
+          {
+            key: "cases",
+            label: "cases",
+            children: <CasesPanel onError={setError} />,
+          },
+          {
+            key: "search",
+            label: "searchDebug",
+            children: <SearchDebugPanel onError={setError} />,
+          },
+        ]}
       />
-
-      <SearchDebugPanel onError={setError} />
-      <RuleCardsPanel onError={setError} />
-      <CasesPanel onError={setError} />
-
-      {previewId !== null && (
-        <PreviewDrawer docId={previewId} onClose={() => setPreviewId(null)} onChanged={() => void refresh()} />
-      )}
-      {logsId !== null && <ParseLogDrawer docId={logsId} onClose={() => setLogsId(null)} />}
-      {showVersions && (
-        <VersionHistoryDialog
-          onClose={() => setShowVersions(false)}
-          onRestored={() => {
-            setError(t('已切回旧版本（以旧集合生成了新版本）'))
-            void refresh()
-          }}
-        />
-      )}
-      {showUpload && (
-        <UploadDialog
-          onClose={() => setShowUpload(false)}
-          onDone={() => {
-            void refresh()
-            refreshSoon()
-          }}
-          onOpenManifest={() => {
-            setShowUpload(false)
-            setShowManifest(true)
-          }}
-        />
-      )}
-      {showManifest && (
-        <ManifestDialog
-          onClose={() => setShowManifest(false)}
-          onImported={() => {
-            void refresh()
-            refreshSoon()
-          }}
-        />
-      )}
+      <>
+        {previewId && (
+          <PreviewDrawer
+            key={previewId}
+            docId={previewId}
+            onClose={() => setPreviewId(null)}
+            onChanged={refresh}
+          />
+        )}
+        {logsId && (
+          <ParseLogDrawer
+            key={logsId}
+            docId={logsId}
+            onClose={() => setLogsId(null)}
+          />
+        )}
+        {dialog === "versions" && (
+          <VersionHistoryDialog
+            onClose={() => setDialog(null)}
+            onRestored={refresh}
+          />
+        )}
+        {dialog === "upload" && (
+          <UploadDialog
+            onClose={() => setDialog(null)}
+            onDone={refresh}
+            onOpenManifest={() => setDialog("manifest")}
+          />
+        )}
+        {dialog === "manifest" && (
+          <ManifestDialog
+            onClose={() => setDialog(null)}
+            onImported={refresh}
+          />
+        )}
+      </>
     </div>
-  )
+  );
 }
