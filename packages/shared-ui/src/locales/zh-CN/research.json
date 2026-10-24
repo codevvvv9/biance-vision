@@ -244,7 +244,7 @@
     "synthesisLlm": "模型归纳（受约束引用）",
     "synthesisLlmDegraded": "模型归纳（部分句被校验剔除）",
     "synthesisCode": "代码装配",
-    "probUnavailable": "概率：不可用（{{code}}；不由 AI 编造）",
+    "probUnavailable": "概率：不可用（{{code}}；不显示无依据的估值）",
     "probLine": "模型 {{version}}：P(高于执行价) = {{up}}%{{tie}}",
     "probTie": "，平价 {{pct}}%",
     "probTieUnknown": "（平价精度未知）",

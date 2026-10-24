@@ -333,7 +333,7 @@
       "en": {
         "locale": "en",
         "title": "What is Biance Vision?",
-        "summary": "An independent, AI-assisted crypto market research workspace. Understand who maintains it, what it does and its limits.",
+        "summary": "An independent crypto market research workspace. Understand who maintains it, what it does and its limits.",
         "body": "content/en/about.mdx",
         "url": "/en/about",
         "translation": "/zh/about",
@@ -372,7 +372,7 @@
       "zh": {
         "locale": "zh",
         "title": "Biance Vision 是什么？",
-        "summary": "一个独立的 AI 辅助加密市场研究工作台。了解维护者、产品范围与使用边界。",
+        "summary": "一个独立的加密市场研究工作台。了解维护者、产品范围与使用边界。",
         "body": "content/zh/about.mdx",
         "url": "/zh/about",
         "translation": "/en/about",
