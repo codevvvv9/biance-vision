@@ -71,3 +71,8 @@ Playwright 使用受控接口，不访问生产数据。覆盖导航、深链、
 - 最终上线前完成真实隔离环境的业务流程验收及 W4 清单。生产仅做登录、导航、只读展示检查。
 - 既有 v0.16.2 不覆盖。发布时选择下一可用 patch，记录旧管理镜像 digest、有效 Compose 和本次不可变镜像。
 - 只升级通过本批验收的管理端服务。验证失败恢复原管理镜像，不回滚共享数据库或已合并的 W4 功能。
+
+
+## Integrated W4 completion (2026-10-24)
+
+The integrated release branch completes the previously pending homepage: users/audit/website URL views, independent provisioning and allowance/password dialogs, dirty-state protection, ephemeral credential delivery and canonical W4 brand resource. The last legacy boundary and stylesheet were removed. All 28 admin browser checks and the complete integrated release gate passed locally. R3 knowledge enhancement is configured independently from model-provider capabilities. See docs/releases/v0.17.2-integration.md for current integration and deployment evidence; earlier pending-W4 descriptions above document the earlier delivery boundary.
