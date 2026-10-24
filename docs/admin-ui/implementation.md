@@ -75,4 +75,9 @@ Playwright 使用受控接口，不访问生产数据。覆盖导航、深链、
 
 ## Integrated W4 completion (2026-10-24)
 
-The integrated release branch completes the previously pending homepage: users/audit/website URL views, independent provisioning and allowance/password dialogs, dirty-state protection, ephemeral credential delivery and canonical W4 brand resource. The last legacy boundary and stylesheet were removed. All 28 admin browser checks and the complete integrated release gate passed locally. R3 knowledge enhancement is configured independently from model-provider capabilities. See docs/releases/v0.17.2-integration.md for current integration and deployment evidence; earlier pending-W4 descriptions above document the earlier delivery boundary.
+The integrated release branch completes the previously pending homepage: users/audit/website URL views, independent provisioning and allowance/password dialogs, dirty-state protection, ephemeral credential delivery and canonical W4 brand resource. The last legacy boundary and stylesheet were removed. All 28 admin browser checks and the complete integrated release gate passed locally. R3 knowledge enhancement is configured independently from model-provider capabilities. See docs/releases/v0.17.3-integration.md for current integration and deployment evidence; earlier pending-W4 descriptions above document the earlier delivery boundary.
+
+
+## Production verification — v0.17.3
+
+Released from main commit `04850fd` on 2026-10-24. Full release gate, real isolated PDF/Docling/worker indexing and cross-process provisioning/allowance/session-revocation checks passed. Live verification covered authentication, deep-link login, all six navigation destinations and refresh, website settings, mobile layout and logout. Production QA performed no business mutations. Earlier pending-W4, pending-parser-integration and pending-production statements above describe the original isolated delivery; this section and the v0.17.3 integration record supersede that status. Customer trials and destructive workflows on production were not performed.
