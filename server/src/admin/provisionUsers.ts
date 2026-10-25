@@ -53,7 +53,7 @@ export async function provisionUser(input: unknown, operator: string) {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`provision:${username.toLowerCase()}`}, 0))`)
       const duplicate = await tx.execute(sql`SELECT id FROM users WHERE lower(username) = ${username.toLowerCase()} LIMIT 1`)
       if (duplicate.length) throw bad('用户名已存在，请使用其他用户名', 409)
-      await tx.insert(users).values({ id: crypto.randomUUID(), username, passwordHash: hashPassword(password), role: 'user', chatPolicy: { disabled: false, dailyLimit } })
+      await tx.insert(users).values({ id: crypto.randomUUID(), username, passwordHash: await hashPassword(password), role: 'user', chatPolicy: { disabled: false, dailyLimit } })
       await tx.insert(appSettings).values({ key: accessKey(username), value: access as unknown as Record<string, unknown> })
       bindProfile(username, profileName, operator)
       bound = true
