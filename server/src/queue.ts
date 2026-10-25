@@ -22,7 +22,9 @@ export const Q_EVENT_SETTLE = 'event:settle'
 export const Q_EVAL_RUN = 'eval:run'
 export const Q_MODEL_TRAIN = 'model:train'
 
-const ALL_QUEUES = [Q_INGEST, Q_BACKFILL, Q_FUNDING, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, Q_KNOWLEDGE_PARSE, Q_RESEARCH_RUN, Q_EVENT_SETTLE, Q_EVAL_RUN, Q_MODEL_TRAIN]
+const ALL_QUEUES = [Q_INGEST, Q_BACKFILL, Q_FUNDING, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, Q_KNOWLEDGE_PARSE, Q_RESEARCH_RUN, Q_EVENT_SETTLE, Q_EVAL_RUN, Q_MODEL_TRAIN,
+  // P2a/P2b 内部观测调度队列（boss.schedule 外键要求队列先建；createQueue 幂等）
+  'observability:cleanup', 'observability:aggregate', 'observability:alert']
 
 /**
  * 队列级配置（单一数据源，属主知识在本文件）：
