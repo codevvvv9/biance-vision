@@ -79,7 +79,7 @@ import { registerHttpQuotaGuard } from './security/httpQuota.js'
 import { registerTelemetryRoute } from './observability/telemetryRoute.js'
 import { registerCspReportRoute } from './observability/cspReport.js'
 import { RATE_POLICIES, rateLimitConsume } from './security/rateLimit.js'
-import { isSameOrigin } from './security/sourceGuard.js'
+import { requestOriginAllowed } from './security/origin.js'
 import { allowedOrigins } from './security/cors.js'
 
 const clientIp = clientIpOf
@@ -671,6 +671,8 @@ registerProductRoutes(app, { requireSession })
 await startQueue()
 
 // ---- 前端 WebSocket（升级请求携带会话 Cookie，未登录直接关闭） ----
+// WS 握手来源白名单：与写守卫同源同语义（security/origin.ts 单点），boot 期构建
+const wsAllowOrigins = new Set(allowedOrigins())
 app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyRequest) => {
   // 地域封锁兜底：WS 升级请求未必都经过全局 onRequest 钩子（依赖插件版本行为），此处显式再判一次
   if (isRegionBlocked(clientIp(req))) {
@@ -678,11 +680,11 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
     return
   }
   // P1-4 握手配额（shadow：30/分/IP，只计数告警）+ Origin 校验（浏览器 WS 恒带
-  // Origin；跨源/null 拒绝——非浏览器客户端不带 Origin 放行，鉴权仍生效）
+  // Origin；跨源/null 拒绝——非浏览器客户端不带 Origin 放行，鉴权仍生效。
+  // 同源判定协议感知：经可信代理 X-Forwarded-Proto 还原公网 scheme，端口对称归一）
   void rateLimitConsume(RATE_POLICIES['ws.handshake:ip'], clientIp(req)).catch(() => {})
-  const wsOrigin = req.headers.origin
-  if (typeof wsOrigin === 'string' && wsOrigin !== 'null' && !isSameOrigin(wsOrigin, req.headers.host, new Set(allowedOrigins()))) {
-    log.warn('ws', '跨源握手被拒', kv({ ip: clientIp(req), origin: wsOrigin.slice(0, 64) }))
+  if (!requestOriginAllowed(req, wsAllowOrigins)) {
+    log.warn('ws', '跨源握手被拒', kv({ ip: clientIp(req), origin: String(req.headers.origin ?? '').slice(0, 64) }))
     connection.socket.close(4003, 'origin_rejected')
     return
   }

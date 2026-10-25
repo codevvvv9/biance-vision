@@ -53,8 +53,29 @@ export default defineConfig({
     strictPort: true, // 端口被占时直接报错退出，由启动器负责换端口
     allowedHosts: ['.tunnel.otun.dev'], // 前缀点号 = 允许该域名下所有子域（otun 隧道）
     proxy: {
-      '/api': { target: `http://127.0.0.1:${apiPort}`, changeOrigin: true },
-      '/ws': { target: `ws://127.0.0.1:${apiPort}`, ws: true },
+      // 开发代理归一为同源 hop：changeOrigin 只重写 Host，浏览器 Origin
+      // （localhost/隧道域名）原样透传到后端会被来源守卫判跨源——此处把
+      // 已存在的 Origin 重写为上游地址。生产反代（Caddy）保留原始 Host 且
+      // 经信任链 X-Forwarded-Proto 判同源，无需也不做此改写
+      // （同源判定单点：server/src/security/origin.ts）。
+      '/api': {
+        target: `http://127.0.0.1:${apiPort}`,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (typeof req.headers.origin === 'string') proxyReq.setHeader('origin', `http://127.0.0.1:${apiPort}`)
+          })
+        },
+      },
+      '/ws': {
+        target: `ws://127.0.0.1:${apiPort}`,
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('proxyReqWs', (proxyReq, req) => {
+            if (typeof req.headers.origin === 'string') proxyReq.setHeader('origin', `http://127.0.0.1:${apiPort}`)
+          })
+        },
+      },
     },
   },
 })
