@@ -271,6 +271,8 @@ try {
 
   // W3-S3 双进程：user-api/admin-api 均以 BV_AUTO_MIGRATE=0 起（迁移已预跑）
   let adminProc: { child: ChildProcess; log: string[] } | null = null
+  // P1-3/L 测试块贡献的额外成功登录数（R4b 全局成功计数的基线）
+  let p1lExtraSuccesses = 0
   const { child, log: serverLog } = startServer({
     PORT: String(PORT),
     LOGIN_MAX_PER_WINDOW: '100',
@@ -358,7 +360,6 @@ try {
 
     // P1-3/L：原子并发断言（SEC-02/03）——双进程并发失败不丢计、锁定不推远
     // L3 含 2 次普通用户成功登录（SEQ_IP 条件清理测试）→ R4b 全局成功计数加此基线
-    let p1lExtraSuccesses = 0
     {
       const { loginGuardOf } = await import('../server/src/loginGuard.js')
       const CONC_IP = '10.77.7.77'

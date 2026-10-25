@@ -16,14 +16,23 @@ export function loadJson<T>(file: string, fallback: T): T {
   }
 }
 
+let tmpSeq = 0
+
 export function saveJson(file: string, data: unknown): void {
   fs.mkdirSync(DATA_DIR, { recursive: true })
   const target = path.join(DATA_DIR, file)
-  const tmp = `${target}.tmp`
+  // tmp 名唯一（pid+递增）：固定 .tmp 名在并发/双进程下 rename 互踩（一个成功后
+  // 其余 ENOENT）——2026-10-25 登录并发断言暴露的存量缺陷
+  const tmp = `${target}.${process.pid}.${++tmpSeq}.tmp`
   try {
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2))
     fs.renameSync(tmp, target)
   } catch (err) {
+    try {
+      fs.unlinkSync(tmp)
+    } catch {
+      /* 清理尽力而为 */
+    }
     log.error('store', `写入 ${file} 失败：`, err)
     throw err
   }

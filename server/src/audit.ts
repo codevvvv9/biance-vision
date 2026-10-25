@@ -83,7 +83,13 @@ function persist(changed: AuditSessionRecord): void {
     }
     records = records.slice(0, KEEP)
   }
-  saveJson('audit.json', records)
+  // JSON 镜像尽力而为（真源在 PG）：镜像失败只告警——审计镜像写失败不能把登录 401
+  // 打成 500（对外同构优先；2026-10-25 并发登录断言暴露镜像 rename 抛错冒泡）
+  try {
+    saveJson('audit.json', records)
+  } catch (e) {
+    log.warn('audit', 'audit.json 镜像写入失败（PG 真源不受影响）：', (e as Error).message)
+  }
   void upsertAuditRecord(changed).catch((e: Error) =>
     log.warn('audit', '数据库写入失败:', e.message),
   )
