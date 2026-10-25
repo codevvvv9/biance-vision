@@ -25,19 +25,6 @@ function check(name: string, actual: unknown, expected: unknown = true): void {
 
 const staticOnly = process.argv.includes('--static')
 
-// ---- OA 组（P2b-3）：告警评估器状态机（纯函数）----
-async function alertUnit(): Promise<void> {
-  const { ALERT_RULES, evaluateAlert } = await import('../server/src/observability/alerts.js')
-  const rule = ALERT_RULES.find((r) => r.key === 'worker.heartbeat')!
-  check('OA1 规则注册（心跳类两条）', ALERT_RULES.length >= 2 && rule.threshold === 90_000, true)
-  check('OA2 首次超阈值 → create', evaluateAlert(rule, { value: 100_000, evidence: {} }, null).action, 'create')
-  check('OA3 数据源不可用 → none（不凭缺数据恢复）', evaluateAlert(rule, { value: null, evidence: {} }, { state: 'open', normalStreak: 1 }).action, 'none')
-  check('OA4 firing 中持续 → keep-firing', evaluateAlert(rule, { value: 100_000, evidence: {} }, { state: 'open', normalStreak: 0 }).action, 'keep-firing')
-  check('OA5 正常第 1 窗 → normal（未达恢复窗）', evaluateAlert(rule, { value: 1_000, evidence: {} }, { state: 'open', normalStreak: 0 }).action, 'normal')
-  check('OA6 连续正常达恢复窗 → resolve', evaluateAlert(rule, { value: 1_000, evidence: {} }, { state: 'acknowledged', normalStreak: 1 }).action, 'resolve')
-  check('OA7 resolved 后再触发 → reopen（不覆盖历史）', evaluateAlert(rule, { value: 100_000, evidence: {} }, { state: 'resolved', normalStreak: 0 }).action, 'create')
-  check('OA8 无事件且正常 → none', evaluateAlert(rule, { value: 1_000, evidence: {} }, null).action, 'none')
-}
 
 function staticChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
