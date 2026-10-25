@@ -12,6 +12,9 @@ import { cookieSecure, clearSessionCookie, sessionCookie } from '../server/src/s
 import { allowedOrigins, corsOptions } from '../server/src/security/cors.js'
 import { WS_MAX_PAYLOAD_BYTES } from '../server/src/security/limits.js'
 import { clientIp, normalizeIp, trustProxyOption, trustedProxies } from '../server/src/security/trust.js'
+import { buildApp } from '../server/src/fastifyApp.js'
+import { csrfSeedCookie, csrfSeedSubjectOf, issueCsrfToken, sessionSubjectHash, verifyCsrfToken } from '../server/src/security/csrf.js'
+import { registerSourceGuard } from '../server/src/security/sourceGuard.js'
 
 let failed = 0
 let checked = 0
@@ -185,6 +188,66 @@ async function trustBehavior(): Promise<void> {
   await trusted.close()
 }
 
+// ---- P0-2b CSRF 令牌（单元：往返/主体/用途/篡改/轮换）----
+function csrfUnit(): void {
+  const prevKey = process.env.BV_CSRF_KEY
+  const prevPrev = process.env.BV_CSRF_KEY_PREVIOUS
+  const prevNode = process.env.NODE_ENV
+  const KEY_A = 'a'.repeat(64)
+  const KEY_B = 'b'.repeat(64)
+  try {
+    delete process.env.NODE_ENV
+    delete process.env.BV_CSRF_KEY_PREVIOUS
+    process.env.BV_CSRF_KEY = KEY_A
+    const t = issueCsrfToken('sub-1', 'user')
+    if (t === null) throw new Error('签发失败')
+    check('C1 签发+验证往返（当前 key）', verifyCsrfToken(t.token, 'sub-1', 'user'), true)
+    check('C2 主体不符拒绝（换会话失效语义）', verifyCsrfToken(t.token, 'sub-2', 'user'), false)
+    check('C3 用途不符拒绝（user/admin 隔离）', verifyCsrfToken(t.token, 'sub-1', 'admin'), false)
+    check('C4 篡改签名拒绝', verifyCsrfToken(`${t.token.slice(0, -4)}AAAA`, 'sub-1', 'user'), false)
+    process.env.BV_CSRF_KEY = KEY_B
+    check('C5 轮换后无 previous → 旧 key token 拒绝', verifyCsrfToken(t.token, 'sub-1', 'user'), false)
+    process.env.BV_CSRF_KEY_PREVIOUS = KEY_A
+    check('C6 previous 窗口内旧 key token 仍验证', verifyCsrfToken(t.token, 'sub-1', 'user'), true)
+    const seed = csrfSeedCookie()
+    check('C7 种子 Cookie HttpOnly+SameSite=Lax', seed.setCookie.includes('HttpOnly') && seed.setCookie.includes('SameSite=Lax'), true)
+    check('C8 种子哈希与 Cookie 值对应（csrfSeedSubjectOf 反解一致）', csrfSeedSubjectOf(seed.setCookie.split(';')[0]), seed.seedHash)
+    check('C9 会话主体哈希稳定', sessionSubjectHash('abc') === sessionSubjectHash('abc') && sessionSubjectHash('abc') !== sessionSubjectHash('abd'), true)
+  } finally {
+    if (prevKey === undefined) delete process.env.BV_CSRF_KEY
+    else process.env.BV_CSRF_KEY = prevKey
+    if (prevPrev === undefined) delete process.env.BV_CSRF_KEY_PREVIOUS
+    else process.env.BV_CSRF_KEY_PREVIOUS = prevPrev
+    if (prevNode === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = prevNode
+  }
+}
+
+// ---- P0-2b 来源守卫（inject 行为：Origin 硬校验 + token verify 模式）----
+async function sourceGuardBehavior(): Promise<void> {
+  process.env.BV_CSRF_KEY = 'c'.repeat(64)
+  try {
+    const app = buildApp({ cors: true })
+    registerSourceGuard(app, { verify: (_req, token) => verifyCsrfToken(token, 'seed-sub', 'user') })
+    app.post('/api/echo', async () => ({ ok: true }))
+    app.get('/api/echo', async () => ({ ok: true }))
+    const host = 'api.local'
+    const post = async (headers: Record<string, string>): Promise<number> =>
+      (await app.inject({ method: 'POST', url: '/api/echo', headers: { host, ...headers } })).statusCode
+    check('G1 跨源 Origin 写请求 → 403', await post({ origin: 'https://evil.example' }), 403)
+    check('G2 null Origin 写请求 → 403', await post({ origin: 'null' }), 403)
+    check('G3 同源 Origin 无 token → 放行（verify 兼容阶段）', await post({ origin: `http://${host}` }), 200)
+    check('G4 同源携带无效 token → 403', await post({ origin: `http://${host}`, 'x-csrf-token': 'garbage' }), 403)
+    const issued = issueCsrfToken('seed-sub', 'user')
+    check('G5 同源携带有效 token → 放行', issued !== null && await post({ origin: `http://${host}`, 'x-csrf-token': issued.token }), 200)
+    check('G6 无 Origin（curl/脚本）→ 放行', await post({}), 200)
+    check('G7 GET 不受守卫拦截（含跨源）', (await app.inject({ method: 'GET', url: '/api/echo', headers: { host, origin: 'https://evil.example' } })).statusCode, 200)
+    await app.close()
+  } finally {
+    delete process.env.BV_CSRF_KEY
+  }
+}
+
 // ---- 接线静态检查（单点定义被入口真实使用；防「模块存在但未接线」）----
 function wiringChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -215,16 +278,24 @@ function wiringChecks(): void {
     read('../deploy/oracle/compose.override.yml').includes('BV_TRUSTED_PROXIES'), true)
   check('W11 buildApp 经 trustProxyOption（废除 trustProxy:true 反射）', app.includes('trustProxy: trustProxyOption()') && !app.includes('trustProxy: true'), true)
   check('W12 clientIpOf 不再手工读转发头（统一信任链）', !read('../server/src/authRoutes.ts').includes("'x-forwarded-for'"), true)
+  // P0-2b：CSRF 与白名单收敛接线
+  check('W13 两入口 /api/auth 白名单收敛为精确集合（AUTH_ANON_ALLOW）',
+    index.includes('AUTH_ANON_ALLOW.has(url)') && read('../server/src/adminApi.ts').includes('AUTH_ANON_ALLOW.has(url)') &&
+    !index.includes("startsWith('/api/auth/')") && !read('../server/src/adminApi.ts').includes("startsWith('/api/auth/')"), true)
+  check('W14 csrf 端点注册于共享 authRoutes（两端获得）+ no-store',
+    read('../server/src/authRoutes.ts').includes("app.get('/api/auth/csrf'") && read('../server/src/authRoutes.ts').includes('no-store'), true)
 }
 
 // ---- main ----
 q1Cookies()
 await q3Cors()
 trustUnit()
+csrfUnit()
 wiringChecks()
 if (!staticOnly) {
   await q2Websocket()
   await trustBehavior()
+  await sourceGuardBehavior()
 }
 
 console.log(`\n${failed === 0 ? '✔' : '✖'} security-gate-check：${checked - failed}/${checked} 通过${staticOnly ? '（--static 模式：运行断言未执行）' : ''}`)

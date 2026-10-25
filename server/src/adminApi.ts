@@ -19,7 +19,7 @@ import multipart from '@fastify/multipart'
 import fastifyStatic from '@fastify/static'
 import type { FastifyRequest } from 'fastify'
 import { buildApp } from './fastifyApp.js'
-import { clientIpOf, registerAuthRoutes, unauthorized } from './authRoutes.js'
+import { clientIpOf, registerAuthRoutes, unauthorized, AUTH_ANON_ALLOW } from './authRoutes.js'
 import { initDb, isDbAvailable } from './db.js'
 import { initUsers, initSessions, readSessionToken, findSession } from './users.js'
 import type { SessionRecord } from './users.js'
@@ -76,7 +76,8 @@ const requireSuperadmin = (req: { headers: { cookie?: string } }): SessionRecord
 app.addHook('preHandler', async (req, reply) => {
   const url = req.url.split('?')[0]
   if (!url.startsWith('/api/')) return
-  if (url === '/api/health' || url.startsWith('/api/auth/')) return
+  // P0-2b：/api/auth/* 前缀白名单收敛为精确路由集合（新增匿名可访问端点必须显式列名）
+  if (url === '/api/health' || AUTH_ANON_ALLOW.has(url)) return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {

@@ -72,7 +72,7 @@ import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { startQueue } from './queue.js'
-import { clientIpOf, registerAuthRoutes } from './authRoutes.js'
+import { clientIpOf, registerAuthRoutes, AUTH_ANON_ALLOW } from './authRoutes.js'
 import { WS_MAX_PAYLOAD_BYTES } from './security/limits.js'
 
 const clientIp = clientIpOf
@@ -293,7 +293,7 @@ app.addHook('preHandler', async (req, reply) => {
     reply.code(404).send({ message: 'Not Found' })
     return
   }
-  if (url === '/api/health' || url.startsWith('/api/auth/')) return
+  if (url === '/api/health' || AUTH_ANON_ALLOW.has(url)) return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {
