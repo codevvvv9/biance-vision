@@ -355,6 +355,31 @@ try {
 
     const r8 = await login(ADMIN_HOST, adminUser, adminPass)
     check('R8 锁定期内管理域名正确密码同样 429（按 IP 锁定，不分入口/密码）', r8.status, 429)
+
+    // P1-3/L：原子并发断言（SEC-02/03）——双进程并发失败不丢计、锁定不推远
+    // L3 含 2 次普通用户成功登录（SEQ_IP 条件清理测试）→ R4b 全局成功计数加此基线
+    let p1lExtraSuccesses = 0
+    {
+      const { loginGuardOf } = await import('../server/src/loginGuard.js')
+      const CONC_IP = '10.77.7.77'
+      const results = await Promise.all(Array.from({ length: 20 }, (_, i) =>
+        login(i % 2 === 0 ? MAIN_HOST : ADMIN_HOST, 'p3l-no-user', 'wrong', CONC_IP)))
+      const guard = await loginGuardOf(CONC_IP)
+      check('L1 双进程并发 20 次失败：全部处理（401/429）且锁定生效',
+        results.every((r) => r.status === 401 || r.status === 429) && guard.lockedUntil > Date.now(), true)
+      check('L2 锁定中并发失败不累计不推远解锁（fails 冻结，15 分钟单次锁定）',
+        guard.fails === 0 && guard.lockedUntil - Date.now() <= 15 * 60_000 + 2000, true)
+
+      // 成功登录条件清理：fails 清零但窗口尝试计数保留（IP 总尝试桶不清）
+      const SEQ_IP = '10.77.7.78'
+      await login(MAIN_HOST, normalUser, normalPass, SEQ_IP)          // 成功（win=1）
+      await login(MAIN_HOST, 'p3l-no-user', 'wrong', SEQ_IP)          // 失败（fails=1）
+      const okAgain = await login(MAIN_HOST, normalUser, normalPass, SEQ_IP) // 再成功（win=3）
+      const seqGuard = await loginGuardOf(SEQ_IP)
+      p1lExtraSuccesses = 2
+      check('L3 成功登录清理 fails 但不清窗口尝试计数（winCount 保留）',
+        okAgain.status === 200 && seqGuard.fails === 0 && seqGuard.winCount === 3, true)
+    }
   } finally {
     await stopServer(child)
     if (adminProc !== null) await stopServer(adminProc.child)
@@ -366,7 +391,7 @@ try {
   {
     const fullLog = serverLog.join('\n') + (adminProc?.log.join('\n') ?? '')
     check('R4b 预检路径生效（错误入口在密码校验之前拒绝）', fullLog.includes('验证前预检，密码校验未执行'), true)
-    check('R4b 全程仅一次登录成功（R1 admin-api；主站正确密码未成功）', fullLog.split('登录成功').length - 1, 1)
+    check('R4b 全程仅一次登录成功（R1 admin-api；主站正确密码未成功）', fullLog.split('登录成功').length - 1, 1 + p1lExtraSuccesses)
   }
 
   // ---- P 组（W3-S2 存储收敛）：会话用途标记 / 限速 PG 持久化 / 认证 fail-closed ----
