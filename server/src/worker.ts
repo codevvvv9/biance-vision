@@ -152,6 +152,50 @@ await boss.work('observability:aggregate', async () => {
 })
 await boss.schedule('observability:aggregate', '* * * * *')
 
+// P2b-3 告警评估（心跳类规则；同机全失效时无法评估——恢复后继续，缺口以 first_seen 表达）
+await boss.work('observability:alert', async () => {
+  const { getDb } = await import('./db.js')
+  const { sql } = await import('drizzle-orm')
+  const { ALERT_RULES, evaluateAlert } = await import('./observability/alerts.js')
+  const db = getDb()
+  if (!db) return
+  try {
+    // 观察值：worker 心跳年龄（本进程刚写心跳=≈0；查库值以防多 worker 全停场景
+    // 由后续评估轮发现）与核心依赖（本 worker 视角 PG 可用性）
+    const hb = await db.execute(sql`SELECT value->>'at' AS at FROM app_settings WHERE key = 'observability:worker:heartbeat' LIMIT 1`)
+    const hbAt = Number((hb as unknown as Array<{ at: string }>)[0]?.at ?? 0)
+    const heartbeatAge = hbAt > 0 ? Date.now() - hbAt : null
+    for (const rule of ALERT_RULES) {
+      const obs = rule.key === 'worker.heartbeat'
+        ? { value: heartbeatAge, evidence: { heartbeatAgeMs: heartbeatAge } }
+        : { value: db !== null ? 0 : 1, evidence: { dbAvailable: db !== null } }
+      const prevRows = await db.execute(sql`SELECT state, normal_streak FROM observability_alerts WHERE rule_key = ${rule.key} AND dimension = '' LIMIT 1`)
+      const prev = (prevRows as unknown as Array<{ state: string; normal_streak: number }>)[0]
+      const prevState = prev === undefined ? null : { state: prev.state as 'open' | 'acknowledged' | 'resolved', normalStreak: Number(prev.normal_streak) }
+      const t = evaluateAlert(rule, obs, prevState)
+      const evidence = JSON.stringify(obs.evidence)
+      if (t.action === 'create') {
+        await db.execute(sql`INSERT INTO observability_alerts (rule_key, rule_version, dimension, state, severity, evidence)
+          VALUES (${rule.key}, ${rule.version}, '', 'open', ${rule.severity}, ${evidence}::jsonb)
+          ON CONFLICT (rule_key, dimension) DO UPDATE SET state = 'open', last_seen = now(), normal_streak = 0,
+            first_seen = now(), resolved_at = NULL, evidence = ${evidence}::jsonb`)
+        log.warn('observability', '告警触发', kv({ 规则: rule.key, 证据: evidence.slice(0, 120) }))
+      } else if (t.action === 'keep-firing') {
+        await db.execute(sql`UPDATE observability_alerts SET last_seen = now(), normal_streak = 0, evidence = ${evidence}::jsonb WHERE rule_key = ${rule.key} AND dimension = ''`)
+      } else if (t.action === 'resolve') {
+        await db.execute(sql`UPDATE observability_alerts SET state = 'resolved', resolved_at = now(), normal_streak = 0,
+          resolved_evidence = ${evidence}::jsonb WHERE rule_key = ${rule.key} AND dimension = ''`)
+        log.ok('observability', '告警恢复（连续正常评估窗通过）', kv({ 规则: rule.key }))
+      } else if (t.action === 'normal') {
+        await db.execute(sql`UPDATE observability_alerts SET normal_streak = ${t.normalStreak}, last_seen = now() WHERE rule_key = ${rule.key} AND dimension = ''`)
+      }
+    }
+  } catch (e) {
+    log.warn('observability', '告警评估失败（下轮重试）：', (e as Error).message)
+  }
+})
+await boss.schedule('observability:alert', '* * * * *')
+
 // P2a-1 观测清理（独立并发 1，每分钟）：inbox 原始 14 天 / error_groups 30 天
 // 无新事件 / 限流与幂等桶过期；批 1000 行内（方案 §11.3）
 await boss.work('observability:cleanup', async () => {
@@ -164,6 +208,9 @@ await boss.work('observability:cleanup', async () => {
     await db.execute(sql`DELETE FROM observability_error_groups WHERE last_seen < now() - interval '30 days'`)
     await db.execute(sql`DELETE FROM security_rate_buckets WHERE expires_at < now() - interval '1 hour'`)
     await db.execute(sql`DELETE FROM request_idempotency WHERE expires_at < now() - interval '1 day'`)
+    await db.execute(sql`DELETE FROM observability_alerts WHERE state = 'resolved' AND resolved_at < now() - interval '30 days'`)
+    await db.execute(sql`DELETE FROM observability_metric_batches WHERE created_at < now() - interval '24 hours'`)
+    await db.execute(sql`DELETE FROM observability_metrics_minute WHERE minute < now() - interval '30 days'`)
   } catch (e) {
     log.warn('observability', '清理任务失败（下轮重试）：', (e as Error).message)
   }

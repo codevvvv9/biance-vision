@@ -232,6 +232,13 @@
       "when": 1792918000000,
       "tag": "0032_metrics_minute",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792919000000,
+      "tag": "0033_alerts",
+      "breakpoints": true
     }
   ]
 }
