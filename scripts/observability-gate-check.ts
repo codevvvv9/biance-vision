@@ -25,8 +25,7 @@ function check(name: string, actual: unknown, expected: unknown = true): void {
 
 const staticOnly = process.argv.includes('--static')
 
-// ---- OG5 静态：端点归属 ----
-function // ---- OA 组（P2b-3）：告警评估器状态机（纯函数）----
+// ---- OA 组（P2b-3）：告警评估器状态机（纯函数）----
 async function alertUnit(): Promise<void> {
   const { ALERT_RULES, evaluateAlert } = await import('../server/src/observability/alerts.js')
   const rule = ALERT_RULES.find((r) => r.key === 'worker.heartbeat')!
@@ -40,7 +39,7 @@ async function alertUnit(): Promise<void> {
   check('OA8 无事件且正常 → none', evaluateAlert(rule, { value: 1_000, evidence: {} }, null).action, 'none')
 }
 
-staticChecks(): void {
+function staticChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
   check('OG5a 观测三端点仅注册于 admin-api（user-api 无 /api/admin/* 路由）',
     read('../server/src/adminApi.ts').includes('registerObservabilityAdminRoutes') &&
