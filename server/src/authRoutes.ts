@@ -14,7 +14,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { LOGIN_LOCK_FAILS, LOGIN_MAX_PER_WINDOW } from './env.js'
-import { LOGIN_LOCK_MS, LOGIN_WINDOW_MS, clearLoginGuard, loginGuardOf, saveLoginGuard } from './loginGuard.js'
+import { consumeLoginAttempt, recordLoginFailure, clearLoginFailuresOnSuccess } from './loginGuard.js'
 import { clientIp } from './security/trust.js'
 import { csrfKeysAvailable, csrfSeedCookie, csrfSeedSubjectOf, issueCsrfToken, sessionSubjectHash, verifyCsrfToken } from './security/csrf.js'
 import { registerSourceGuard } from './security/sourceGuard.js'
@@ -141,37 +141,28 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
       log.warn('auth', '认证存储不可用，登录被拒（fail-closed）', kv({ ip, 入口: entryLabel }))
       throw Object.assign(new Error('认证服务暂不可用，请稍后重试'), { statusCode: 503 })
     }
-    // 限速（PG 持久化，跨域名合并计数，重启不丢）：锁定期内直接拒绝；滑动窗口每分钟最多 N 次尝试
-    const guard = await loginGuardOf(ip)
+    // 限速（PG 持久化，跨域名合并计数，重启不丢）——P1-3/L 原子准入：
+    // 锁定检查 + 窗口重置 + 计数递增单条 SQL 完成（双进程并发/窗口边界不丢不重；
+    // 写失败 → 503 安全状态不可用，不执行密码计算）
+    const admission = await consumeLoginAttempt(ip, LOGIN_MAX_PER_WINDOW)
     const now = Date.now()
-    if (guard.lockedUntil > now) {
-      log.warn('auth', '登录被锁定拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 剩余秒: Math.ceil((guard.lockedUntil - now) / 1000) }))
+    if (admission.locked) {
+      log.warn('auth', '登录被锁定拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 剩余秒: Math.ceil((admission.lockedUntilMs - now) / 1000) }))
       throw Object.assign(new Error('尝试过于频繁，账号已临时锁定，请稍后再试'), { statusCode: 429 })
     }
-    if (now - guard.winStart >= LOGIN_WINDOW_MS) {
-      guard.winStart = now
-      guard.winCount = 0
-    }
-    guard.winCount++
-    await saveLoginGuard(ip, guard)
-    if (guard.winCount > LOGIN_MAX_PER_WINDOW) {
-      log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: guard.winCount }))
+    if (!admission.allowed) {
+      log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: admission.windowCount }))
       throw Object.assign(new Error('尝试过于频繁，请一分钟后再试'), { statusCode: 429 })
     }
     /**
      * 统一失败出口：计数/锁定/审计/401 一处收口——入口不匹配与密码错误对外完全同构。
-     * ❗计数保存必须 await：锁定状态在响应前落库（否则与成功登录的 delete 并行提交丢锁定）。
+     * P1-3/L：失败计数为原子 SQL（行锁串行累加，并发不丢）；写失败 → 503 拒绝
+     * （不吞错后继续执行密码计算）。
      */
     async function failLogin(logMsg: string, detail: Record<string, unknown>): Promise<never> {
-      guard.fails++
-      if (guard.fails >= LOGIN_LOCK_FAILS) {
-        guard.lockedUntil = Date.now() + LOGIN_LOCK_MS
-        guard.fails = 0
-        log.warn('auth', '连续登录失败触发锁定', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 锁定分钟: LOGIN_LOCK_MS / 60_000 }))
-      }
-      await saveLoginGuard(ip, guard)
+      await recordLoginFailure(ip, LOGIN_LOCK_FAILS)
       recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
-      log.warn('auth', logMsg, kv({ ...detail, 累计失败: guard.fails }))
+      log.warn('auth', logMsg, kv({ ...detail, 尝试序号: admission.attemptSeq }))
       throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
     }
 
@@ -204,8 +195,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
     }
     // failLogin 恒抛出；`?? await` 兼作类型收窄（Promise<never> 不参与控制流分析）
     const verified: UserRecord = user ?? (await failLogin('登录失败', { 用户: name.slice(0, 64) || '(未提供)', ip, 客户端: briefUa(ua) }))
-    // 成功登录清零该 IP 的失败计数（PG 行 + 缓存）
-    await clearLoginGuard(ip)
+    // 成功登录：条件清理该 IP 的失败计数（按本次尝试序号——并发后发生的失败不清除；
+    // 窗口尝试计数保留，IP 总尝试桶不因成功而重置）
+    await clearLoginFailuresOnSuccess(ip, admission.attemptSeq)
     // 会话用途标记 = 进程入口（W3-S2/S3）：跨用途使用一律无效
     const session = await createSession(verified, sessionPurpose)
     startSessionAudit(session, { ip, userAgent: ua })
