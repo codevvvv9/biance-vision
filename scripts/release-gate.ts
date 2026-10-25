@@ -27,6 +27,7 @@ const steps: Step[] = [
   { name: '管理端域名门禁（35 项）', cmd: 'pnpm admin:gate-check' },
   { name: '登录回归（入口同构/计数/锁定，需 PG）', cmd: 'pnpm login:regression', skip: skipDb },
   { name: 'chatPolicy 原子成功累计（P1-3/C，需 PG）', cmd: 'pnpm chat:usage-atomic-check', skip: skipDb },
+  { name: '共享限流原语（P1-2，需 PG）', cmd: 'pnpm rate-limit:atomic-check', skip: skipDb },
   { name: '知识库集成（需 PG）', cmd: 'pnpm knowledge:smoke', skip: skipDb },
   { name: '知识库权限底座（需 PG）', cmd: 'pnpm knowledge:access-check', skip: skipDb },
   { name: '双入口切分（W3-S3，28 项，需 PG）', cmd: 'pnpm admin:dual-check', skip: skipDb },

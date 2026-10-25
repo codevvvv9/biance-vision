@@ -18,6 +18,7 @@ import { consumeLoginAttempt, recordLoginFailure, clearLoginFailuresOnSuccess } 
 import { clientIp } from './security/trust.js'
 import { csrfKeysAvailable, csrfSeedCookie, csrfSeedSubjectOf, issueCsrfToken, sessionSubjectHash, verifyCsrfToken } from './security/csrf.js'
 import { registerSourceGuard } from './security/sourceGuard.js'
+import { RATE_POLICIES, rateLimitConsume, rateLimitedError } from './security/rateLimit.js'
 import { isDbAvailable } from './db.js'
 import { log, kv, briefUa } from './logger.js'
 import { endSessionAudit, recordFailedLogin, startSessionAudit } from './audit.js'
@@ -110,6 +111,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
     reply.header('cache-control', 'no-store')
     if (!csrfKeysAvailable()) {
       throw Object.assign(new Error('安全状态暂不可用，请稍后重试'), { statusCode: 503, code: 'security_state_unavailable' })
+    }
+    // P1-2 强制入口配额（30/分/IP，enforce）：防止无限签发
+    const csrfPolicy = RATE_POLICIES['csrf.issue:ip']
+    if (csrfPolicy !== undefined) {
+      const verdict = await rateLimitConsume(csrfPolicy, ctx.clientIp(req))
+      if (!verdict.allowed) throw rateLimitedError(verdict.retryAfterSeconds)
     }
     const raw = readSessionToken(req.headers.cookie)
     let subjectHash: string | null = null
