@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 interface PostgresClient {
-  unsafe(query: string): Promise<unknown>
+  unsafe(query: string, params?: unknown[]): Promise<unknown>
   end(opts?: { timeout?: number }): Promise<void>
 }
 type PostgresFactory = (url: string, opts?: { max?: number; connect_timeout?: number; onnotice?: () => void }) => PostgresClient
