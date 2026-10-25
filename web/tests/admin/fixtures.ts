@@ -177,6 +177,33 @@ export const test = base.extend<{
           data = { prompt: "Fixture prompt" };
         else if (path === "/api/admin/conversations")
           data = { conversations: [] };
+        else if (path === "/api/admin/queue-health")
+          data = {
+            queues: [
+              {
+                name: "market:ingest",
+                created: 0,
+                active: 0,
+                retry: 0,
+                completed: 12,
+                failed: 0,
+                oldestCreatedAgeSeconds: null,
+                retentionMinutes: 30,
+                purgeable: true,
+              },
+              {
+                name: "knowledge:parse",
+                created: 0,
+                active: 0,
+                retry: 0,
+                completed: 3,
+                failed: 0,
+                oldestCreatedAgeSeconds: null,
+                retentionMinutes: null,
+                purgeable: false,
+              },
+            ],
+          };
         else if (path === "/api/ai/status")
           data = { configured: false, model: "" };
         else {
