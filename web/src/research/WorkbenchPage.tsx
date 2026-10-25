@@ -266,6 +266,7 @@ export default function WorkbenchPage(): JSX.Element {
       const nextH = opts.horizon ?? run.horizon
       const d = await api<{ run: ResearchRun }>('/research/runs', {
         method: 'POST',
+        idempotencyKey: crypto.randomUUID(), // P1-5：网络重试不双建 run/双扣额度
         body: {
           product: run.product,
           symbol: run.symbol,

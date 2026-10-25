@@ -232,6 +232,7 @@ export default function ResearchPage(): JSX.Element {
     try {
       const r = await api<{ run: ResearchRun }>('/research/runs', {
         method: 'POST',
+        idempotencyKey: crypto.randomUUID(), // P1-5：网络重试不双建 run/双扣额度
         body: {
           product,
           symbol,
@@ -263,6 +264,7 @@ export default function ResearchPage(): JSX.Element {
     try {
       const r = await api<{ run: ResearchRun }>('/research/runs', {
         method: 'POST',
+        idempotencyKey: crypto.randomUUID(), // P1-5：网络重试不双建 run/双扣额度
         body: {
           product: activeRun.product,
           symbol: activeRun.symbol,
