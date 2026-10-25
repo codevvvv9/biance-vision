@@ -72,9 +72,11 @@ import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage }
 import { findSession, initSessions, initUsers, readSessionToken } from './users.js'
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
-import { geoBlockStatus, initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
+import { initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { startQueue } from './queue.js'
 import { clientIpOf, registerAuthRoutes, unauthorized } from './authRoutes.js'
+import { corsOptions } from './security/cors.js'
+import { WS_MAX_PAYLOAD_BYTES } from './security/limits.js'
 
 const clientIp = clientIpOf
 import { registerAiAccessGuard } from './aiAccess.js'
@@ -265,8 +267,11 @@ app.setErrorHandler((err, req, reply) => {
   void reply.code(statusCode).send(body)
 })
 
-await app.register(cors, { origin: true })
-await app.register(fastifyWs)
+// Q-3：CORS 单点配置（security/cors.ts）——默认同源不反射任意来源，显式白名单才放行
+await app.register(cors, corsOptions())
+// Q-2：WS 单帧 16 KiB 上限（security/limits.ts 单点常量）——超大帧按协议关闭，
+// 不再无界接收（正常 market/kline 订阅消息远小于此）
+await app.register(fastifyWs, { options: { maxPayload: WS_MAX_PAYLOAD_BYTES } })
 
 // ---------------------------------------------------------------------------
 // 生产模式：托管 web/dist（用户端）静态资源；未构建时跳过（Vite dev 提供）。
@@ -407,18 +412,11 @@ const requireSession = auth.requireSession
 // Global metering runs before model handlers, after live session validation.
 registerAiAccessGuard(app, { requireSession })
 
-app.get('/api/health', async () => ({
-  ok: true,
-  binanceStream: stream.connected,
-  symbols: tickerCache.size,
-  clients: clients.size,
-  storage: storageMode(),
-  blobStore: currentBlobStoreKind(),
-  geoBlock: geoBlockStatus(),
-  uptime: Math.floor(process.uptime()),
-  lastTickerAt,
-  tickerAgeMs: lastTickerAt === 0 ? null : Date.now() - lastTickerAt,
-}))
+// Q-4：公网健康检查收敛为最小契约 { ok, entry }——在线数/存储模式/地域名单等内部
+// 状态不再公网披露（行情/存储状态走服务端日志，后续批次进管理端观测页）。
+// 消费方盘点（2026-10-25）：scripts/dev.ts、login:regression、admin:dual-check 只读 ok；
+// web/vite.admin.config.ts 预检读 admin-api 的 entry 字段（本端 entry='user-api'）。
+app.get('/api/health', async () => ({ ok: true, entry: 'user-api' }))
 
 app.get('/api/tickers', async (req) => {
   const q = req.query as { limit?: string }

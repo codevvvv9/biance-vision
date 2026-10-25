@@ -295,6 +295,15 @@ try {
     }
     check('R0 server 连接独立测试库（未降级 JSON 存储）', serverLog.join('\n').includes(TEST_DB), true)
 
+    // Q-4：公网 health 收敛为最小契约——精确键集断言，字段回潮（在线数/存储/地域）即失败
+    {
+      const h = await fetch(`http://127.0.0.1:${PORT}/api/health`)
+      const body = await h.json() as Record<string, unknown>
+      check('R0a /api/health → 200 { ok, entry }（公网不披露内部细节）',
+        h.status === 200 && Object.keys(body).sort().join(',') === 'entry,ok' && body.ok === true && body.entry === 'user-api',
+        true)
+    }
+
     for (const [route, status] of [['/login', 200], ['/dashboard', 200], ['/research', 200], ['/definitely-unknown', 404], ['/index.html', 404], ['/api/undefined-test-route', 401]] as const) {
       const response = await fetch(`http://127.0.0.1:${PORT}${route}`)
       check(`官网分流接缝：直连 user-api ${route}`, response.status, status)

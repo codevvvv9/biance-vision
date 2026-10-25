@@ -6,6 +6,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { STATUS_CODES } from 'node:http'
 import { log } from './logger.js'
+import { corsOptions } from './security/cors.js'
 import type { FastifyInstance } from 'fastify'
 
 export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInstance {
@@ -28,8 +29,9 @@ export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInsta
     void reply.code(statusCode).send(body)
   })
 
-  // CORS 仅 user-api 需要（同源部署下亦无害）；admin-api 同源直连不注册
-  if (opts.cors) void app.register(cors, { origin: true })
+  // CORS 仅 user-api 需要；策略单点在 security/cors.ts（Q-3：默认同源不反射，
+  // BV_ALLOWED_ORIGINS 显式列举才放行）——admin-api 同源直连不注册
+  if (opts.cors) void app.register(cors, corsOptions())
 
   return app
 }
