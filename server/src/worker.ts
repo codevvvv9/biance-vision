@@ -7,7 +7,7 @@ import './env.js'
 import { kv, log } from './logger.js'
 import { initDb } from './db.js'
 import { initUsers } from './users.js'
-import { Q_BACKFILL, Q_FUNDING, Q_INGEST, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, getBoss, startQueue, stopQueue } from './queue.js'
+import { Q_BACKFILL, Q_FUNDING, Q_INGEST, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, countCreatedBacklog, getBoss, startQueue, stopQueue } from './queue.js'
 import { backfillRange, backfillRecent, detectGaps, isFreshSeries, refreshGapCount } from './market/backfill.js'
 import { ingestFunding } from './market/funding.js'
 import { ingestSeries, markIngestError } from './market/ingest.js'
@@ -113,6 +113,10 @@ await boss.work(Q_SWEEP_FAST, async () => {
     await b.send(Q_INGEST, s, { singletonKey: `ingest:${seriesKeyText(s)}`, singletonSeconds: 50 })
   }
 })
+/** 增量采集积压告警阈值（created 条数）：sweep 每分钟重下发，正常稳态应接近 0；
+ * 超阈值=消费停摆（2026-10-25 事故 pg-boss fetch 吞错静默 16h 的对策，logs 侧唯一信号） */
+const INGEST_BACKLOG_WARN_THRESHOLD = 500
+
 await boss.work(Q_SWEEP_SLOW, async () => {
   const b = getBoss()
   if (!b) return
@@ -121,7 +125,12 @@ await boss.work(Q_SWEEP_SLOW, async () => {
   }
   for (const symbol of watchlistPerpSymbols()) {
     await b.send(Q_FUNDING, { symbol }, { singletonKey: `funding:${symbol}`, singletonSeconds: 3000 })
-    await b.send(Q_OI, { symbol, interval: OI_INTERVAL }, { singletonKey: `oi:${symbol}:${OI_INTERVAL}`, singletonSeconds: 3000 })
+    await b.send(Q_OI, { symbol }, { singletonKey: `oi:${symbol}:${OI_INTERVAL}`, singletonSeconds: 3000 })
+  }
+  // 小时级自检：冗余队列本应被 retention 兜底，仍积压说明消费侧异常，必须留下日志证据
+  const backlog = await countCreatedBacklog(Q_INGEST).catch(() => -1)
+  if (backlog > INGEST_BACKLOG_WARN_THRESHOLD) {
+    log.warn('queue', '行情采集积压超阈值（消费可能停摆）', kv({ 队列: Q_INGEST, created: backlog, 阈值: INGEST_BACKLOG_WARN_THRESHOLD, 处置: '查管理端队列健康页/重启 worker' }))
   }
 })
 await boss.schedule(Q_SWEEP_FAST, '* * * * *')

@@ -15,7 +15,9 @@
     "prompts": "Prompts & copy",
     "promptsHint": "Template versions / disclaimers / input config",
     "evals": "Evals & models",
-    "evalsHint": "Datasets / training / metrics"
+    "evalsHint": "Datasets / training / metrics",
+    "queues": "Queue Health",
+    "queuesHint": "Backlog / expiry / purge"
   },
   "gate": {
     "verifying": "Verifying session…",
@@ -725,6 +727,22 @@
     "auditAction_knowledge_batch_publish": "Batch publish",
     "auditAction_knowledge_batch_reparse": "Batch reparse",
     "auditAction_knowledge_batch_delete": "Batch delete",
-    "auditAction_prediction_confirm": "Confirm prediction"
+    "auditAction_prediction_confirm": "Confirm prediction",
+    "queueHint": "market:* queues are redundant command queues: schedulers re-issue the same keyed commands periodically, stale backlog expires automatically by retention and can also be purged manually. Knowledge / research / eval queues hold precious jobs — view-only, never auto-expired or purged.",
+    "purgeBacklog": "Purge backlog",
+    "purgeConfirmTitle": "Confirm purge",
+    "purgeConfirmBody": "This deletes pending jobs in {{queue}} created more than 30 minutes ago (current backlog: {{created}}). Running and completed jobs are unaffected.",
+    "purgeDone": "{{queue}}: purged {{count}} backlog jobs",
+    "colQueue": "Queue",
+    "colCreated": "Created",
+    "colActive": "Active",
+    "colRetry": "Retry",
+    "colCompleted": "Completed",
+    "colFailed": "Failed",
+    "colOldest": "Oldest backlog",
+    "colRetention": "Auto-expire",
+    "colAction": "Action",
+    "preciousTag": "Precious jobs",
+    "preciousHint": "Knowledge / research / eval jobs each map to user work — never auto-expired, no purge entry"
   }
 }
