@@ -17,6 +17,8 @@ bv.example.com {
 			header X-Robots-Tag "noindex, nofollow"
 			reverse_proxy 127.0.0.1:3200 {
 				flush_interval -1
+				header_up X-Forwarded-For {remote_host}
+				header_up X-Real-IP {remote_host}
 			}
 		}
 		@backend path /api /api/* /ws /assets/*
@@ -24,6 +26,8 @@ bv.example.com {
 			header X-Robots-Tag "noindex, nofollow"
 			reverse_proxy 127.0.0.1:3200 {
 				flush_interval -1
+				header_up X-Forwarded-For {remote_host}
+				header_up X-Real-IP {remote_host}
 			}
 		}
 		# /、/en、/zh、/_next/*、SEO 与品牌资源、所有未知路径归官网。
@@ -43,6 +47,8 @@ admin.example.com {
 	}
 	reverse_proxy 127.0.0.1:3201 {
 		flush_interval -1
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
