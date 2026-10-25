@@ -83,9 +83,9 @@ try {
   await reserveAiAccess(account.username)
   pass('管理端续开只增加额度上限，保留已用计数')
   const reset = await app.inject({ method: 'POST', url: `/api/admin/users/${account.username}/reset-credentials`, headers: jsonHeaders, payload: {} })
-  assert.equal(reset.statusCode, 200); assert.equal(verifyLogin(account.username, account.password), null)
-  assert.ok(verifyLogin(account.username, reset.json().password))
-  const signed = await createSession(verifyLogin(account.username, reset.json().password)!, 'user')
+  assert.equal(reset.statusCode, 200); assert.equal(await verifyLogin(account.username, account.password), null)
+  assert.ok(await verifyLogin(account.username, reset.json().password))
+  const signed = await createSession((await verifyLogin(account.username, reset.json().password))!, 'user')
   assert.ok(findSession(signed.token, 'user'))
   await db.execute(sql`DELETE FROM auth_sessions WHERE username = ${account.username}`)
   assert.ok(findSession(signed.token, 'user')) // Simulates a token cached by the other process.

@@ -95,7 +95,7 @@ const dclUrl = new URL(testUrl.toString())
 dclUrl.username = 'postgres'
 dclUrl.password = process.env.PG_SUPER_PASSWORD ?? 'postgres'
 const dcl = postgres(dclUrl.toString(), { max: 1, connect_timeout: 3, onnotice: () => {} })
-await syncDbUserRole(dcl)
+await syncDbUserRole(dcl as unknown as { unsafe: (q: string) => Promise<unknown[]> })
 await dcl.end({ timeout: 1 })
 const userUrl = new URL(testUrl.toString())
 userUrl.username = 'biance_user'

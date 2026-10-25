@@ -161,6 +161,13 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
       log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: admission.windowCount }))
       throw Object.assign(new Error('尝试过于频繁，请一分钟后再试'), { statusCode: 429 })
     }
+    // P1-3 主批多维准入：IP 总桶之后，
+    // a) IP＋规范账号 5 次/分钟（enforce）——撞库单账号在单 IP 上也快速受限；
+    //    账号存在与否同样计数（对外同构 401/429，不暴露账号存在性）
+    // b) 账号跨 IP 异常 20 次/5 分钟（shadow）——只告警不建账号硬锁（方案 §4.2）
+    const acctVerdict = await rateLimitConsume(RATE_POLICIES['login.acct:ip+acct'], `${ip}|${name.toLowerCase().slice(0, 64)}`)
+    if (!acctVerdict.allowed) throw rateLimitedError(acctVerdict.retryAfterSeconds)
+    void rateLimitConsume(RATE_POLICIES['login.acct:global'], name.toLowerCase().slice(0, 64)).catch(() => {})
     /**
      * 统一失败出口：计数/锁定/审计/401 一处收口——入口不匹配与密码错误对外完全同构。
      * P1-3/L：失败计数为原子 SQL（行锁串行累加，并发不丢）；写失败 → 503 拒绝
@@ -189,7 +196,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
       })
     }
 
-    const user = verifyLogin(name, String(body.password ?? ''))
+    const user = await verifyLogin(name, String(body.password ?? ''))
     // 入口纵深二次校验：预检放行但 verifyLogin 结果角色不匹配时仍拒绝（防
     // roleOfUsername 与 verifyLogin 的用户名匹配语义漂移），同样走同构 failLogin
     if (user && (user.role === 'superadmin') !== adminEntry) {

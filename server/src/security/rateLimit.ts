@@ -34,6 +34,10 @@ export interface RatePolicy {
 export const RATE_POLICIES: Readonly<Record<string, RatePolicy>> = {
   // P1-2 交付的最小策略：CSRF 签发端点（P0-2b 端点的强制入口配额，30/分/IP）
   'csrf.issue:ip': { id: 'csrf.issue:ip', limit: 30, windowMs: 60_000, mode: 'enforce' },
+  // P1-3 主批：登录 IP＋账号维度（5 次/分，enforce——主体由 authRoutes 拼 ip|账号）
+  'login.acct:ip+acct': { id: 'login.acct:ip+acct', limit: 5, windowMs: 60_000, mode: 'enforce' },
+  // P1-3 主批：账号跨 IP 异常（20 次/5 分钟，shadow——只告警不建账号硬锁）
+  'login.acct:global': { id: 'login.acct:global', limit: 20, windowMs: 5 * 60_000, mode: 'shadow' },
 }
 
 export interface RateDecision {

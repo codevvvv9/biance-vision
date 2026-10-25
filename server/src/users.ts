@@ -7,6 +7,7 @@ import { getDb, initDb, isDbAvailable, loadUsersFromDb, upsertUsersDb } from './
 import { authSessions } from './models.js'
 import { log } from './logger.js'
 import { SESSION_COOKIE, SESSION_TTL_MS } from './security/cookies.js'
+import { scryptLimited } from './security/scryptLimiter.js'
 
 export type UserRole = 'user' | 'superadmin'
 
@@ -54,18 +55,20 @@ function badRequest(msg: string): BadRequestError {
 }
 
 // ---------------------------------------------------------------------------
-// 密码：scrypt + 随机盐，存储格式 "salt$hash"（hex）
+// 密码：scrypt + 随机盐，存储格式 "salt$hash"（hex）。
+// P1-3 主批：异步化 + 全进程并发限制（并发 2/排队 10，超限 503）——同步
+// scrypt 阻塞事件循环，多并发登录会拖垮整个进程（含行情广播）。
 // ---------------------------------------------------------------------------
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex')
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex')
+  const hash = (await scryptLimited(password, salt, 64)).toString('hex')
   return `${salt}$${hash}`
 }
 
-function verifyPassword(password: string, stored: string): boolean {
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [salt, hash] = stored.split('$')
   if (!salt || !hash) return false
-  const actual = crypto.scryptSync(password, salt, 64)
+  const actual = await scryptLimited(password, salt, 64)
   const expected = Buffer.from(hash, 'hex')
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected)
 }
@@ -149,14 +152,14 @@ export async function initUsers(opts: { seed?: boolean } = {}): Promise<void> {
       const current = getUsers()
       if (seeds.length > 0) {
         const now = Date.now()
-        const seeded = seeds.map((s) => ({
+        const seeded = await Promise.all(seeds.map(async (s) => ({
           id: crypto.randomUUID(),
           username: s.username,
-          passwordHash: hashPassword(s.password),
+          passwordHash: await hashPassword(s.password),
           role: s.role,
           createdAt: now,
           updatedAt: now,
-        }))
+        })))
         await persistUsers([...current, ...seeded])
         log.ok('users', `已按 seed-users.json 写入内置账号 ${seeded.length} 个（PG）`)
       } else {
@@ -197,7 +200,7 @@ export async function createUser(username: string, password: string, role: UserR
   const record: UserRecord = {
     id: crypto.randomUUID(),
     username: name,
-    passwordHash: hashPassword(pw),
+    passwordHash: await hashPassword(pw),
     role,
     createdAt: now,
     updatedAt: now,
@@ -214,7 +217,7 @@ export async function updatePassword(username: string, password: string): Promis
   const list = getUsers()
   const u = list.find((x) => x.username.toLowerCase() === name.toLowerCase())
   if (!u) throw badRequest(`用户 ${name} 不存在`)
-  const updated: UserRecord = { ...u, passwordHash: hashPassword(pw), updatedAt: Date.now() }
+  const updated: UserRecord = { ...u, passwordHash: await hashPassword(pw), updatedAt: Date.now() }
   await persistUsers(list.map((x) => (x === u ? updated : x)))
   await destroySessionsFor(u.username)
   return updated
@@ -253,11 +256,12 @@ export async function updateChatPolicy(
 /**
  * 校验用户名密码；统一返回 null 以免区分「用户不存在 / 密码错误」。
  * 认证 fail-closed（W3-S2）：PG 不可用时一律拒绝（不降级 JSON 判权）。
+ * P1-3：异步 scrypt（并发限制见 security/scryptLimiter）——调用方需 await。
  */
-export function verifyLogin(username: string, password: string): UserRecord | null {
+export async function verifyLogin(username: string, password: string): Promise<UserRecord | null> {
   if (!isDbAvailable()) return null
   const u = getUsers().find((x) => x.username === String(username ?? '').trim())
-  if (!u || !verifyPassword(String(password ?? ''), u.passwordHash)) return null
+  if (!u || !(await verifyPassword(String(password ?? ''), u.passwordHash))) return null
   return u
 }
 
