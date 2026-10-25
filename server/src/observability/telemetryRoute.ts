@@ -39,8 +39,8 @@ function boundedString(v: unknown, max: number): string | null {
   return v
 }
 
-/** 属性白名单投影：只保留 ≤10 个标量属性（字符串截 256），拒绝对象/数组/危险键 */
-function projectProps(raw: unknown): Record<string, string | number | boolean> | null {
+/** 属性白名单投影（导出供专项 gate 断言）：只保留 ≤10 个标量属性（字符串截 256），拒绝对象/数组/危险键 */
+export function projectTelemetryProps(raw: unknown): Record<string, string | number | boolean> | null {
   if (raw === undefined || raw === null) return {}
   if (typeof raw !== 'object' || Array.isArray(raw)) return null
   const out: Record<string, string | number | boolean> = {}
@@ -78,7 +78,7 @@ export function registerTelemetryRoute(
     for (const raw of body.events as IncomingEvent[]) {
       const eventId = typeof raw.eventId === 'string' && /^[0-9a-f-]{16,64}$/i.test(raw.eventId) ? raw.eventId : null
       const name = typeof raw.name === 'string' && ALLOWED_EVENTS.has(raw.name) ? raw.name : null
-      const props = projectProps(raw.properties)
+      const props = projectTelemetryProps(raw.properties)
       if (eventId === null || name === null || props === null) {
         dropped += 1
         continue

@@ -126,25 +126,6 @@ function PromptIcon(): JSX.Element {
   );
 }
 
-function QueueIcon(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12 3 3 8l9 5 9-5z" />
-      <path d="M3 13l9 5 9-5" />
-    </svg>
-  );
-}
-
 /** Paths are internal to the router basename; no deployment prefixes. */
 export const ADMIN_ROUTES: AdminRouteDef[] = [
   {
@@ -196,11 +177,11 @@ export const ADMIN_ROUTES: AdminRouteDef[] = [
     load: () => import("./AdminEvalsPage"),
   },
   {
-    id: "queues",
-    path: "queues",
-    labelKey: "menu.queues",
-    hintKey: "menu.queuesHint",
-    icon: <QueueIcon />,
-    load: () => import("./AdminQueuesPage"),
+    id: "observability",
+    path: "observability",
+    labelKey: "menu.observability",
+    hintKey: "menu.observabilityHint",
+    icon: <ChartIcon />,
+    load: () => import("./AdminObservabilityPage"),
   },
 ];
