@@ -50,6 +50,7 @@ import {
   updateDraft,
 } from './agentVersions.js'
 import { enqueueEvalRun, enqueueTrainJob, pinnedConfigVersion } from './jobs.js'
+import { purgeQueueBacklog, purgeableQueues, queueHealthSnapshot } from '../queue.js'
 import { researchPyHealthy } from '../researchpy.js'
 import { toModelInfo } from '../research/productRoutes.js'
 import { getConversationByIdAdmin, listConversationsWithStats, listMessages } from '../research/runs/conversation.js'
@@ -631,6 +632,44 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
     })
     log.warn('admin', '聊天切断', kv({ 操作者: session.username, 目标: user.username, 取消研究: cancelledRuns.length, 取消延后: cancelDeferred || undefined }))
     return { disabled: true, cancelledRuns, cancelDeferred }
+  })
+
+  // ---- 队列健康（pg-boss 巡检；冗余型可清理，珍贵型只读） ----
+
+  /** 全队列状态快照：各状态计数 + 最老 created 滞留秒数 + retention 配置 + 是否可清理 */
+  app.get('/api/admin/queue-health', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const queues = await queueHealthSnapshot()
+    return { queues }
+  })
+
+  /** 清理冗余型队列的陈旧 created 积压（白名单=QUEUE_OPTIONS 集合，珍贵队列一律 400） */
+  app.post('/api/admin/queue-purge', async (req, reply) => {
+    const session = deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const body = parseBody(
+      z.object({
+        queue: z.string().min(1),
+        olderThanMinutes: z.number().int().min(5).max(24 * 60).optional(),
+      }),
+      req.body,
+      reply,
+    )
+    if (!body) return reply
+    const allow = purgeableQueues()
+    if (!allow.includes(body.queue)) {
+      return badRequest(reply, `队列 ${body.queue} 不在可清理白名单（任务珍贵不自动过期）：${allow.join('、')}`)
+    }
+    const olderThanMinutes = body.olderThanMinutes ?? 30
+    const purged = await purgeQueueBacklog(body.queue, olderThanMinutes)
+    recordAudit(session, {
+      action: 'queue_purge',
+      target: body.queue,
+      detail: `清理队列积压：删除 ${purged} 条 ${olderThanMinutes} 分钟前的 created 任务`,
+    })
+    log.warn('admin', '队列积压清理', kv({ 操作者: session.username, 队列: body.queue, 删除: purged, 门槛分钟: olderThanMinutes }))
+    return { queue: body.queue, purged, olderThanMinutes }
   })
 
   // ---- 研究会话追踪（链路 B：conversations/conversation_messages） ----

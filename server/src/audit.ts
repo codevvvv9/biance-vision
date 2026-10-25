@@ -26,6 +26,7 @@ export type AuditAction =
   | 'prediction_confirm'
   | 'chat_policy_update'
   | 'chat_cutoff'
+  | 'queue_purge'
 
 /** 会话内单次操作 */
 export interface AuditEntry {

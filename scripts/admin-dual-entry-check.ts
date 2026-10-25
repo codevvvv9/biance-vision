@@ -232,6 +232,33 @@ try {
   check('D22 admin-api /ai/user conversations 为数组（未泄漏 Promise）', Array.isArray(JSON.parse(panorama.body).conversations), true)
   const myConvs = await req(USER_PORT, 'GET', '/api/ai/conversations', { cookie: userCookie })
   check('D23 user-api /ai/conversations conversations 为数组（未泄漏 Promise）', Array.isArray(JSON.parse(myConvs.body).conversations), true)
+
+  // ---- 队列健康与受限清理（2026-10-25 market:ingest 停摆 16h 积压 3.7 万条事故对策）----
+  const noQueueHealth = await req(USER_PORT, 'GET', '/api/admin/queue-health')
+  check('D24 user-api GET /api/admin/queue-health → 404（路由不存在）', noQueueHealth.status, 404)
+  const queueNoAuth = await req(ADMIN_PORT, 'GET', '/api/admin/queue-health')
+  check('D25 admin-api queue-health 无会话 → 401', queueNoAuth.status, 401)
+  const queueHealth = await req(ADMIN_PORT, 'GET', '/api/admin/queue-health', { cookie: adminCookie })
+  const qh = JSON.parse(queueHealth.body) as { queues?: Array<Record<string, unknown>> }
+  const ingest = qh.queues?.find((x) => x.name === 'market:ingest')
+  check(
+    'D26 queue-health → 200 且 market:ingest retention=30 分钟且可清理（updateQueue 已生效）',
+    queueHealth.status === 200 && Array.isArray(qh.queues) && ingest?.retentionMinutes === 30 && ingest?.purgeable === true,
+    true,
+  )
+  const purgePrecious = await req(ADMIN_PORT, 'POST', '/api/admin/queue-purge', { cookie: adminCookie, body: { queue: 'knowledge:parse' } })
+  check('D27 queue-purge 珍贵队列被拒（400，白名单服务端强制）', purgePrecious.status, 400)
+  // 造数：40 分钟前的陈旧积压 + 1 分钟前的新任务 → 清理必须旧删新留
+  const pq = postgres(testUrl.toString(), { max: 1, onnotice: () => {} })
+  await pq.unsafe(`insert into pgboss.job (id, name, data, state, retry_limit, retry_delay, retry_backoff, start_after, expire_in, created_on)
+    values (gen_random_uuid(), 'market:ingest', '{}'::jsonb, 'created', 2, 0, false, now() - interval '40 minutes', interval '15 minutes', now() - interval '40 minutes'),
+           (gen_random_uuid(), 'market:ingest', '{}'::jsonb, 'created', 2, 0, false, now() - interval '1 minutes', interval '15 minutes', now() - interval '1 minutes')`)
+  const purgeOk = await req(ADMIN_PORT, 'POST', '/api/admin/queue-purge', { cookie: adminCookie, body: { queue: 'market:ingest', olderThanMinutes: 30 } })
+  const purgeBody = JSON.parse(purgeOk.body) as { purged?: number }
+  const afterHealth = await req(ADMIN_PORT, 'GET', '/api/admin/queue-health', { cookie: adminCookie })
+  const afterIngest = (JSON.parse(afterHealth.body) as { queues: Array<Record<string, unknown>> }).queues.find((x) => x.name === 'market:ingest')
+  check('D28 queue-purge 仅清过期积压（旧删 1 新留 1）', purgeOk.status === 200 && purgeBody.purged === 1 && afterIngest?.created === 1, true)
+  await pq.end({ timeout: 1 })
 } finally {
   for (const c of procs) await stop(c)
   if (testUrl !== null) {
@@ -245,5 +272,5 @@ try {
   }
 }
 
-console.log(failures === 0 ? '\n双入口切分自测全部通过 ✔（23 项）' : `\n失败 ${failures} 项 ✖`)
+console.log(failures === 0 ? '\n双入口切分自测全部通过 ✔（28 项）' : `\n失败 ${failures} 项 ✖`)
 process.exit(failures === 0 ? 0 : 1)

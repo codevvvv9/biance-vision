@@ -15,7 +15,9 @@
     "prompts": "提示词与文案",
     "promptsHint": "模板版本 / 免责 / 输入配置",
     "evals": "评测与模型",
-    "evalsHint": "数据集 / 训练 / 指标"
+    "evalsHint": "数据集 / 训练 / 指标",
+    "queues": "队列健康",
+    "queuesHint": "积压 / 自动过期 / 清理"
   },
   "gate": {
     "verifying": "会话验证中…",
@@ -725,6 +727,22 @@
     "auditAction_knowledge_batch_publish": "批量发布",
     "auditAction_knowledge_batch_reparse": "批量重解析",
     "auditAction_knowledge_batch_delete": "批量删除",
-    "auditAction_prediction_confirm": "确认预测"
+    "auditAction_prediction_confirm": "确认预测",
+    "queueHint": "market:* 为冗余指令型队列：周期调度会反复重下发同键指令，陈旧积压按保留期自动过期，也可手动清理；知识库 / 研究 / 评测队列的任务珍贵，仅展示状态，绝不自动或手动清理。",
+    "purgeBacklog": "清理积压",
+    "purgeConfirmTitle": "确认清理",
+    "purgeConfirmBody": "将删除 {{queue}} 中 30 分钟前创建的待处理任务（当前积压 {{created}} 条）；正在执行与已完成的任务不受影响。",
+    "purgeDone": "{{queue}} 已清理 {{count}} 条积压",
+    "colQueue": "队列",
+    "colCreated": "待处理",
+    "colActive": "执行中",
+    "colRetry": "重试",
+    "colCompleted": "已完成",
+    "colFailed": "失败",
+    "colOldest": "最老积压",
+    "colRetention": "自动过期",
+    "colAction": "操作",
+    "preciousTag": "珍贵任务",
+    "preciousHint": "知识库 / 研究 / 评测任务一一对应用户工作，不自动过期、不提供清理入口"
   }
 }
