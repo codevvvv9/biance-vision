@@ -399,6 +399,22 @@ function wiringChecks(): void {
   check('W16 SSE 释放与 acquire 成对（cleanup 内 releaseSse）', sse.includes('releaseSse(ticket)') && sse.includes('let cleaned = false'), true)
   check('W17 SSE 串行轮询（polling 守卫防 async interval 重叠）', sse.includes('if (polling) return') && sse.includes('polling = false'), true)
   check('W18 SSE 每轮复查存活会话（不再复用初始 SessionRecord）', sse.includes('findLiveSession(readSessionToken(req.headers.cookie)'), true)
+  // P1-4：HTTP 配额（shadow）+ WS 加固 + 输入边界
+  check('W19 两入口注册 registerHttpQuotaGuard（读/写/上传/管理写路由组）',
+    index.includes('registerHttpQuotaGuard') && read('../server/src/adminApi.ts').includes('registerHttpQuotaGuard'), true)
+  wsChecks()
+}
+
+function wsChecks(): void {
+  const index = readFileSync(new URL('../server/src/index.ts', import.meta.url), 'utf8')
+  check('W20a WS Origin 校验（isSameOrigin + 4003 origin_rejected）',
+    index.includes("isSameOrigin(wsOrigin, req.headers.host") && index.includes("'origin_rejected'"), true)
+  check('W20b WS 消息限速（10/s 突发 20 令牌桶 + 4008）', index.includes('4008') && index.includes('msgBucket'), true)
+  check('W20c WS K 线订阅上限 20', index.includes('state.klines.size >= 20'), true)
+  check('W20d WS 发送背压（>1MiB 跳过快照、>4MiB terminate）',
+    index.includes('4 * 1024 * 1024') && index.includes('1024 * 1024') && index.includes('terminate()'), true)
+  check('W21 JSON bodyLimit 256KiB（共享构造点）', readFileSync(new URL('../server/src/fastifyApp.ts', import.meta.url), 'utf8').includes('256 * 1024'), true)
+  check('W22 URL 上限 8KiB（414 拒绝）', index === '' ? true : readFileSync(new URL('../server/src/security/httpQuota.ts', import.meta.url), 'utf8').includes('URI Too Long'), true)
 }
 
 // ---- main ----

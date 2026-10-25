@@ -26,6 +26,8 @@ export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInsta
     trustProxy: trustProxyOption(),
     requestIdHeader: false,
     genReqId: () => crypto.randomUUID(),
+    // P1-4 输入边界：普通 JSON 上限 256 KiB（multipart 上传不受此限，走独立 50MiB）
+    bodyLimit: 256 * 1024,
   })
 
   // P1-2 本地入口闸门：onRequest 最前（先于鉴权/密码/body 解析）——每 IP 10/s

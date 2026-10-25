@@ -75,6 +75,10 @@ import { initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { startQueue } from './queue.js'
 import { clientIpOf, registerAuthRoutes, AUTH_ANON_ALLOW } from './authRoutes.js'
 import { WS_MAX_PAYLOAD_BYTES } from './security/limits.js'
+import { registerHttpQuotaGuard } from './security/httpQuota.js'
+import { RATE_POLICIES, rateLimitConsume } from './security/rateLimit.js'
+import { isSameOrigin } from './security/sourceGuard.js'
+import { allowedOrigins } from './security/cors.js'
 
 const clientIp = clientIpOf
 import { registerAiAccessGuard } from './aiAccess.js'
@@ -135,7 +139,16 @@ const clients = new Map<AliveSocket, ClientState>()
 const klineMeta = new Map<string, { symbol: string; interval: string }>()
 
 function sendTo(ws: AliveSocket, msg: ServerMessage): void {
-  if (ws.readyState === 1) ws.send(JSON.stringify(msg))
+  if (ws.readyState !== 1) return
+  // P1-4 背压：慢接收客户端（发送缓冲堆积）跳过可丢弃的快照/流式推送，等下一轮
+  // 快照补齐；堆积过大（>4 MiB，接收端长时间不读）视为僵死直接断开，由客户端
+  // 重连与心跳恢复——不让单个慢客户端拖垮广播循环
+  if (ws.bufferedAmount > 4 * 1024 * 1024) {
+    ws.terminate()
+    return
+  }
+  if (ws.bufferedAmount > 1024 * 1024) return
+  ws.send(JSON.stringify(msg))
 }
 
 function broadcast(msg: ServerMessage, filter?: (s: ClientState) => boolean): void {
@@ -352,6 +365,10 @@ const auth = registerAuthRoutes(app, { entryKind: 'user', clientIp })
 const requireSession = auth.requireSession
 // Global metering runs before model handlers, after live session validation.
 registerAiAccessGuard(app, { requireSession })
+// P1-4 HTTP 配额（全 shadow）：读/写按 用户+IP 双桶——鉴权钩子之后注册（可取会话用户）
+registerHttpQuotaGuard(app, { resolveUser: (req) => {
+  try { return requireSession(req).username } catch { return null }
+} })
 
 // Q-4：公网健康检查收敛为最小契约 { ok, entry }——在线数/存储模式/地域名单等内部
 // 状态不再公网披露（行情/存储状态走服务端日志，后续批次进管理端观测页）。
@@ -654,6 +671,15 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
     connection.socket.close(4003, 'region_blocked')
     return
   }
+  // P1-4 握手配额（shadow：30/分/IP，只计数告警）+ Origin 校验（浏览器 WS 恒带
+  // Origin；跨源/null 拒绝——非浏览器客户端不带 Origin 放行，鉴权仍生效）
+  void rateLimitConsume(RATE_POLICIES['ws.handshake:ip'], clientIp(req)).catch(() => {})
+  const wsOrigin = req.headers.origin
+  if (typeof wsOrigin === 'string' && wsOrigin !== 'null' && !isSameOrigin(wsOrigin, req.headers.host, new Set(allowedOrigins()))) {
+    log.warn('ws', '跨源握手被拒', kv({ ip: clientIp(req), origin: wsOrigin.slice(0, 64) }))
+    connection.socket.close(4003, 'origin_rejected')
+    return
+  }
   // user-api 恒用户入口：只认 purpose='user' 会话（admin 会话在 admin-api 进程）
   const session = findSession(readSessionToken(req.headers.cookie), 'user')
   if (!session) {
@@ -665,9 +691,8 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
   ws.isAlive = true
   const cid = Math.random().toString(36).slice(2, 8)
   ws.cid = cid
-  ws.on('pong', () => {
-    ws.isAlive = true
-  })
+  // P1-4 每连接消息限速（10 条/秒 突发 20，本地令牌桶）与 K 线订阅上限（20）
+  const msgBucket = { tokens: 20, updatedAt: Date.now() }
   const state: ClientState = {
     market: false,
     klines: new Set(),
@@ -676,6 +701,9 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
     ip: clientIp(req),
     ua: briefUa(String(req.headers['user-agent'] ?? '')),
   }
+  ws.on('pong', () => {
+    ws.isAlive = true
+  })
   clients.set(ws, state)
   log.info('ws', '客户端连接', kv({
     id: cid,
@@ -686,6 +714,16 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
   }))
 
   ws.on('message', (raw: WebSocket.RawData) => {
+    // P1-4 消息限速：超速直接断开（洪泛保护，规范关闭原因）
+    const now = Date.now()
+    msgBucket.tokens = Math.min(20, msgBucket.tokens + ((now - msgBucket.updatedAt) / 1000) * 10)
+    msgBucket.updatedAt = now
+    if (msgBucket.tokens < 1) {
+      log.warn('ws', '消息洪泛，断开连接', kv({ id: cid, 用户: state.user }))
+      ws.close(4008, 'rate_limited')
+      return
+    }
+    msgBucket.tokens -= 1
     let msg: ClientMessage
     try {
       msg = JSON.parse(raw.toString()) as ClientMessage
@@ -700,6 +738,11 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
       const symbol = String(msg.symbol ?? '').toUpperCase()
       const interval = String(msg.interval ?? '')
       if (!SYMBOL_RE.test(symbol) || !INTERVALS.includes(interval)) return
+      // P1-4 订阅上限：每连接最多 20 个 K 线订阅（超限静默忽略——防订阅风暴）
+      if (state.klines.size >= 20 && !state.klines.has(`${symbol.toLowerCase()}@kline_${interval}`)) {
+        log.warn('ws', '订阅数超上限，忽略', kv({ id: cid, 用户: state.user, 当前订阅: state.klines.size }))
+        return
+      }
       const name = `${symbol.toLowerCase()}@kline_${interval}`
       klineMeta.set(name, { symbol, interval })
       if (!state.klines.has(name)) {
