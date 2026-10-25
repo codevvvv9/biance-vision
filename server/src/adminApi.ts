@@ -82,7 +82,7 @@ app.addHook('preHandler', async (req, reply) => {
     await auth.requireLiveSession(req)
   } catch (err) {
     const e = err as { statusCode?: number }
-    reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
+    return reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
   }
 })
 
@@ -94,6 +94,7 @@ app.addHook('onResponse', (req, reply, done) => {
     const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info'
     const user = findSession(readSessionToken(req.headers.cookie), 'admin')?.username
     log[level]('http', `${req.method} ${req.url} → ${status}`, kv({
+      编号: req.id, // P0-3：与 X-Request-ID/错误体同源
       耗时: fmtMs(reply.elapsedTime ?? 0),
       用户: user,
       入口: 'admin-api',

@@ -34,3 +34,38 @@ export interface RequestCorrelation {
   requestId: string
   originRequestId?: string
 }
+
+/**
+ * 框架级公共错误码注册表：跨领域、前端按码分支行为的码在此中央声明
+ * （HTTP 语义/重试属性/日志级别）。规则：
+ * - 公开错误体只应携带本表内的框架码 + 各领域真实发出的业务码（原码原语义，
+ *   由属主模块维护，不收编改名——收编会破坏既有 UI 分支且污染纯契约）；
+ * - 内部 err.code（PG SQLSTATE/网络异常/第三方错误）禁止直透，统一落
+ *   internal_error / service_unavailable；
+ * - 新框架码必须在注册表声明后才可在服务端/前端同时引用（OCP 具名注册）。
+ */
+export const PUBLIC_ERROR_REGISTRY: Readonly<Record<string, ErrorDefinition>> = {
+  validation_failed: { httpStatus: 400, messageKey: 'errors.validation_failed', retryable: false, logLevel: 'info' },
+  bad_request: { httpStatus: 400, messageKey: 'errors.bad_request', retryable: false, logLevel: 'info' },
+  payload_too_large: { httpStatus: 413, messageKey: 'errors.payload_too_large', retryable: false, logLevel: 'info' },
+  invalid_credentials: { httpStatus: 401, messageKey: 'errors.invalid_credentials', retryable: false, logLevel: 'info' },
+  session_expired: { httpStatus: 401, messageKey: 'errors.session_expired', retryable: false, logLevel: 'info' },
+  permission_denied: { httpStatus: 403, messageKey: 'errors.permission_denied', retryable: false, logLevel: 'info' },
+  csrf_invalid: { httpStatus: 403, messageKey: 'errors.csrf_invalid', retryable: false, logLevel: 'info' },
+  not_found: { httpStatus: 404, messageKey: 'errors.not_found', retryable: false, logLevel: 'info' },
+  chat_disabled: { httpStatus: 403, messageKey: 'errors.chat_disabled', retryable: false, logLevel: 'info' },
+  chat_limit_exceeded: { httpStatus: 429, messageKey: 'errors.chat_limit_exceeded', retryable: true, logLevel: 'warn' },
+  ai_access_exhausted: { httpStatus: 403, messageKey: 'errors.ai_access_exhausted', retryable: false, logLevel: 'info' },
+  ai_daily_limit_exceeded: { httpStatus: 429, messageKey: 'errors.ai_daily_limit_exceeded', retryable: true, logLevel: 'warn' },
+  ai_rate_limited: { httpStatus: 429, messageKey: 'errors.ai_rate_limited', retryable: true, logLevel: 'warn' },
+  rate_limited: { httpStatus: 429, messageKey: 'errors.rate_limited', retryable: true, logLevel: 'warn' },
+  login_throttled: { httpStatus: 429, messageKey: 'errors.login_throttled', retryable: true, logLevel: 'warn' },
+  service_unavailable: { httpStatus: 503, messageKey: 'errors.service_unavailable', retryable: true, logLevel: 'error' },
+  security_state_unavailable: { httpStatus: 503, messageKey: 'errors.security_state_unavailable', retryable: true, logLevel: 'error' },
+  internal_error: { httpStatus: 500, messageKey: 'errors.internal_error', retryable: false, logLevel: 'error' },
+}
+
+/** 框架码判定（服务端序列化器用于区分「可透出的已声明码」与未声明值） */
+export function isFrameworkErrorCode(code: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PUBLIC_ERROR_REGISTRY, code)
+}

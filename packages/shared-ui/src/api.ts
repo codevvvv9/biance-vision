@@ -9,6 +9,30 @@ import type {
 export interface ApiOptions {
   method?: string
   body?: unknown
+  headers?: Record<string, string>
+  signal?: AbortSignal
+  /** 幂等键（P1-5 起高成本写操作携带；此处透传） */
+  idempotencyKey?: string
+}
+
+/**
+ * 统一 API 错误（P0-3）：携带 status/code/requestId/retryAfterSeconds——
+ * 旧调用方读取 message 仍有效；错误展示可附「请求编号」（报障定位抓手）。
+ */
+export class ApiError extends Error {
+  status: number
+  code: string | null
+  requestId: string | null
+  retryAfterSeconds: number | null
+
+  constructor(init: { status: number; message: string; code?: string; requestId?: string; retryAfterSeconds?: number }) {
+    super(init.message)
+    this.name = 'ApiError'
+    this.status = init.status
+    this.code = init.code ?? null
+    this.requestId = init.requestId ?? null
+    this.retryAfterSeconds = init.retryAfterSeconds ?? null
+  }
 }
 
 /** 会话失效（401）时的回调，由 AuthContext 注册：把界面切回登录页 */
@@ -19,22 +43,37 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 }
 
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
+  const headers: Record<string, string> = { ...options.headers }
+  // 无 body 时不能带 content-type: json——Fastify 对空 body + json 头直接 400（FST_ERR_CTP_EMPTY_JSON_BODY），
+  // 会打死所有无 body 的 POST/PUT（logout/取消 run/chat-cutoff/settings 测试）
+  if (options.body !== undefined) headers['content-type'] = 'application/json'
+  if (options.idempotencyKey !== undefined) headers['idempotency-key'] = options.idempotencyKey
   const res = await fetch(`/api${path}`, {
-    // 无 body 时不能带 content-type: json——Fastify 对空 body + json 头直接 400（FST_ERR_CTP_EMPTY_JSON_BODY），
-    // 会打死所有无 body 的 POST/PUT（logout/取消 run/chat-cutoff/settings 测试）
-    headers: options.body !== undefined ? { 'content-type': 'application/json' } : undefined,
+    headers,
     method: options.method,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   })
   if (!res.ok) {
     if (res.status === 401) unauthorizedHandler?.()
     let detail = ''
+    let code: string | undefined
+    let retryAfterSeconds: number | undefined
     try {
-      detail = ((await res.json()) as { message?: string }).message ?? ''
+      const parsed = (await res.json()) as { message?: string; code?: string; retryAfterSeconds?: number }
+      detail = parsed.message ?? ''
+      code = parsed.code
+      retryAfterSeconds = parsed.retryAfterSeconds
     } catch {
       /* noop */
     }
-    throw new Error(detail || i18n.t('common:api.requestFailed', { code: res.status }))
+    throw new ApiError({
+      status: res.status,
+      message: detail || i18n.t('common:api.requestFailed', { code: res.status }),
+      code,
+      requestId: res.headers.get('x-request-id') ?? undefined,
+      retryAfterSeconds,
+    })
   }
   return (await res.json()) as T
 }

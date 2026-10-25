@@ -248,6 +248,81 @@ async function sourceGuardBehavior(): Promise<void> {
   }
 }
 
+// ---- P0-3 JSON 日志 / 安全投影 / requestId / 错误契约 ----
+import * as loggerModule from '../server/src/logger.js'
+import { sanitizeForLog as sanitizeForLogObj, toBoundedText } from '../server/src/security/logProjection.js'
+
+function loggerJsonMode(): void {
+  const prevJson = process.env.BV_LOG_JSON
+  const prevNode = process.env.NODE_ENV
+  const lines: unknown[] = []
+  const origLog = console.log
+  const origWarn = console.warn
+  console.log = (...args: unknown[]): void => { lines.push(args[0]) }
+  console.warn = (...args: unknown[]): void => { lines.push(args[0]) }
+  try {
+    process.env.BV_LOG_JSON = '1'
+    delete process.env.NODE_ENV
+    loggerModule.record({ level: 'warn', tag: 'gate', message: 'hello', attributes: { password: 'super-secret', note: 'ok' } })
+    const parsed = JSON.parse(String(lines[lines.length - 1])) as { level: string; tag: string; message: string; attributes?: string }
+    check('L1 生产 JSON 模式：单行 JSON 含 level/tag/message',
+      parsed.level === 'warn' && parsed.tag === 'gate' && parsed.message === 'hello', true)
+    check('L2 JSON 模式属性经安全投影（password 不落原文）',
+      (parsed.attributes ?? '').includes('***') && !(parsed.attributes ?? '').includes('super-secret'), true)
+  } finally {
+    console.log = origLog
+    console.warn = origWarn
+    if (prevJson === undefined) delete process.env.BV_LOG_JSON
+    else process.env.BV_LOG_JSON = prevJson
+    if (prevNode === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = prevNode
+  }
+}
+
+function projectionUnit(): void {
+  const projected = sanitizeForLogObj({ password: 'p@ss', apiKey: 'k', note: 'hello', nested: { authToken: 't', ok: 1 } }) as Record<string, unknown>
+  const nested = projected.nested as Record<string, unknown>
+  check('L3 共享投影：敏感键打码（password/apiKey/token），非敏感保留',
+    projected.password === '***' && projected.apiKey === '***' && nested.authToken === '***' && projected.note === 'hello' && nested.ok === 1, true)
+  const truncated = sanitizeForLogObj({ text: 'x'.repeat(300) }) as { text: string }
+  check('L4 长字符串截断（160 字，标注原始长度）', truncated.text.length < 200 && truncated.text.includes('共300字'), true)
+  const bounded = toBoundedText({ secret: 'top', a: 1 })
+  check('L5 toBoundedText：对象投影敏感键', bounded.includes('***') && !bounded.includes('top') && bounded.includes('"a":1'), true)
+  check('L6 toBoundedText：字符串上限截断', toBoundedText('y'.repeat(5000), { maxText: 100 }).length <= 101, true)
+}
+
+async function requestIdBehavior(): Promise<void> {
+  const app = buildApp({ cors: true })
+  app.get('/api/ok', async () => ({ ok: true }))
+  app.get('/api/boom', async () => {
+    throw Object.assign(new Error('业务错误'), { statusCode: 400, code: 'validation_failed' })
+  })
+  app.get('/api/wait', async () => {
+    throw Object.assign(new Error('稍后再试'), { statusCode: 429, code: 'rate_limited', retryAfterSeconds: 7 })
+  })
+  app.get('/api/crash', async () => {
+    throw Object.assign(new Error('PG SQLSTATE 42P01 内部细节'), { statusCode: 500, code: '42P01' })
+  })
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const r1 = await app.inject({ method: 'GET', url: '/api/ok' })
+  const id1 = r1.headers['x-request-id']
+  const r2 = await app.inject({ method: 'GET', url: '/api/ok' })
+  check('R1 每响应返还 x-request-id（UUID）', typeof id1 === 'string' && UUID_RE.test(id1), true)
+  check('R2 请求间 ID 唯一（双进程关联基础）', id1 !== r2.headers['x-request-id'], true)
+  const forged = await app.inject({ method: 'GET', url: '/api/ok', headers: { 'x-request-id': 'fake-client-id' } })
+  check('R3 伪造 x-request-id 请求头无效（服务端 UUID）', forged.headers['x-request-id'] !== 'fake-client-id' && UUID_RE.test(String(forged.headers['x-request-id'])), true)
+  const boom = await app.inject({ method: 'GET', url: '/api/boom' })
+  const boomBody = JSON.parse(boom.body) as { code?: string; requestId?: string }
+  check('R4 错误体含 requestId 且与响应头一致', boomBody.requestId === boom.headers['x-request-id'], true)
+  check('R5 错误体透传 4xx code', boomBody.code, 'validation_failed')
+  const wait = await app.inject({ method: 'GET', url: '/api/wait' })
+  check('R6 retryAfterSeconds 透传（429）', (JSON.parse(wait.body) as { retryAfterSeconds?: number }).retryAfterSeconds, 7)
+  const crash = await app.inject({ method: 'GET', url: '/api/crash' })
+  const crashBody = JSON.parse(crash.body) as { code?: string; message?: string }
+  check('R7 5xx 不透 code 不回显内部 message', crashBody.code === undefined && crashBody.message === 'Internal Server Error', true)
+  await app.close()
+}
+
 // ---- 接线静态检查（单点定义被入口真实使用；防「模块存在但未接线」）----
 function wiringChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -291,11 +366,14 @@ q1Cookies()
 await q3Cors()
 trustUnit()
 csrfUnit()
+loggerJsonMode()
+projectionUnit()
 wiringChecks()
 if (!staticOnly) {
   await q2Websocket()
   await trustBehavior()
   await sourceGuardBehavior()
+  await requestIdBehavior()
 }
 
 console.log(`\n${failed === 0 ? '✔' : '✖'} security-gate-check：${checked - failed}/${checked} 通过${staticOnly ? '（--static 模式：运行断言未执行）' : ''}`)

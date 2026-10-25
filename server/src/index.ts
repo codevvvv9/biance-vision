@@ -70,6 +70,7 @@ import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage }
 import { findSession, initSessions, initUsers, readSessionToken } from './users.js'
 import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
+import { sanitizeForLog, webhookHost } from './security/logProjection.js'
 import { initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { startQueue } from './queue.js'
 import { clientIpOf, registerAuthRoutes, AUTH_ANON_ALLOW } from './authRoutes.js'
@@ -298,12 +299,14 @@ app.addHook('preHandler', async (req, reply) => {
     await auth.requireLiveSession(req)
   } catch (err) {
     const e = err as { statusCode?: number }
-    reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
+    // ❗必须 return：send 后继续走后续 hook（aiAccess preHandler 等）会二次 send
+    // （ERR_HTTP_HEADERS_SENT——onSend 链加入 requestId hook 后时序变化暴露）
+    return reply.code(e.statusCode ?? 401).send({ message: (err as Error).message })
   }
 })
 
 // HTTP 访问日志：每个 /api/* 请求一条（health 为探针高频调用，排除）；
-// 写请求附带提交的 body（敏感字段打码、长文本截断）
+// 写请求附带提交的 body（敏感字段打码、长文本截断——共享投影 security/logProjection）
 app.addHook('onResponse', (req, reply, done) => {
   const url = req.url.split('?')[0]
   if (url.startsWith('/api/') && url !== '/api/health') {
@@ -311,11 +314,12 @@ app.addHook('onResponse', (req, reply, done) => {
     const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info'
     const user = findSession(readSessionToken(req.headers.cookie))?.username
     log[level]('http', `${req.method} ${req.url} → ${status}`, kv({
+      编号: req.id, // P0-3：与 X-Request-ID/错误体同源，报障全链路定位
       耗时: fmtMs(reply.elapsedTime ?? 0),
       用户: user,
       ip: clientIp(req),
       客户端: briefUa(String(req.headers['user-agent'] ?? '')),
-      提交数据: req.body !== undefined && !/^\/api\/(ai|research|conversations|translate)(?:\/|$)/.test(url) ? bodyForLog(req.body) : undefined,
+      提交数据: req.body !== undefined && !/^\/api\/(ai|research|conversations|translate)(?:\/|$)/.test(url) ? JSON.stringify(sanitizeForLog(req.body)) : undefined,
     }))
   }
   done()
@@ -339,51 +343,8 @@ function userAgent(req: FastifyRequest): string {
   return String(req.headers['user-agent'] ?? '').slice(0, 160)
 }
 
-/** 只记录 Webhook 的主机名，避免完整地址（含密钥）进审计日志 */
-function webhookHost(url: string): string {
-  try {
-    return new URL(url).host
-  } catch {
-    return '无效地址'
-  }
-}
-
-/** 敏感字段（键名匹配即整值打码；webhookUrl 保留主机名便于排查） */
-const SENSITIVE_KEY_RE = /password|passphrase|apikey|api_key|secret|token|authorization/i
-
-/**
- * 请求体 → 可进日志的紧凑 JSON：
- * - password / apiKey / secret / token 等键打码为 ***
- * - webhookUrl 只保留主机名（与审计日志同策略）
- * - 字符串超 160 字截断（标注原始长度），整体超 500 字截断
- */
-function bodyForLog(body: unknown): string {
-  const sanitize = (value: unknown, depth: number): unknown => {
-    if (typeof value === 'string') {
-      return value.length > 160 ? `${value.slice(0, 160)}…(共${value.length}字)` : value
-    }
-    if (Array.isArray(value)) {
-      return depth < 3 ? value.slice(0, 10).map((v) => sanitize(v, depth + 1)) : '[…]'
-    }
-    if (value !== null && typeof value === 'object') {
-      const out: Record<string, unknown> = {}
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        if (/^webhookurl$/i.test(k) && typeof v === 'string' && v) {
-          out[k] = `${webhookHost(v)}/***`
-        } else if (SENSITIVE_KEY_RE.test(k)) {
-          out[k] = v === undefined || v === '' ? v : '***'
-        } else {
-          out[k] = sanitize(v, depth + 1)
-        }
-      }
-      return out
-    }
-    return value
-  }
-  const text =
-    typeof body === 'object' && body !== null ? JSON.stringify(sanitize(body, 0)) : String(body)
-  return text.length > 500 ? `${text.slice(0, 500)}…` : text
-}
+// P0-3：bodyForLog/敏感键打码已提炼为共享投影 security/logProjection.ts
+//（audit/HTTP 访问日志/后续诊断管道单点），webhookHost 由审计继续复用共享实现。
 
 // 登录/登出/会话查询（W3-S3 提取至共享模块 authRoutes.ts；user-api 恒用户入口：
 // superadmin 在本进程登录被拒——管理认证只在 admin-api 进程，入口=进程）
