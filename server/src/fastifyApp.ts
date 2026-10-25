@@ -15,6 +15,7 @@ import { trustProxyOption } from './security/trust.js'
 import { localGateConsume } from './security/localGate.js'
 import { clientIp } from './security/trust.js'
 import { tryRecord } from './observability/diagnosticSink.js'
+import { recordHttpMetric, startMetricSnapshot } from './observability/metrics.js'
 import type { FastifyInstance } from 'fastify'
 
 export interface BuildAppOptions {
@@ -51,6 +52,13 @@ export function buildApp(opts: BuildAppOptions = { cors: true }): FastifyInstanc
       })
     }
   })
+
+  // P2b-1：HTTP 指标分桶计数（内存全量；分钟快照入 metric_batches 由 worker 聚合）
+  app.addHook('onResponse', (req, reply, done) => {
+    recordHttpMetric(purpose === 'admin' ? 'admin-api' : 'user-api', req.routeOptions?.url ?? null, req.method, reply.statusCode, reply.elapsedTime ?? 0)
+    done()
+  })
+  startMetricSnapshot(purpose === 'admin' ? 'admin-api' : 'user-api', `${process.pid}`)
 
   // 每个响应返还 X-Request-ID（前端报障可复制；onSend 是最后可改头的阶段）
   app.addHook('onSend', async (req, reply, payload) => {

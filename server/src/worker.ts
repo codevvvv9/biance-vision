@@ -136,6 +136,22 @@ await boss.work(Q_SWEEP_SLOW, async () => {
 await boss.schedule(Q_SWEEP_FAST, '* * * * *')
 await boss.schedule(Q_SWEEP_SLOW, '11 * * * *')
 
+// P2b：指标聚合（受控函数幂等）+ worker 心跳（管理 overview 新鲜度）
+await boss.work('observability:aggregate', async () => {
+  const { getDb } = await import('./db.js')
+  const { sql } = await import('drizzle-orm')
+  const db = getDb()
+  if (!db) return
+  try {
+    await db.execute(sql`SELECT observability_aggregate_batches(100)`)
+    await db.execute(sql`INSERT INTO app_settings (key, value) VALUES ('observability:worker:heartbeat', jsonb_build_object('at', (extract(epoch FROM now())*1000)::bigint, 'pid', ${String(process.pid)}))
+      ON CONFLICT (key) DO UPDATE SET value = jsonb_build_object('at', (extract(epoch FROM now())*1000)::bigint, 'pid', ${String(process.pid)})`)
+  } catch (e) {
+    log.warn('observability', '指标聚合/心跳失败（下轮重试）：', (e as Error).message)
+  }
+})
+await boss.schedule('observability:aggregate', '* * * * *')
+
 // P2a-1 观测清理（独立并发 1，每分钟）：inbox 原始 14 天 / error_groups 30 天
 // 无新事件 / 限流与幂等桶过期；批 1000 行内（方案 §11.3）
 await boss.work('observability:cleanup', async () => {
