@@ -27,6 +27,17 @@ interface ErrorGroupRow {
   sample: unknown
 }
 
+interface AlertRow {
+  ruleKey: string
+  dimension: string
+  state: string
+  severity: string
+  firstSeen: string
+  lastSeen: string
+  resolvedAt: string | null
+  ackedBy: string | null
+}
+
 interface LogRow {
   source: string
   kind: string
@@ -49,20 +60,32 @@ export default function AdminObservabilityPage() {
   const [logs, setLogs] = useState<LogRow[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState<{ requestId: string; username: string }>({ requestId: "", username: "" })
+  const [alerts, setAlerts] = useState<AlertRow[] | null>(null)
 
   const refresh = useCallback(async () => {
     setLoadError(null)
     try {
-      const [ov, er] = await Promise.all([
+      const [ov, er, al] = await Promise.all([
         api<Overview>("/admin/observability/overview"),
         api<{ items: ErrorGroupRow[] }>("/admin/observability/errors?limit=50"),
+        api<{ items: AlertRow[] }>("/admin/observability/alerts"),
       ])
       setOverview(ov)
       setErrors(er.items)
+      setAlerts(al.items)
     } catch (e) {
       setLoadError((e as Error).message)
     }
   }, [])
+
+  const ackAlert = useCallback(async (key: string) => {
+    try {
+      await api(`/admin/observability/alerts/${encodeURIComponent(key)}/ack`, { method: 'POST' })
+      void refresh()
+    } catch (e) {
+      setLoadError((e as Error).message)
+    }
+  }, [refresh])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -101,6 +124,33 @@ export default function AdminObservabilityPage() {
           </div>
         )}
         {overview !== null && !overview.dbAvailable && <p className="error-banner">{t("observability.dbDown")}</p>}
+      </section>
+
+      <section>
+        <h3>{t("observability.alerts")}</h3>
+        {alerts === null ? <p>{t("observability.loading")}</p> : alerts.length === 0 ? (
+          <p className="muted">{t("observability.noAlerts")}</p>
+        ) : (
+          <table className="data-table">
+            <thead><tr>
+              <th>{t("observability.rule")}</th><th>{t("observability.severity")}</th>
+              <th>{t("observability.state")}</th><th>{t("observability.firstSeen")}</th>
+              <th>{t("observability.lastSeen")}</th><th></th>
+            </tr></thead>
+            <tbody>
+              {alerts.map((a) => (
+                <tr key={a.ruleKey + a.dimension}>
+                  <td>{a.ruleKey}</td>
+                  <td>{a.severity}</td>
+                  <td>{a.state}{a.ackedBy !== null ? ` (${a.ackedBy})` : ""}</td>
+                  <td>{fmtTime(a.firstSeen)}</td>
+                  <td>{fmtTime(a.lastSeen)}</td>
+                  <td>{a.state === "open" && <button onClick={() => { void ackAlert(a.ruleKey) }}>{t("observability.ack")}</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <section>

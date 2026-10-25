@@ -77,6 +77,36 @@ export function registerObservabilityAdminRoutes(
     }
   })
 
+  /** 告警列表（open/ack/resolved；默认只看未关闭）+ ack（接手≠恢复，走审计） */
+  app.get('/api/admin/observability/alerts', async (req) => {
+    const db = getDb()
+    if (db === null) return { items: [], observedAt: new Date().toISOString() }
+    const q = req.query as { includeResolved?: string; limit?: string }
+    const limit = parseIntQuery(q.limit, 50, 1, 100)
+    const rows = q.includeResolved === '1'
+      ? await db.execute(sql`SELECT rule_key, rule_version, dimension, state, severity, first_seen, last_seen, resolved_at, acked_by, evidence FROM observability_alerts ORDER BY last_seen DESC LIMIT ${limit}`)
+      : await db.execute(sql`SELECT rule_key, rule_version, dimension, state, severity, first_seen, last_seen, resolved_at, acked_by, evidence FROM observability_alerts WHERE state <> 'resolved' ORDER BY last_seen DESC LIMIT ${limit}`)
+    return {
+      items: (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+        ruleKey: String(r.rule_key), ruleVersion: Number(r.rule_version), dimension: String(r.dimension),
+        state: String(r.state), severity: String(r.severity), firstSeen: r.first_seen, lastSeen: r.last_seen,
+        resolvedAt: r.resolved_at, ackedBy: r.acked_by, evidence: r.evidence,
+      })),
+      observedAt: new Date().toISOString(),
+    }
+  })
+
+  app.post('/api/admin/observability/alerts/:key/ack', async (req, reply) => {
+    const db = getDb()
+    if (db === null) return reply.code(503).send({ message: '数据库不可用' })
+    const session = deps.requireSuperadmin(req)
+    const { key } = req.params as { key: string }
+    const updated = await db.execute(sql`UPDATE observability_alerts SET state = 'acknowledged', acked_by = ${session.username}
+      WHERE rule_key = ${key} AND state = 'open' RETURNING rule_key`)
+    if ((updated as unknown as unknown[]).length === 0) return reply.code(404).send({ message: '告警不存在或已处理' })
+    return { ok: true }
+  })
+
   /** requestId 精确查（含 origin_request_id 关联）+ 用户最近已记录请求 */
   app.get('/api/admin/observability/logs', async (req) => {
     const db = getDb()
