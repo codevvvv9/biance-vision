@@ -323,6 +323,39 @@ async function requestIdBehavior(): Promise<void> {
   await app.close()
 }
 
+// ---- P1-1 SSE 紧急硬限（单元：4/用户、20/IP、100/进程 + 释放幂等）----
+import { acquireSse, releaseSse, sseCounts, SSE_LIMITS } from '../server/src/security/sseGuards.js'
+
+function sseGuardUnit(): void {
+  const t1 = acquireSse('sg-user', '10.1.1.1')
+  const t2 = acquireSse('sg-user', '10.1.1.2')
+  const t3 = acquireSse('sg-user', '10.1.1.3')
+  const t4 = acquireSse('sg-user', '10.1.1.4')
+  check('SG1 同用户第 5 条 SSE 被拒（4/用户）', acquireSse('sg-user', '10.1.1.5').ok, false)
+  const stray: NonNullable<ReturnType<typeof acquireSse>['ticket']>[] = []
+  const other = acquireSse('sg-user-b', '10.1.1.6')
+  check('SG2 其他用户不受影响（IP 未超）', other.ok, true)
+  if (other.ticket) stray.push(other.ticket)
+  releaseSse(t4.ticket!) // 释放 1 条后可再连
+  const regained = acquireSse('sg-user', '10.1.1.7')
+  check('SG3 释放后额度恢复（可重连语义）', regained.ok, true)
+  if (regained.ticket) stray.push(regained.ticket)
+  releaseSse(t4.ticket!) // 幂等：重复释放不再减
+  const c1 = sseCounts().total
+  releaseSse(t1.ticket!)
+  releaseSse(t2.ticket!)
+  releaseSse(t3.ticket!)
+  check('SG4 释放幂等（重复 release 不产生负计数/多扣）', sseCounts().total === c1 - 3, true)
+  // IP 上限：从干净状态用同 IP 多用户打满
+  const tickets: Array<ReturnType<typeof acquireSse>> = []
+  for (let i = 0; i < SSE_LIMITS.MAX_PER_IP; i++) tickets.push(acquireSse(`sg-ip-u${i}`, '10.9.9.9'))
+  check('SG5 同 IP 第 21 条被拒（20/IP）', acquireSse('sg-ip-fresh', '10.9.9.9').ok, false)
+  check('SG6 拒绝时给出范围与 Retry-After', (() => { const r = acquireSse('sg-ip-fresh2', '10.9.9.9'); return r.ok === false && r.scope === 'ip' && (r.retryAfterSeconds ?? 0) > 0 })(), true)
+  for (const t of tickets) if (t.ticket) releaseSse(t.ticket)
+  for (const t of stray) releaseSse(t)
+  check('SG7 全部释放后计数归零', sseCounts().total, 0)
+}
+
 // ---- 接线静态检查（单点定义被入口真实使用；防「模块存在但未接线」）----
 function wiringChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -359,6 +392,13 @@ function wiringChecks(): void {
     !index.includes("startsWith('/api/auth/')") && !read('../server/src/adminApi.ts').includes("startsWith('/api/auth/')"), true)
   check('W14 csrf 端点注册于共享 authRoutes（两端获得）+ no-store',
     read('../server/src/authRoutes.ts').includes("app.get('/api/auth/csrf'") && read('../server/src/authRoutes.ts').includes('no-store'), true)
+  // P1-1：SSE 硬限接线（写头前拒绝 + 释放成对 + 串行轮询 + 每轮验权）
+  const sse = read('../server/src/research/runs/routes.ts')
+  check('W15 SSE 准入在 writeHead 之前（超额 429 先于流建立）',
+    sse.indexOf('acquireSse(') < sse.indexOf("reply.raw.writeHead(200", sse.indexOf('events')) && sse.includes('retry-after'), true)
+  check('W16 SSE 释放与 acquire 成对（cleanup 内 releaseSse）', sse.includes('releaseSse(ticket)') && sse.includes('let cleaned = false'), true)
+  check('W17 SSE 串行轮询（polling 守卫防 async interval 重叠）', sse.includes('if (polling) return') && sse.includes('polling = false'), true)
+  check('W18 SSE 每轮复查存活会话（不再复用初始 SessionRecord）', sse.includes('findLiveSession(readSessionToken(req.headers.cookie)'), true)
 }
 
 // ---- main ----
@@ -368,6 +408,7 @@ trustUnit()
 csrfUnit()
 loggerJsonMode()
 projectionUnit()
+sseGuardUnit()
 wiringChecks()
 if (!staticOnly) {
   await q2Websocket()

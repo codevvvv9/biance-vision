@@ -13,6 +13,9 @@ import { getDb } from '../../db.js'
 import { eventQuotes, knowledgeDocuments, portfolioPositions, structureEvents } from '../../models.js'
 import { kv, log } from '../../logger.js'
 import type { SessionRecord } from '../../users.js'
+import { findLiveSession, readSessionToken } from '../../users.js'
+import { clientIpOf } from '../../authRoutes.js'
+import { acquireSse, releaseSse, sseCounts } from '../../security/sseGuards.js'
 import { enqueueResearchRun } from './jobs.js'
 import { createRun, getRunForUser, getSteps, listEvidence, listRuns, requestCancel, subscribeRun } from './store.js'
 import { loadSnapshotPack } from '../../services/marketSnapshot.js'
@@ -455,6 +458,17 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     const { id } = req.params as { id: string }
     const row = await getRunForUser(id, session.username)
     if (!row) return reply.code(404).send({ code: 'not_found', message: '研究运行不存在' })
+    // P1-1 紧急硬限（进程内 4/用户、20/IP、100/进程）：在写任何 SSE 头之前拒绝
+    const admission = acquireSse(session.username, clientIpOf(req))
+    if (!admission.ok) {
+      log.warn('sse', '连接超硬限被拒', kv({ run: id, 用户: session.username, 范围: admission.scope, 在线: sseCounts().total }))
+      return reply.code(429).header('retry-after', String(admission.retryAfterSeconds ?? 5)).send({
+        statusCode: 429, error: 'Too Many Requests',
+        message: '当前订阅连接数已达上限，请关闭其他标签页后重试', code: 'rate_limited',
+        retryAfterSeconds: admission.retryAfterSeconds ?? 5,
+      })
+    }
+    const ticket = admission.ticket!
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache',
@@ -516,11 +530,27 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       }
     })
     // 跨进程（独立 worker）：轮询除终态外持续读取新增事件（run_events），
-    // 实时进度与重连重放共用同一持久化序列，序号连续不重发
+    // 实时进度与重连重放共用同一持久化序列，序号连续不重发。
+    // P1-1：串行调度（上一轮未完成不叠加——慢查询下防 async interval 重叠）+
+    // 每轮复查存活会话（登出/停用/吊销最迟 ~1.5s 停流，不只依赖初始握手）；
+    // 会话/数据查询失败（保护存储不可用）不继续发送旧缓存，直接关闭
+    let polling = false
     const poll = setInterval(async () => {
+      if (polling) return
+      polling = true
       try {
-        const fresh = await getRunForUser(id, session.username)
-        if (!fresh) return
+        const live = await findLiveSession(readSessionToken(req.headers.cookie), 'user')
+        if (!live) {
+          cleanup()
+          reply.raw.end()
+          return
+        }
+        const fresh = await getRunForUser(id, live.username)
+        if (!fresh) {
+          cleanup()
+          reply.raw.end()
+          return
+        }
         for (const ev of await listRunEventsAfter(id, lastSeq)) {
           sendOnce(ev.type, { runId: id, step: ev.step ?? undefined, at: ev.at, ...(ev.payload as Record<string, unknown>) }, ev.seq)
         }
@@ -530,7 +560,11 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
           reply.raw.end()
         }
       } catch {
-        /* 轮询失败下一轮再试 */
+        // 查询失败（存储不可用）：不继续发送旧缓存——关闭本流，客户端按游标重连
+        cleanup()
+        reply.raw.end()
+      } finally {
+        polling = false
       }
     }, 1500)
     let cleaned = false
@@ -539,6 +573,7 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       cleaned = true
       clearInterval(poll)
       unsubscribe()
+      releaseSse(ticket) // P1-1：配额释放幂等（与 acquire 成对）
     }
     req.raw.on('close', cleanup)
   })
