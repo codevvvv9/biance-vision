@@ -33,6 +33,7 @@
     "rate-limit:atomic-check": "tsx scripts/rate-limit-atomic-check.ts",
     "idempotency:atomic-check": "tsx scripts/idempotency-atomic-check.ts",
     "rate-limit:shadow-report": "tsx scripts/rate-limit-shadow-report.ts",
+    "observability:gate-check": "tsx scripts/observability-gate-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
     "admin:gate-check": "tsx scripts/admin-gate-check.ts",
     "login:regression": "tsx scripts/login-regression.ts",

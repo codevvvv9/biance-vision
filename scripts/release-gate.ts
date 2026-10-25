@@ -29,6 +29,7 @@ const steps: Step[] = [
   { name: 'chatPolicy 原子成功累计（P1-3/C，需 PG）', cmd: 'pnpm chat:usage-atomic-check', skip: skipDb },
   { name: "共享限流原语（P1-2，需 PG）", cmd: "pnpm rate-limit:atomic-check", skip: skipDb },
   { name: "幂等原语（P1-5，需 PG）", cmd: "pnpm idempotency:atomic-check", skip: skipDb },
+  { name: "可观测专项（P2a，需 PG）", cmd: "pnpm observability:gate-check", skip: skipDb },
   { name: '知识库集成（需 PG）', cmd: 'pnpm knowledge:smoke', skip: skipDb },
   { name: '知识库权限底座（需 PG）', cmd: 'pnpm knowledge:access-check', skip: skipDb },
   { name: '双入口切分（W3-S3，28 项，需 PG）', cmd: 'pnpm admin:dual-check', skip: skipDb },
