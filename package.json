@@ -31,6 +31,7 @@
     "chat:policy-check": "tsx scripts/chat-policy-check.ts",
     "chat:usage-atomic-check": "tsx scripts/chat-usage-atomic-check.ts",
     "rate-limit:atomic-check": "tsx scripts/rate-limit-atomic-check.ts",
+    "idempotency:atomic-check": "tsx scripts/idempotency-atomic-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
     "admin:gate-check": "tsx scripts/admin-gate-check.ts",
     "login:regression": "tsx scripts/login-regression.ts",

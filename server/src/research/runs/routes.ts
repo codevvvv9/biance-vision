@@ -16,6 +16,7 @@ import type { SessionRecord } from '../../users.js'
 import { findLiveSession, readSessionToken } from '../../users.js'
 import { clientIpOf } from '../../authRoutes.js'
 import { acquireSse, releaseSse, sseCounts } from '../../security/sseGuards.js'
+import { claimIdempotency, completeIdempotency, idempotencyRejected, replyReplay } from '../../security/idempotency.js'
 import { enqueueResearchRun } from './jobs.js'
 import { createRun, getRunForUser, getSteps, listEvidence, listRuns, requestCancel, subscribeRun } from './store.js'
 import { loadSnapshotPack } from '../../services/marketSnapshot.js'
@@ -241,6 +242,11 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
     if (!ensureStorage(reply)) return reply
     // 直建 run 也要过用户级管控，堵住绕过对话入口的通道
     await assertChatAllowed(session.username)
+    // P1-5 幂等（键可选阶段，§5.2 兼容 rollout）：带 Idempotency-Key 的请求——
+    // 同键同内容重放返回原 runId（网络重试不双建 run/双扣额度）；同键异内容 409
+    const idem = await claimIdempotency(req, '/api/research/runs', 'user', session.username)
+    if (idem.kind === 'replay') return await replyReplay(reply, idem.statusCode, idem.body)
+    if (idem.kind === 'in_progress' || idem.kind === 'conflict') throw idempotencyRejected(idem)
     const parsed = ResearchRunCreateSchema.safeParse(req.body ?? {})
     if (!parsed.success) return badRequest(reply, parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('；'))
     const input = parsed.data
@@ -271,7 +277,12 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       return reply.code(503).send({ code: 'queue_unavailable', message: '队列不可用；运行已保存，稍后由管理员重投', runId: row.id })
     }
     await recordChatMessage(session.username)
-    return reply.code(202).send({ runId: row.id, run: runDto(row) })
+    const responseBody = { runId: row.id, run: runDto(row) }
+    if (idem.kind === 'fresh') {
+      // 成功才写完成记录（失败/超时键可重试；重放返回原 202 与 runId）
+      await completeIdempotency(req, '/api/research/runs', 'user', session.username, 202, responseBody)
+    }
+    return reply.code(202).send(responseBody)
   })
 
   app.get('/api/research/runs', async (req, reply) => {
