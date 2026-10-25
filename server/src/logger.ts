@@ -1,14 +1,21 @@
 // ---------------------------------------------------------------------------
-// 统一日志：时间戳 + 级别图标 + ANSI 颜色
+// 统一日志（P0-3 起双模式）：
+//   开发（默认）  时间戳 + 级别图标 + ANSI 颜色，人类可读（原行为不变）
+//   生产          NODE_ENV=production → 单行 JSON（stdout；Docker local 驱动采集），
+//                 字段：timestamp/level/tag/message/parts（经安全投影+有界化）
 //
 //   ok      ✔ 绿    成功/里程碑事件（连接建立、服务启动、数据加载）
 //   info    ℹ 青    常规事件（客户端连接、订阅变化）
 //   warn    ⚠ 黄    异常但已自动处理（降级、重试、写入失败）
 //   error   ✖ 红    需要人介入的错误
 //
-// 输出示例：[2026-09-24 15:40:12] ✔ [binance] stream connected: wss://...
-// 设 NO_COLOR=1 关闭颜色（纯文本环境）；error 级别附带错误堆栈。
+// 安全投影（security/logProjection.ts 单点）：生产 JSON 模式下 parts 全部经
+// toBoundedText（敏感键打码/字符串 2KiB/堆栈 8KiB/单行 16KiB）——原始对象、
+// Error、循环结构不允许未投影直接 JSON.stringify 进日志。
+// 设 NO_COLOR=1 关闭颜色（纯文本环境）。
 // ---------------------------------------------------------------------------
+
+import { toBoundedText } from './security/logProjection.js'
 
 const RESET = '\x1b[0m'
 const DIM = '\x1b[2m'
@@ -19,16 +26,33 @@ interface LevelStyle {
   icon: string
   color: string
   stream: 'log' | 'warn' | 'error'
+  jsonLevel: 'info' | 'warn' | 'error'
 }
 
 const LEVELS: Record<string, LevelStyle> = {
-  ok: { icon: '✔', color: '\x1b[32m', stream: 'log' },
-  info: { icon: 'ℹ', color: '\x1b[36m', stream: 'log' },
-  warn: { icon: '⚠', color: '\x1b[33m', stream: 'warn' },
-  error: { icon: '✖', color: '\x1b[31m', stream: 'error' },
+  ok: { icon: '✔', color: '\x1b[32m', stream: 'log', jsonLevel: 'info' },
+  info: { icon: 'ℹ', color: '\x1b[36m', stream: 'log', jsonLevel: 'info' },
+  warn: { icon: '⚠', color: '\x1b[33m', stream: 'warn', jsonLevel: 'warn' },
+  error: { icon: '✖', color: '\x1b[31m', stream: 'error', jsonLevel: 'error' },
 }
 
 const colored = process.env.NO_COLOR !== '1'
+/** 生产 JSON 行模式（NODE_ENV=production；显式 BV_LOG_JSON 可覆盖）。每次判定：
+ *  env 变化（测试注入/进程内切换）即时生效，模块加载时不固化 */
+function isJsonMode(): boolean {
+  return process.env.BV_LOG_JSON === '1' || (process.env.BV_LOG_JSON !== '0' && process.env.NODE_ENV === 'production')
+}
+
+export type LogLevel = keyof typeof LEVELS
+
+/** 类型化日志记录（P0-3 新入口）：生产模式下字段直接进 JSON 行（不拼 kv 字符串） */
+export interface LogRecord {
+  level: LogLevel
+  tag: string
+  message: string
+  /** 受控属性（经安全投影） */
+  attributes?: Record<string, unknown>
+}
 
 function timestamp(): string {
   const d = new Date()
@@ -36,7 +60,7 @@ function timestamp(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-/** Error → message（error 级别带堆栈）；对象/数组 → JSON；其余 → String */
+/** Error → message（error 级别带堆栈）；对象/数组 → JSON；其余 → String（开发模式排版） */
 function fmt(value: unknown, withStack: boolean): string {
   if (value instanceof Error) {
     return withStack && value.stack ? value.stack : value.message
@@ -51,13 +75,49 @@ function fmt(value: unknown, withStack: boolean): string {
   return String(value)
 }
 
-function emit(level: keyof typeof LEVELS, tag: string, parts: unknown[]): void {
+function emit(level: LogLevel, tag: string, parts: unknown[]): void {
   const style = LEVELS[level]
+  if (isJsonMode()) {
+    // 生产 JSON：消息取首段文本，其余 parts 经安全投影收进 parts 数组；
+    // 单行 16KiB 上限由 toBoundedText 保证
+    const [head, ...rest] = parts
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: style.jsonLevel,
+      tag,
+      message: toBoundedText(head, { maxText: 2048 }),
+      parts: rest.length > 0 ? rest.map((p) => toBoundedText(p)) : undefined,
+    })
+    console[style.stream](line)
+    return
+  }
   const body = parts.map((p) => fmt(p, level === 'error')).join(' ')
   const head = colored
     ? `${DIM}[${timestamp()}]${RESET} ${style.color}${style.icon}${RESET} ${MAGENTA}[${tag}]${RESET}`
     : `[${timestamp()}] ${style.icon} [${tag}]`
   console[style.stream](head === '' ? body : `${head} ${body}`)
+}
+
+/** 类型化入口：生产 JSON 模式的结构化字段直通；开发模式按 kv 文本排版 */
+export function record(r: LogRecord): void {
+  if (isJsonMode()) {
+    const style = LEVELS[r.level]
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: style.jsonLevel,
+      tag: r.tag,
+      message: toBoundedText(r.message, { maxText: 2048 }),
+      attributes: r.attributes === undefined ? undefined : toBoundedText(r.attributes),
+    })
+    console[style.stream](line)
+    return
+  }
+  const attrs = r.attributes === undefined ? '' : ` ${kv(r.attributes)}`
+  const style = LEVELS[r.level]
+  const head = colored
+    ? `${DIM}[${timestamp()}]${RESET} ${style.color}${style.icon}${RESET} ${MAGENTA}[${r.tag}]${RESET}`
+    : `[${timestamp()}] ${style.icon} [${r.tag}]`
+  console[style.stream](`${head} ${fmt(r.message, r.level === 'error')}${attrs}`)
 }
 
 export const log = {
@@ -68,11 +128,8 @@ export const log = {
 }
 
 // ---------------------------------------------------------------------------
-// 结构化字段辅助：让"结论 + 数据"有一致的排版
-//
-//   kv({ 用户: 'admin', ip: '1.2.3.4' })   →  用户=admin ip=1.2.3.4
-//   fmtMs(65_000)                          →  1m05s
-//   briefUa(req.headers['user-agent'])     →  Chrome 126 · macOS
+// 结构化字段辅助：让"结论 + 数据"有一致的排版（开发模式；生产走 record 的
+// attributes 结构化字段，不再拼进单一 message）
 // ---------------------------------------------------------------------------
 
 /** 对象 → "k=v k=v"；值含空白加引号，null/undefined/空串字段跳过 */

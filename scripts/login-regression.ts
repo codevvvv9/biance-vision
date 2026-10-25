@@ -340,7 +340,10 @@ try {
     const r4 = await login(MAIN_HOST, adminUser, adminPass)
     check('R4 主站 + 超管正确密码 → 401（修复前为 403，可探测密码命中）', r4.status, 401)
     check('R4 不签发会话', r4.setCookie, undefined)
-    check('R5 R3/R4 响应体逐字节一致（对外完全同构）', r4.body === r3.body, true)
+    // P0-3：错误体携带 requestId（每次唯一）——同构断言剔除该字段后逐字节比较
+    // （requestId 是随机关联标识，不泄露账号/入口信息，不破坏同构语义）
+    const stripRequestId = (body: string): string => body.replace(/"requestId":"[0-9a-f-]{36}"/g, '"requestId":"*"')
+    check('R5 R3/R4 响应体（剔除 requestId 后）逐字节一致（对外完全同构）', stripRequestId(r4.body) === stripRequestId(r3.body), true)
 
     // 第 3 次失败：入口正确但用户不存在，同样计满阈值 → 触发锁定
     const r6 = await login(ADMIN_HOST, 'no-such-user', 'whatever')
