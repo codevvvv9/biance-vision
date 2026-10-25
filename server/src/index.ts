@@ -76,6 +76,7 @@ import { startQueue } from './queue.js'
 import { clientIpOf, registerAuthRoutes, AUTH_ANON_ALLOW } from './authRoutes.js'
 import { WS_MAX_PAYLOAD_BYTES } from './security/limits.js'
 import { registerHttpQuotaGuard } from './security/httpQuota.js'
+import { registerTelemetryRoute } from './observability/telemetryRoute.js'
 import { RATE_POLICIES, rateLimitConsume } from './security/rateLimit.js'
 import { isSameOrigin } from './security/sourceGuard.js'
 import { allowedOrigins } from './security/cors.js'
@@ -365,6 +366,8 @@ const auth = registerAuthRoutes(app, { entryKind: 'user', clientIp })
 const requireSession = auth.requireSession
 // Global metering runs before model handlers, after live session validation.
 registerAiAccessGuard(app, { requireSession })
+// P2a-3：遥测批量上报端点（user 会话；batch 配额 enforce）
+registerTelemetryRoute(app, { purpose: 'user', requireSession, clientIp })
 // P1-4 HTTP 配额（全 shadow）：读/写按 用户+IP 双桶——鉴权钩子之后注册（可取会话用户）
 registerHttpQuotaGuard(app, { resolveUser: (req) => {
   try { return requireSession(req).username } catch { return null }
