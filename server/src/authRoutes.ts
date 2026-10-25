@@ -15,6 +15,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { LOGIN_LOCK_FAILS, LOGIN_MAX_PER_WINDOW } from './env.js'
 import { LOGIN_LOCK_MS, LOGIN_WINDOW_MS, clearLoginGuard, loginGuardOf, saveLoginGuard } from './loginGuard.js'
+import { clientIp } from './security/trust.js'
 import { isDbAvailable } from './db.js'
 import { log, kv, briefUa } from './logger.js'
 import { endSessionAudit, recordFailedLogin, startSessionAudit } from './audit.js'
@@ -44,21 +45,12 @@ export function unauthorized(): Error {
 }
 
 /**
- * 客户端 IP（W3-S3 共享）：XFF 末段（可被伪造的首段忽略）→ x-real-ip → 连接地址。
+ * 客户端 IP（P0-2 起统一走信任链解析）：不再手工读 XFF/X-Real-IP——由 Fastify 按
+ * BV_TRUSTED_PROXIES（security/trust.ts）解析 req.ip；不可信来源的伪造头一律无效。
  * 两进程必须同口径——限速按 IP 计数在共享 PG 行上，口径漂移=计数分裂（实测踩坑）。
+ * 保留导出名兼容两入口的既有引用（const clientIp = clientIpOf）。
  */
-export function clientIpOf(req: FastifyRequest): string {
-  const last = (v: string | string[] | undefined): string => {
-    const raw = Array.isArray(v) ? v.join(',') : v
-    const parts = (raw ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-    return parts.length > 0 ? parts[parts.length - 1] : ''
-  }
-  const xf = last(req.headers['x-forwarded-for'])
-  if (xf) return xf.slice(0, 64)
-  const real = last(req.headers['x-real-ip'])
-  if (real) return real.slice(0, 64)
-  return String(req.ip ?? '')
-}
+export const clientIpOf = clientIp
 
 /** 浏览器 / 客户端标识（截断，用于会话审计） */
 function userAgent(req: FastifyRequest): string {

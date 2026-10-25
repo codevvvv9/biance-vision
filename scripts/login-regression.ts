@@ -148,7 +148,9 @@ function baseDatabaseUrl(): URL {
 function startServer(overrides: Record<string, string>, entry = 'src/index.ts'): { child: ChildProcess; log: string[] } {
   const child = spawn('npx', ['tsx', entry], {
     cwd: SERVER_DIR,
-    env: { ...process.env, ...overrides },
+    // BV_TRUSTED_PROXIES=127.0.0.1：P0-2 起客户端 IP 走信任链解析——测试从回环
+    // 注入 XFF 模拟不同 IP（限速/锁定按 IP 分桶语义），需显式信任回环代理
+    env: { ...process.env, BV_TRUSTED_PROXIES: '127.0.0.1', ...overrides },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const serverLog: string[] = []

@@ -11,6 +11,7 @@ import { createRequire } from 'node:module'
 import { cookieSecure, clearSessionCookie, sessionCookie } from '../server/src/security/cookies.js'
 import { allowedOrigins, corsOptions } from '../server/src/security/cors.js'
 import { WS_MAX_PAYLOAD_BYTES } from '../server/src/security/limits.js'
+import { clientIp, normalizeIp, trustProxyOption, trustedProxies } from '../server/src/security/trust.js'
 
 let failed = 0
 let checked = 0
@@ -143,6 +144,47 @@ async function q2Websocket(): Promise<void> {
   }
 }
 
+// ---- P0-2 可信代理与统一 IP（单元 + 进程内 inject 行为）----
+interface IpApp {
+  get(path: string, handler: (req: { ip: string }) => unknown): void
+  inject(req: { method: string; url: string; headers?: Record<string, string>; remoteAddress?: string }): Promise<{ statusCode: number; body: string }>
+  close(): Promise<void>
+}
+
+function trustUnit(): void {
+  const prev = process.env.BV_TRUSTED_PROXIES
+  try {
+    delete process.env.BV_TRUSTED_PROXIES
+    check('T0a 未配置 → 不信任任何代理（trustProxy=false）', trustProxyOption(), false)
+    process.env.BV_TRUSTED_PROXIES = '172.16.0.0/12, 127.0.0.1'
+    check('T0b 配置解析（列表 + 去空格）', trustedProxies().join('|'), '172.16.0.0/12|127.0.0.1')
+  } finally {
+    if (prev === undefined) delete process.env.BV_TRUSTED_PROXIES
+    else process.env.BV_TRUSTED_PROXIES = prev
+  }
+  check('T0c IPv4-mapped IPv6 规范化', normalizeIp('::ffff:198.51.100.9'), '198.51.100.9')
+}
+
+async function trustBehavior(): Promise<void> {
+  const mkFastify = nodeRequire('fastify') as (opts: { logger: boolean; trustProxy: boolean | string[] }) => IpApp
+  const untrusted = mkFastify({ logger: false, trustProxy: false })
+  untrusted.get('/ip', (req) => req.ip)
+  const r1 = await untrusted.inject({
+    method: 'GET', url: '/ip', remoteAddress: '127.0.0.1',
+    headers: { 'x-forwarded-for': '1.2.3.4,9.9.9.9', 'x-real-ip': '8.8.8.8' },
+  })
+  check('T1 不可信代理：伪造 XFF/X-Real-IP 无效（req.ip=socket 对端）', r1.body, '127.0.0.1')
+  await untrusted.close()
+
+  const trusted = mkFastify({ logger: false, trustProxy: ['127.0.0.1'] })
+  trusted.get('/ip', (req) => clientIp(req as never))
+  const r2 = await trusted.inject({ method: 'GET', url: '/ip', remoteAddress: '127.0.0.1', headers: { 'x-forwarded-for': '203.0.113.7' } })
+  check('T2 可信回环代理：XFF 真实客户端生效（统一 clientIp）', r2.body, '203.0.113.7')
+  const r3 = await trusted.inject({ method: 'GET', url: '/ip', remoteAddress: '127.0.0.1', headers: { 'x-forwarded-for': '::ffff:198.51.100.9' } })
+  check('T3 统一 clientIp 做 IPv4-mapped 规范化（计数不分裂）', r3.body, '198.51.100.9')
+  await trusted.close()
+}
+
 // ---- 接线静态检查（单点定义被入口真实使用；防「模块存在但未接线」）----
 function wiringChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -161,13 +203,29 @@ function wiringChecks(): void {
   const contractImports = [...contracts.matchAll(/from '([^']+)'/g)].map((m) => m[1])
   check('W8 platform-contracts 零运行时依赖（无 node:/server/web/相对导入）',
     contractImports.every((s) => !s.startsWith('node:') && !s.startsWith('../') && !s.includes('server') && !s.includes('web')), true)
+  // P0-2：可信代理接线
+  const vpsCaddy = read('../deploy/vps/Caddyfile')
+  const oracleCaddy = read('../deploy/oracle/Caddyfile')
+  check('W9 两份 Caddyfile 终端/backend/admin 块均覆盖 XFF/X-Real-IP（各 3 块）',
+    vpsCaddy.split('header_up X-Forwarded-For {remote_host}').length - 1 === 3 &&
+    oracleCaddy.split('header_up X-Forwarded-For {remote_host}').length - 1 === 3 &&
+    vpsCaddy.includes('header_up X-Real-IP {remote_host}') && oracleCaddy.includes('header_up X-Real-IP {remote_host}'), true)
+  check('W10 两份 compose override 注入 BV_TRUSTED_PROXIES',
+    read('../deploy/vps/compose.override.yml').includes('BV_TRUSTED_PROXIES') &&
+    read('../deploy/oracle/compose.override.yml').includes('BV_TRUSTED_PROXIES'), true)
+  check('W11 buildApp 经 trustProxyOption（废除 trustProxy:true 反射）', app.includes('trustProxy: trustProxyOption()') && !app.includes('trustProxy: true'), true)
+  check('W12 clientIpOf 不再手工读转发头（统一信任链）', !read('../server/src/authRoutes.ts').includes("'x-forwarded-for'"), true)
 }
 
 // ---- main ----
 q1Cookies()
 await q3Cors()
+trustUnit()
 wiringChecks()
-if (!staticOnly) await q2Websocket()
+if (!staticOnly) {
+  await q2Websocket()
+  await trustBehavior()
+}
 
 console.log(`\n${failed === 0 ? '✔' : '✖'} security-gate-check：${checked - failed}/${checked} 通过${staticOnly ? '（--static 模式：运行断言未执行）' : ''}`)
 process.exit(failed === 0 ? 0 : 1)

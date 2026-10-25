@@ -10,10 +10,13 @@ import cors from '@fastify/cors'
 import { STATUS_CODES } from 'node:http'
 import { log } from './logger.js'
 import { corsOptions } from './security/cors.js'
+import { trustProxyOption } from './security/trust.js'
 import type { FastifyInstance } from 'fastify'
 
 export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInstance {
-  const app = Fastify({ logger: false, trustProxy: true })
+  // P0-2：代理信任单点——空 = 不信任（socket 对端），列表 = 按信任链解析；
+  // 禁止 true（反射任意来源伪造 XFF）
+  const app = Fastify({ logger: false, trustProxy: trustProxyOption() })
 
   // 统一错误映射：路由内 throw Object.assign(new Error(msg), { statusCode, code? })
   // 转为 { statusCode, error, message, code? }——message 面向最终用户（前端原样展示）；
