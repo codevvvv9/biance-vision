@@ -22,6 +22,8 @@ import { buildApp } from './fastifyApp.js'
 import { clientIpOf, registerAuthRoutes, unauthorized, AUTH_ANON_ALLOW } from './authRoutes.js'
 import { registerHttpQuotaGuard } from './security/httpQuota.js'
 import { registerTelemetryRoute } from './observability/telemetryRoute.js'
+import { registerCspReportRoute } from './observability/cspReport.js'
+import { registerDiagnosticsGrantRoutes } from './observability/diagnosticsGrant.js'
 import { registerObservabilityAdminRoutes } from './observability/adminRoutes.js'
 import { initDb, isDbAvailable } from './db.js'
 import { initUsers, initSessions, readSessionToken, findSession } from './users.js'
@@ -80,7 +82,8 @@ app.addHook('preHandler', async (req, reply) => {
   const url = req.url.split('?')[0]
   if (!url.startsWith('/api/')) return
   // P0-2b：/api/auth/* 前缀白名单收敛为精确路由集合（新增匿名可访问端点必须显式列名）
-  if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' || AUTH_ANON_ALLOW.has(url)) return
+  if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' ||
+    AUTH_ANON_ALLOW.has(url) || url === '/api/security/csp-report' || url === '/api/observability/diagnostics/grant') return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {
@@ -112,6 +115,8 @@ app.addHook('onResponse', (req, reply, done) => {
 // P2a-4：观测查询三视图（superadmin；监控页 AdminObservabilityPage）
 registerObservabilityAdminRoutes(app, { requireSuperadmin })
 // P2a-3：遥测批量上报端点（admin 会话）
+registerCspReportRoute(app, { purpose: 'admin', clientIp })
+registerDiagnosticsGrantRoutes(app, { requireSuperadmin })
 registerTelemetryRoute(app, { purpose: 'admin', requireSession: (req) => auth.requireSession(req), clientIp })
 registerHttpQuotaGuard(app, {
   resolveUser: (req) => {

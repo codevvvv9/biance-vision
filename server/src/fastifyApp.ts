@@ -53,6 +53,14 @@ export function buildApp(opts: BuildAppOptions = { cors: true }): FastifyInstanc
     }
   })
 
+  // P3-3 CSP（report-only 起步；验证后经 BV_CSP_MODE=enforce 切换——可独立回退
+  // 到 report-only 而不撤销策略；官网 Next 有专属 CSP 不经过此处）
+  const cspHeader = process.env.BV_CSP_MODE === 'enforce' ? 'content-security-policy' : 'content-security-policy-report-only'
+  const cspValue = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+  app.addHook('onRequest', async (_req, reply) => {
+    reply.header(cspHeader, cspValue)
+  })
+
   // P2b-1：HTTP 指标分桶计数（内存全量；分钟快照入 metric_batches 由 worker 聚合）
   app.addHook('onResponse', (req, reply, done) => {
     recordHttpMetric(purpose === 'admin' ? 'admin-api' : 'user-api', req.routeOptions?.url ?? null, req.method, reply.statusCode, reply.elapsedTime ?? 0)

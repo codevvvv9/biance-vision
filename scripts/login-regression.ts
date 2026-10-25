@@ -476,6 +476,11 @@ try {
       if (!(await waitForHealth(30_000, ADMIN_PORT))) throw new Error(`P5 admin-api 未就绪：${s3a.log.slice(-8).join('\n')}`)
       const p5 = await login(MAIN_HOST, normalUser, normalPass, '10.99.1.8')
       check('P5 PG 不可用时登录被拒 503（fail-closed，user-api）', p5.status, 503)
+      // P2b-4 故障演练（PG 死端口进程）：live 恒 200（不查依赖）、ready 503（身份存储不可用）
+      const liveProbe = await fetch(`http://127.0.0.1:${PORT}/api/health/live`, { signal: AbortSignal.timeout(2000) })
+      check('P5a PG 不可用时 /api/health/live 仍 200（轻量存活）', liveProbe.status, 200)
+      const readyProbe = await fetch(`http://127.0.0.1:${PORT}/api/health/ready`, { signal: AbortSignal.timeout(3000) })
+      check('P5b PG 不可用时 /api/health/ready → 503（readiness 准入信号）', readyProbe.status, 503)
       const p5a = await login(ADMIN_HOST, adminUser, adminPass, '10.99.1.9')
       check('P5 admin-api 同样 fail-closed 503', p5a.status, 503)
       check('P5 fail-closed 日志证据', s3.log.join('\n').includes('fail-closed') || (s3a?.log.join('\n').includes('fail-closed') ?? false), true)

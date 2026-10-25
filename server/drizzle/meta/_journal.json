@@ -239,6 +239,13 @@
       "when": 1792919000000,
       "tag": "0033_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792920000000,
+      "tag": "0034_diagnostic_grants",
+      "breakpoints": true
     }
   ]
 }
