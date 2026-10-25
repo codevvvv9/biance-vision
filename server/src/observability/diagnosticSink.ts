@@ -33,7 +33,7 @@ export interface DiagnosticEvent {
 
 interface QueuedEvent extends DiagnosticEvent {
   eventId: string
-  source: 'server'
+  source: 'server' | 'browser'
   purpose: 'user' | 'admin'
   subjectHash: string
   fingerprint?: string
@@ -88,6 +88,27 @@ export function tryRecord(
     // 诊断存储主体走哈希（与限流同一 HMAC 口径；IP/用户名不落原文，§9.1）
     subjectHash: `${subject.length}:${crypto.createHash('sha256').update(subject).digest('hex').slice(0, 32)}`,
     fingerprint: opts.fingerprint,
+    bytes: payloadText.length > SAMPLE_MAX_BYTES ? SAMPLE_MAX_BYTES : payloadText.length,
+  })
+}
+
+/**
+ * 浏览器事件入口（P2a-3）：source='browser'，eventId 由客户端生成（去重键），
+ * 服务端不重新生成——伪造 eventId 只能覆盖同 (source,purpose,subject,eventId)
+ * 的自己记录，不能覆盖其他来源。payload 已由端点按白名单校验。
+ */
+export function tryRecordBrowser(
+  purpose: 'user' | 'admin',
+  subject: string,
+  evt: DiagnosticEvent & { eventId: string },
+): void {
+  if (!started) start()
+  const payloadText = JSON.stringify(sanitizeForLog(evt.payload))
+  enqueue({
+    ...evt,
+    source: 'browser',
+    purpose,
+    subjectHash: `${subject.length}:${crypto.createHash('sha256').update(subject).digest('hex').slice(0, 32)}`,
     bytes: payloadText.length > SAMPLE_MAX_BYTES ? SAMPLE_MAX_BYTES : payloadText.length,
   })
 }

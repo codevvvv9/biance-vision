@@ -20,3 +20,5 @@ export { Dropdown } from './research/Dropdown'
 export type { DropdownOption } from './research/Dropdown'
 export { useAnchoredPanel } from './research/anchoredPanel'
 export type { AnchoredPanelPos } from './research/anchoredPanel'
+
+export { startTelemetry, stopTelemetry, resetTelemetrySubject, reportOperationFailed, reportClientError, telemetryStats } from './telemetry'

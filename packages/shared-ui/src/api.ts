@@ -1,4 +1,5 @@
 import i18n from './i18n'
+import { reportOperationFailed } from './telemetry'
 import type {
   AdminConversationDetail,
   AdminConversationSummary,
@@ -67,13 +68,16 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     } catch {
       /* noop */
     }
-    throw new ApiError({
+    const apiErr = new ApiError({
       status: res.status,
       message: detail || i18n.t('common:api.requestFailed', { code: res.status }),
       code,
       requestId: res.headers.get('x-request-id') ?? undefined,
       retryAfterSeconds,
     })
+    // P2a-3：已知 UI 操作失败自动上报（telemetry 用原生 fetch，不经本函数——无递归）
+    reportOperationFailed(path.slice(0, 64), apiErr)
+    throw apiErr
   }
   return (await res.json()) as T
 }
