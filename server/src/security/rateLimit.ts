@@ -50,6 +50,8 @@ export const RATE_POLICIES: Readonly<Record<string, RatePolicy>> = {
   'ws.handshake:ip': { id: 'ws.handshake:ip', limit: 30, windowMs: 60_000, mode: 'shadow' },
   // P2a-3：遥测批配额（enforce——可丢遥测的 429 不影响业务；每批 ≤20 事件）
   'telemetry:user': { id: 'telemetry:user', limit: 10, windowMs: 60_000, mode: 'enforce' },
+  // P3-3：CSP 报告通道（匿名端点强制配额，防伪造报告填存储）
+  'csp.report:ip': { id: 'csp.report:ip', limit: 10, windowMs: 60_000, mode: 'enforce' },
   'telemetry:ip': { id: 'telemetry:ip', limit: 30, windowMs: 60_000, mode: 'enforce' },
 }
 

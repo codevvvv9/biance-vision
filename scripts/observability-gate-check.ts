@@ -26,6 +26,38 @@ function check(name: string, actual: unknown, expected: unknown = true): void {
 const staticOnly = process.argv.includes('--static')
 
 
+// ---- P3-3/P3-4：CSP 接线与构建产物断言（--artifacts 在构建后跑）----
+function p3Checks(): void {
+  const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
+  check('P3a CSP report-only 头在共享构造点（两端 SPA 获得）',
+    read('../server/src/fastifyApp.ts').includes('content-security-policy-report-only'), true)
+  check('P3b CSP 报告端点两端注册+匿名白名单+16KiB',
+    read('../server/src/index.ts').includes('csp-report') && read('../server/src/adminApi.ts').includes('csp-report') &&
+    read('../server/src/observability/cspReport.ts').includes('16 * 1024'), true)
+  check('P3c 生产 debug 默认不挂（DEV 分支挂载）',
+    read('../web/src/main.tsx').includes('import.meta.env.DEV) mountDevDebug()'), true)
+  check('P3d 诊断授权绑定会话哈希+15 分钟+审计',
+    read('../server/src/observability/diagnosticsGrant.ts').includes('admin_session_hash') &&
+    read('../server/src/observability/diagnosticsGrant.ts').includes('15 * 60_000'), true)
+}
+
+function artifactChecks(): void {
+  const nodeFs = require('node:fs') as typeof import('node:fs')
+  for (const dist of ['dist', 'dist-admin']) {
+    const dir = new URL(`../web/${dist}/assets`, import.meta.url).pathname
+    if (!nodeFs.existsSync(dir)) {
+      check(`P3e ${dist} 产物存在（先构建）`, false, true)
+      continue
+    }
+    const files = nodeFs.readdirSync(dir)
+    const hasDebug = files.some((f) => f.endsWith('.js') && nodeFs.readFileSync(`${dir}/${f}`, 'utf8').includes('__BV_DEBUG__'))
+    check(`P3e ${dist} 生产产物零 __BV_DEBUG__（DBG-03）`, hasDebug, false)
+    check(`P3f ${dist} 无公开 sourcemap（.map）`, files.some((f) => f.endsWith('.map')), false)
+  }
+}
+
+const require = createRequire(import.meta.url)
+
 function staticChecks(): void {
   const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
   check('OG5a 观测三端点仅注册于 admin-api（user-api 无 /api/admin/* 路由）',
@@ -53,7 +85,9 @@ async function alertUnit(): Promise<void> {
   check('OA8 无事件且正常 → none', evaluateAlert(rule, { value: 1_000, evidence: {} }, null).action, 'none')
 }
 
+p3Checks()
 void alertUnit()
+if (process.argv.includes('--artifacts')) artifactChecks()
 
 if (!staticOnly) {
   // 独立库：sink 落库 + 聚合（❗所有会间接加载 db.ts 的 import 必须在 env 设置后——

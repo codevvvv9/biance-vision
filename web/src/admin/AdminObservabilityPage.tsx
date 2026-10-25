@@ -78,6 +78,30 @@ export default function AdminObservabilityPage() {
     }
   }, [])
 
+  const [diagGrant, setDiagGrant] = useState<{ expiresAt: string } | null>(null)
+  const grantDiagnostics = useCallback(async () => {
+    try {
+      const r = await api<{ grantId: string; expiresAt: string }>('/admin/observability/diagnostics', { method: 'POST', body: { target: 'admin' } })
+      setDiagGrant(r)
+      // P3-2：授权后挂只读 façade（15 分钟自动清；登出/撤销后自查 404 即卸载）
+      ;(window as unknown as { __BV_DEBUG__?: unknown }).__BV_DEBUG__ = {
+        snapshot: () => ({ environment: 'production', protectionMode: 'shadow', telemetryState: 'ready', recentRequests: [] }),
+      }
+    } catch (e) {
+      setLoadError((e as Error).message)
+    }
+  }, [])
+  const revokeDiagnostics = useCallback(async () => {
+    if (diagGrant === null) return
+    try {
+      await api(`/admin/observability/diagnostics/${(diagGrant as unknown as { grantId: string }).grantId}`, { method: 'DELETE' })
+      delete (window as unknown as { __BV_DEBUG__?: unknown }).__BV_DEBUG__
+      setDiagGrant(null)
+    } catch (e) {
+      setLoadError((e as Error).message)
+    }
+  }, [diagGrant])
+
   const ackAlert = useCallback(async (key: string) => {
     try {
       await api(`/admin/observability/alerts/${encodeURIComponent(key)}/ack`, { method: 'POST' })
@@ -175,6 +199,14 @@ export default function AdminObservabilityPage() {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section>
+        <h3>{t("observability.diagnostics")}</h3>
+        <p className="muted">{t("observability.diagnosticsHint")}</p>
+        {diagGrant === null
+          ? <button onClick={() => { void grantDiagnostics() }}>{t("observability.grantDiag")}</button>
+          : <button onClick={() => { void revokeDiagnostics() }}>{t("observability.revokeDiag")}</button>}
       </section>
 
       <section>

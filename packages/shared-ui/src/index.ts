@@ -22,3 +22,5 @@ export { useAnchoredPanel } from './research/anchoredPanel'
 export type { AnchoredPanelPos } from './research/anchoredPanel'
 
 export { startTelemetry, stopTelemetry, resetTelemetrySubject, reportOperationFailed, reportClientError, telemetryStats } from './telemetry'
+export { mountDevDebug, debugRecordRequest } from './telemetry/devDebug'
+export type { BvDebugSnapshot } from './telemetry/devDebug'

@@ -77,6 +77,7 @@ import { clientIpOf, registerAuthRoutes, AUTH_ANON_ALLOW } from './authRoutes.js
 import { WS_MAX_PAYLOAD_BYTES } from './security/limits.js'
 import { registerHttpQuotaGuard } from './security/httpQuota.js'
 import { registerTelemetryRoute } from './observability/telemetryRoute.js'
+import { registerCspReportRoute } from './observability/cspReport.js'
 import { RATE_POLICIES, rateLimitConsume } from './security/rateLimit.js'
 import { isSameOrigin } from './security/sourceGuard.js'
 import { allowedOrigins } from './security/cors.js'
@@ -308,7 +309,8 @@ app.addHook('preHandler', async (req, reply) => {
     reply.code(404).send({ message: 'Not Found' })
     return
   }
-  if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' || AUTH_ANON_ALLOW.has(url)) return
+  if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' ||
+    AUTH_ANON_ALLOW.has(url) || url === '/api/security/csp-report') return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {
@@ -367,6 +369,7 @@ const requireSession = auth.requireSession
 // Global metering runs before model handlers, after live session validation.
 registerAiAccessGuard(app, { requireSession })
 // P2a-3：遥测批量上报端点（user 会话；batch 配额 enforce）
+registerCspReportRoute(app, { purpose: 'user', clientIp })
 registerTelemetryRoute(app, { purpose: 'user', requireSession, clientIp })
 // P1-4 HTTP 配额（全 shadow）：读/写按 用户+IP 双桶——鉴权钩子之后注册（可取会话用户）
 registerHttpQuotaGuard(app, { resolveUser: (req) => {
