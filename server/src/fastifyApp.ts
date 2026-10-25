@@ -14,9 +14,17 @@ import { corsOptions } from './security/cors.js'
 import { trustProxyOption } from './security/trust.js'
 import { localGateConsume } from './security/localGate.js'
 import { clientIp } from './security/trust.js'
+import { tryRecord } from './observability/diagnosticSink.js'
 import type { FastifyInstance } from 'fastify'
 
-export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInstance {
+export interface BuildAppOptions {
+  cors?: boolean
+  /** 入口用途（P2a-1 起诊断事件按入口标记） */
+  purpose?: 'user' | 'admin'
+}
+
+export function buildApp(opts: BuildAppOptions = { cors: true }): FastifyInstance {
+  const purpose = opts.purpose ?? 'user'
   // P0-2：代理信任单点——空 = 不信任（socket 对端），列表 = 按信任链解析；
   // 禁止 true（反射任意来源伪造 XFF）
   // P0-3：requestId 单点——进程内计数不足以保证双进程/重启后唯一，改 UUID；
@@ -60,6 +68,19 @@ export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInsta
     const e = err as { statusCode?: number; code?: string; message?: string; retryAfterSeconds?: number }
     const statusCode = typeof e.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600 ? e.statusCode : 500
     if (statusCode >= 500) log.error('http', '未处理异常', err)
+    // P2a-1：错误进诊断收件箱（可丢：同步有界不抛）；5xx 全量 + 4xx 计数样本，
+    // 指纹=statusCode+code（聚合键不含动态 ID/原始 message 变量，§9.4）
+    tryRecord(purpose, req.ip ?? 'unknown', {
+      kind: statusCode >= 500 ? 'http_error' : 'http_4xx',
+      requestId: req.id,
+      payload: {
+        method: req.method,
+        route: req.url.split('?')[0].slice(0, 128),
+        statusCode,
+        code: typeof e.code === 'string' ? e.code : null,
+        message: statusCode >= 500 ? null : String(e.message ?? '').slice(0, 200),
+      },
+    }, { fingerprint: `http:${statusCode}:${typeof e.code === 'string' ? e.code : 'none'}` })
     const body: Record<string, unknown> = {
       statusCode,
       error: STATUS_CODES[statusCode] ?? 'Error',

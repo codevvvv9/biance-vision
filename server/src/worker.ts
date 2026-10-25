@@ -136,6 +136,24 @@ await boss.work(Q_SWEEP_SLOW, async () => {
 await boss.schedule(Q_SWEEP_FAST, '* * * * *')
 await boss.schedule(Q_SWEEP_SLOW, '11 * * * *')
 
+// P2a-1 观测清理（独立并发 1，每分钟）：inbox 原始 14 天 / error_groups 30 天
+// 无新事件 / 限流与幂等桶过期；批 1000 行内（方案 §11.3）
+await boss.work('observability:cleanup', async () => {
+  const { getDb } = await import('./db.js')
+  const { sql } = await import('drizzle-orm')
+  const db = getDb()
+  if (!db) return
+  try {
+    await db.execute(sql`DELETE FROM observability_inbox WHERE received_at < now() - interval '14 days'`)
+    await db.execute(sql`DELETE FROM observability_error_groups WHERE last_seen < now() - interval '30 days'`)
+    await db.execute(sql`DELETE FROM security_rate_buckets WHERE expires_at < now() - interval '1 hour'`)
+    await db.execute(sql`DELETE FROM request_idempotency WHERE expires_at < now() - interval '1 day'`)
+  } catch (e) {
+    log.warn('observability', '清理任务失败（下轮重试）：', (e as Error).message)
+  }
+})
+await boss.schedule('observability:cleanup', '* * * * *')
+
 /** 首启动：无游标的序列回补最近 INITIAL_BACKFILL_BARS 根；已有游标的入队追平 */
 async function initialBackfill(): Promise<void> {
   const series = watchlistSeries()

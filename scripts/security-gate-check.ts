@@ -368,7 +368,7 @@ function wiringChecks(): void {
   check('W5 Cookie 属性单点（users.ts 无第二份属性定义）', !read('../server/src/users.ts').includes('SameSite=Lax; Max-Age'), true)
   // P0-1：真共享骨架——两入口均经 buildApp；index.ts 不再自建 Fastify 实例/错误处理器
   check('W6 user-api 经 buildApp 构造（P0-1 真共享）', index.includes("buildApp({ cors: true })") && !index.includes('const app = Fastify(') && !index.includes('app.setErrorHandler'), true)
-  check('W7 admin-api 经 buildApp 构造', read('../server/src/adminApi.ts').includes('buildApp({ cors: false })'), true)
+  check('W7 admin-api 经 buildApp 构造（admin purpose）', read('../server/src/adminApi.ts').includes("buildApp({ cors: false, purpose: 'admin' })"), true)
   // ARCH-01：契约包纯度——不 import server/web/Node 内置、无相对逃逸（浏览器可安全引用）
   const contracts = read('../packages/platform-contracts/src/index.ts')
   const contractImports = [...contracts.matchAll(/from '([^']+)'/g)].map((m) => m[1])

@@ -59,7 +59,7 @@ await initUsers()
 await initSessions()
 await initAudit()
 
-const app = buildApp({ cors: false })
+const app = buildApp({ cors: false, purpose: 'admin' }) // P2a-1：诊断按入口标记
 
 // 客户端 IP：与 user-api 同口径（共享实现 clientIpOf——口径漂移=限速计数分裂）
 const clientIp = clientIpOf
