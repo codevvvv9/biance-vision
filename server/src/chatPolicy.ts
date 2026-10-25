@@ -19,7 +19,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { getDb, isDbAvailable } from './db.js'
 import { appSettings } from './models.js'
 import { DATA_DIR, loadJson } from './store.js'
@@ -140,16 +140,35 @@ export async function assertChatAllowed(username: string): Promise<void> {
 
 /**
  * 成功完成一次交互后计数 +1（挂点在成功响应之前；失败/拒绝不计）。
+ * P1-3/C：改单条原子 SQL（数据库内完成跨日重置判断 + 目标用户递增）——
+ * 旧实现读整份 JSON → 内存加一 → 整份覆盖，并发下丢其他用户的更新；
+ * 且保持「成功交互」软管控口径：写失败仅告警不抛（不擅自变硬控制）。
  * 注意：postMessage 有 10s 同内容幂等窗，幂等重放走到这里会重复计数——
  * 本模块按「交互次数」宽松口径统计，重放多计可接受，不另做去重。
  */
+export async function recordChatMessage(username: string): Promise<void> {
+  const conn = getDb()
+  if (conn === null || !isDbAvailable()) {
+    log.warn('chatPolicy', '用量计数写失败（PG 不可用，本次计数丢失——非硬控制口径可接受）')
+    return
+  }
+  const today = todayStr()
+  try {
+    await conn.execute(sql`
+      INSERT INTO app_settings (key, value)
+      VALUES (${USAGE_KEY}, jsonb_build_object('date', ${today}::text, 'counts', jsonb_build_object(${username}::text, 1)))
+      ON CONFLICT (key) DO UPDATE SET value = CASE
+        WHEN app_settings.value->>'date' = ${today} THEN
+          jsonb_set(app_settings.value, ARRAY['counts'::text, ${username}::text],
+            to_jsonb(COALESCE((app_settings.value->'counts'->>${username})::int, 0) + 1))
+        ELSE jsonb_build_object('date', ${today}::text, 'counts', jsonb_build_object(${username}::text, 1))
+        END`)
+  } catch (e) {
+    log.warn('chatPolicy', '用量计数原子更新失败（本次计数丢失——非硬控制口径可接受）：', (e as Error).message)
+  }
+}
+
 /** 跨天滚动（纯函数，抽出供 scripts/chat-policy-check 直接自测）：非当日整体归零 */
 export function rollUsage(u: ChatUsage, today: string): ChatUsage {
   return u.date === today ? u : { date: today, counts: {} }
-}
-
-export async function recordChatMessage(username: string): Promise<void> {
-  const next = rollUsage(await loadUsage(), todayStr())
-  next.counts[username] = (next.counts[username] ?? 0) + 1
-  await saveUsage(next)
 }

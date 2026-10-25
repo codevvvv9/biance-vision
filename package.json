@@ -29,6 +29,7 @@
     "start": "pnpm --filter biance-vision-server run start",
     "brooks:causality": "tsx scripts/causality-check.ts",
     "chat:policy-check": "tsx scripts/chat-policy-check.ts",
+    "chat:usage-atomic-check": "tsx scripts/chat-usage-atomic-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
     "admin:gate-check": "tsx scripts/admin-gate-check.ts",
     "login:regression": "tsx scripts/login-regression.ts",
