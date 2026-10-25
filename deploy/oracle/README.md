@@ -58,10 +58,25 @@ git clone https://github.com/codevvvv9/biance-vision.git && cd biance-vision
 
 BV_VERSION=0.2.x docker compose \
   -f docker-compose.yml -f deploy/oracle/compose.override.yml up -d
-curl -s http://127.0.0.1:3200/api/health   # 验证
+curl -s http://127.0.0.1:3200/api/health   # 验证（仅进程存活；来源守卫类变更还须走第 6 步后的写冒烟）
 ```
 
 覆盖层做了三件事：app/research-py 去本地构建改 GHCR、worker 镜像同步、**PG 端口收敛到 127.0.0.1**（根 compose 的 0.0.0.0 + 弱口令只适合本机开发，公网机器绝不能直接暴露）。
+
+### 上线验证必须走公网入口的写请求（来源守卫冒烟）
+
+`curl 127.0.0.1:3200/api/health` 是 GET 且不带 Origin 头，永远不会经过写来源
+守卫——2026-10-25 事故正是这样漏过的。Caddy 域名配好后补一条**带 Origin 的写
+冒烟**（期望非 403：400/401 都说明守卫已放行），浏览器真实登录一次（用户端 +
+管理端）是最终验收：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://<用户域名>/api/auth/login" \
+  -H 'Content-Type: application/json' -H 'Origin: https://<用户域名>' -d '{}'
+```
+
+若前后端确实分域部署，用 `BV_ALLOWED_ORIGINS`（精确 origin 逗号分隔）显式
+放行，详见 `docs/security-observability-implementation-plan.md` §3.2 修订块。
 
 ## 5. 数据迁移（本机 → 服务器）
 

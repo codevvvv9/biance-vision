@@ -2,6 +2,7 @@
  * 安全专项门禁（pnpm security:gate-check；--static 只跑无副作用断言）
  * ——《反爬、安全防护与可观测性实施方案》§15.1 的专项脚本，逐批增量添断言：
  *   当前覆盖：Q 快赢四项（Cookie 环境感知 / WS maxPayload / CORS 白名单 / health 收敛）；
+ *   来源判定单点（origin.ts：协议感知同源 + 对称端口归一 + 生产反代形态回归）；
  *   P0 起接入 release:gate，并按批次扩展来源/错误契约/限流/幂等等运行断言。
  * 全部断言不触业务库（Q 项无需 DB）；静态接线检查钉住「单点定义被真实接线」，
  * 防止只在模块里定义、入口未使用（假共享教训）。
@@ -15,6 +16,7 @@ import { clientIp, normalizeIp, trustProxyOption, trustedProxies } from '../serv
 import { buildApp } from '../server/src/fastifyApp.js'
 import { csrfSeedCookie, csrfSeedSubjectOf, issueCsrfToken, sessionSubjectHash, verifyCsrfToken } from '../server/src/security/csrf.js'
 import { registerSourceGuard } from '../server/src/security/sourceGuard.js'
+import { classifyOrigin } from '../server/src/security/origin.js'
 
 let failed = 0
 let checked = 0
@@ -223,10 +225,41 @@ function csrfUnit(): void {
   }
 }
 
+// ---- P0-2b 来源判定单点（origin.ts 纯函数：协议感知 + 对称默认端口归一）----
+// 2026-10-25 线上事故锚点：原实现 Host 侧默认端口写死 80，TLS 终止在反代的
+// HTTPS 默认端口生产拓扑（Origin 归一 443 vs Host 80）被整体误判跨源、登录全站
+// 403。O 组矩阵钉住全部部署形态，G8-G10（sourceGuardBehavior）钉住行为接线。
+function originUnit(): void {
+  const EMPTY = new Set<string>()
+  const ALLOW = new Set(['https://app.example.dev:5173'])
+  const v = (o: unknown, proto: string, host: string | undefined, allow: ReadonlySet<string> = EMPTY) =>
+    classifyOrigin(o, proto, host, allow)
+  check('O1 生产反代形态（https 默认端口，Host 无端口）判同源 —— 事故形态', v('https://api.example.com', 'https', 'api.example.com'), 'same')
+  check('O2 生产反代非默认端口（Host 带显式端口）判同源', v('https://api.example.com:8443', 'https', 'api.example.com:8443'), 'same')
+  check('O3 显式默认端口与无端口对称归一（:443 ≡ 空）', v('https://api.example.com:443', 'https', 'api.example.com'), 'same')
+  check('O4 直连显式端口（本地/脚本模拟）判同源', v('http://127.0.0.1:3200', 'http', '127.0.0.1:3200'), 'same')
+  check('O5 IPv6 Host（brackets 形式）判同源', v('http://[::1]:3200', 'http', '[::1]:3200'), 'same')
+  check('O6 跨站 Origin 判 foreign', v('https://evil.example', 'https', 'api.example.com'), 'foreign')
+  check('O7 同主机不同端口判 foreign', v('http://api.example.com:9999', 'http', 'api.example.com'), 'foreign')
+  check('O8 协议不一致判 foreign（未配置信任链时 XFP 不采信，fail-closed）', v('https://api.example.com', 'http', 'api.example.com'), 'foreign')
+  check('O9 null Origin 判 foreign', v('null', 'https', 'api.example.com'), 'foreign')
+  check('O10 畸形 Origin（带路径 / 缺 scheme / 裸 IPv6 Host）判 foreign',
+    v('https://a.example/x', 'https', 'a.example') === 'foreign' &&
+    v('a.example', 'https', 'a.example') === 'foreign' &&
+    v('http://::1:3200', 'http', '::1:3200') === 'foreign', true)
+  check('O11 无 Origin 判 absent（非浏览器放行语义由调用方决定）', v(undefined, 'https', 'api.example.com'), 'absent')
+  check('O12 白名单精确命中判 same、端口不一致不命中',
+    v('https://app.example.dev:5173', 'https', 'api.example.com', ALLOW) === 'same' &&
+    v('https://app.example.dev', 'https', 'api.example.com', ALLOW) === 'foreign', true)
+  check('O13 Host 缺失判 foreign（不因信息缺失放水）', v('https://api.example.com', 'https', undefined), 'foreign')
+}
+
 // ---- P0-2b 来源守卫（inject 行为：Origin 硬校验 + token verify 模式）----
 async function sourceGuardBehavior(): Promise<void> {
   process.env.BV_CSRF_KEY = 'c'.repeat(64)
+  const prevAllowed = process.env.BV_ALLOWED_ORIGINS
   try {
+    delete process.env.BV_ALLOWED_ORIGINS
     const app = buildApp({ cors: true })
     registerSourceGuard(app, { verify: (_req, token) => verifyCsrfToken(token, 'seed-sub', 'user') })
     app.post('/api/echo', async () => ({ ok: true }))
@@ -243,8 +276,30 @@ async function sourceGuardBehavior(): Promise<void> {
     check('G6 无 Origin（curl/脚本）→ 放行', await post({}), 200)
     check('G7 GET 不受守卫拦截（含跨源）', (await app.inject({ method: 'GET', url: '/api/echo', headers: { host, origin: 'https://evil.example' } })).statusCode, 200)
     await app.close()
+
+    // 生产反代形态行为回归（2026-10-25 事故锚点）：TLS 终止在 Caddy、默认端口、
+    // Host 无端口、协议来自可信链 X-Forwarded-Proto——上一版实现在这里对登录全站 403。
+    interface TrusterApp { post: (u: string, handler: unknown) => unknown; inject: (o: unknown) => Promise<{ statusCode: number }>; close: () => Promise<void> }
+    const mkFastify = nodeRequire('fastify') as (opts: { logger: boolean; trustProxy: boolean | string[] }) => TrusterApp
+    const proxiedHeaders = { host: 'api.example.com', origin: 'https://api.example.com', 'x-forwarded-proto': 'https' }
+    const trusted = mkFastify({ logger: false, trustProxy: ['127.0.0.1'] })
+    registerSourceGuard(trusted as never, { verify: () => true })
+    trusted.post('/api/echo', async () => ({ ok: true }))
+    check('G8 生产反代形态（可信链 XFP https + 无端口 Host + https Origin）放行',
+      (await trusted.inject({ method: 'POST', url: '/api/echo', remoteAddress: '127.0.0.1', headers: proxiedHeaders })).statusCode, 200)
+    check('G9 生产反代形态跨源 Origin 仍拒',
+      (await trusted.inject({ method: 'POST', url: '/api/echo', remoteAddress: '127.0.0.1', headers: { ...proxiedHeaders, origin: 'https://evil.example' } })).statusCode, 403)
+    await trusted.close()
+    const untrusted = mkFastify({ logger: false, trustProxy: false })
+    registerSourceGuard(untrusted as never, { verify: () => true })
+    untrusted.post('/api/echo', async () => ({ ok: true }))
+    check('G10 不可信链不采信 XFP（同头但 trustProxy 未配置 → 403 fail-closed）',
+      (await untrusted.inject({ method: 'POST', url: '/api/echo', remoteAddress: '127.0.0.1', headers: proxiedHeaders })).statusCode, 403)
+    await untrusted.close()
   } finally {
     delete process.env.BV_CSRF_KEY
+    if (prevAllowed === undefined) delete process.env.BV_ALLOWED_ORIGINS
+    else process.env.BV_ALLOWED_ORIGINS = prevAllowed
   }
 }
 
@@ -407,20 +462,36 @@ function wiringChecks(): void {
 
 function wsChecks(): void {
   const index = readFileSync(new URL('../server/src/index.ts', import.meta.url), 'utf8')
-  check('W20a WS Origin 校验（isSameOrigin + 4003 origin_rejected）',
-    index.includes("isSameOrigin(wsOrigin, req.headers.host") && index.includes("'origin_rejected'"), true)
+  const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8')
+  check('W20a WS Origin 校验经 origin.ts 单点（requestOriginAllowed + 4003 origin_rejected）',
+    index.includes('requestOriginAllowed(req, wsAllowOrigins)') && index.includes("'origin_rejected'"), true)
   check('W20b WS 消息限速（10/s 突发 20 令牌桶 + 4008）', index.includes('4008') && index.includes('msgBucket'), true)
   check('W20c WS K 线订阅上限 20', index.includes('state.klines.size >= 20'), true)
   check('W20d WS 发送背压（>1MiB 跳过快照、>4MiB terminate）',
     index.includes('4 * 1024 * 1024') && index.includes('1024 * 1024') && index.includes('terminate()'), true)
   check('W21 JSON bodyLimit 256KiB（共享构造点）', readFileSync(new URL('../server/src/fastifyApp.ts', import.meta.url), 'utf8').includes('256 * 1024'), true)
   check('W22 URL 上限 8KiB（414 拒绝）', index === '' ? true : readFileSync(new URL('../server/src/security/httpQuota.ts', import.meta.url), 'utf8').includes('URI Too Long'), true)
+  // P0-2b 修订（2026-10-25）：来源判定单点化——三处消费 origin.ts，仓内不再有手写比较
+  const originModule = read('../server/src/security/origin.ts')
+  const guard = read('../server/src/security/sourceGuard.ts')
+  const mutation = read('../server/src/admin/mutationGuard.ts')
+  check('W23 来源判定单点（origin.ts 定义 canonical 归一，守卫/WS/管理突变三处消费、无手写残留）',
+    originModule.includes('DEFAULT_PORTS') && originModule.includes("http: '80'") && originModule.includes("https: '443'") &&
+    guard.includes('requestOriginAllowed') && index.includes('requestOriginAllowed') && mutation.includes('requestOriginVerdict') &&
+    !guard.includes('new URL(') && !mutation.includes('new URL(origin'), true)
+  check('W24 守卫协议感知（经 req.protocol 还原公网 scheme，不写死 80/443 于 Host 侧）',
+    !guard.includes("?? '80'") && !originModule.includes("rawPort ?? '80'") && originModule.includes('req.protocol'), true)
+  const viteConfig = read('../web/vite.config.ts')
+  check('W25 开发代理 Origin 归一（/api 与 /ws 均重写已存在 Origin 为上游 hop，本地浏览器链路同源）',
+    viteConfig.includes("proxyReq") && viteConfig.includes("proxyReqWs") &&
+    viteConfig.split("proxyReq.setHeader('origin'").length - 1 === 2, true)
 }
 
 // ---- main ----
 q1Cookies()
 await q3Cors()
 trustUnit()
+originUnit()
 csrfUnit()
 loggerJsonMode()
 projectionUnit()
