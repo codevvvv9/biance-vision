@@ -20,7 +20,9 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
-    headers: { 'content-type': 'application/json' },
+    // 无 body 时不能带 content-type: json——Fastify 对空 body + json 头直接 400（FST_ERR_CTP_EMPTY_JSON_BODY），
+    // 会打死所有无 body 的 POST/PUT（logout/取消 run/chat-cutoff/settings 测试）
+    headers: options.body !== undefined ? { 'content-type': 'application/json' } : undefined,
     method: options.method,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
