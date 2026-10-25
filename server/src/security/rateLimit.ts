@@ -38,6 +38,16 @@ export const RATE_POLICIES: Readonly<Record<string, RatePolicy>> = {
   'login.acct:ip+acct': { id: 'login.acct:ip+acct', limit: 5, windowMs: 60_000, mode: 'enforce' },
   // P1-3 主批：账号跨 IP 异常（20 次/5 分钟，shadow——只告警不建账号硬锁）
   'login.acct:global': { id: 'login.acct:global', limit: 20, windowMs: 5 * 60_000, mode: 'shadow' },
+  // ---- P1-4 按路由组策略（全部 shadow：7 自然日观察后按 scope 切 enforce，方案 §13.2）----
+  'read:user': { id: 'read:user', limit: 120, windowMs: 60_000, mode: 'shadow' },
+  'read:ip': { id: 'read:ip', limit: 600, windowMs: 60_000, mode: 'shadow' },
+  'write:user': { id: 'write:user', limit: 30, windowMs: 60_000, mode: 'shadow' },
+  'write:ip': { id: 'write:ip', limit: 120, windowMs: 60_000, mode: 'shadow' },
+  'upload:admin': { id: 'upload:admin', limit: 5, windowMs: 60_000, mode: 'shadow' },
+  'upload:ip': { id: 'upload:ip', limit: 20, windowMs: 60_000, mode: 'shadow' },
+  'admin.write:admin': { id: 'admin.write:admin', limit: 10, windowMs: 60_000, mode: 'shadow' },
+  'sse.handshake:ip': { id: 'sse.handshake:ip', limit: 30, windowMs: 60_000, mode: 'shadow' },
+  'ws.handshake:ip': { id: 'ws.handshake:ip', limit: 30, windowMs: 60_000, mode: 'shadow' },
 }
 
 export interface RateDecision {

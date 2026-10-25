@@ -20,6 +20,7 @@ import fastifyStatic from '@fastify/static'
 import type { FastifyRequest } from 'fastify'
 import { buildApp } from './fastifyApp.js'
 import { clientIpOf, registerAuthRoutes, unauthorized, AUTH_ANON_ALLOW } from './authRoutes.js'
+import { registerHttpQuotaGuard } from './security/httpQuota.js'
 import { initDb, isDbAvailable } from './db.js'
 import { initUsers, initSessions, readSessionToken, findSession } from './users.js'
 import type { SessionRecord } from './users.js'
@@ -102,6 +103,16 @@ app.addHook('onResponse', (req, reply, done) => {
     }))
   }
   done()
+})
+
+// P1-4 HTTP 配额（全 shadow）：知识库上传/导入/重解析 5/分/管理员 + 20/分/IP；
+// 其余管理写 10/分/管理员；读按通用 read 桶
+registerHttpQuotaGuard(app, {
+  resolveUser: (req) => {
+    try { return auth.requireSession(req).username } catch { return null }
+  },
+  isUploadPath: (method, url) => method === 'POST' && (url.startsWith('/api/admin/knowledge/') || url.startsWith('/api/knowledge/')),
+  isAdminWritePath: (method, url) => method !== 'GET' && method !== 'HEAD' && url.startsWith('/api/admin/'),
 })
 
 app.get('/api/health', async () => ({
