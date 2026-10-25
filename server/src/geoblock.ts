@@ -4,7 +4,7 @@
  * - 名单文件：server/data/cn-ip-list.txt（17mon/china_ip_list，一行一个 CIDR；
  *   用 pnpm geo:update 或 deploy/oracle 与 deploy/vps 两份 README「地域封锁」一节的 curl 命令获取/更新）
  * - 名单缺失或加载失败 → 放行全部 + 显著告警（fail-open，绝不把运营者锁在门外）；
- *   实际状态看 /api/health 的 geoBlock 字段
+ *   实际状态看服务端启动/告警日志（Q-4 起 /api/health 不再披露内部细节）
  * - 热更新：每 60s 检查文件 mtime，变化即重载，无需重启进程
  * - 环境变量：
  *     GEO_BLOCK_CN=off        关闭封锁（默认 on）

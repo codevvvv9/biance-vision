@@ -6,6 +6,7 @@ import { DATA_DIR, saveJson } from './store.js'
 import { getDb, initDb, isDbAvailable, loadUsersFromDb, upsertUsersDb } from './db.js'
 import { authSessions } from './models.js'
 import { log } from './logger.js'
+import { SESSION_COOKIE, SESSION_TTL_MS } from './security/cookies.js'
 
 export type UserRole = 'user' | 'superadmin'
 
@@ -43,8 +44,6 @@ export interface SessionRecord {
   expiresAt: number
 }
 
-export const SESSION_COOKIE = 'bv_session'
-export const SESSION_TTL_MS = 7 * 24 * 3600 * 1000
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,32}$/
 
 interface BadRequestError extends Error {
@@ -406,10 +405,6 @@ export function readSessionToken(cookieHeader: string | undefined): string | und
   return undefined
 }
 
-export function sessionCookie(token: string): string {
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`
-}
-
-export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
-}
+// Cookie 属性单点定义已迁 security/cookies.ts（Q-1：环境感知 Secure）；此处 re-export
+// 兼容既有 import（authRoutes 等）——SESSION_COOKIE/TTL 同源，不在本文件留第二份定义。
+export { SESSION_COOKIE, SESSION_TTL_MS, sessionCookie, clearSessionCookie, cookieSecure } from './security/cookies.js'
