@@ -54,9 +54,10 @@ export const RO_TABLES = [
 
 /**
  * user-api 无任何权限（纯管理域；S4 验收断言 INSERT 被拒）：
- * eval_datasets / eval_runs / agent_versions / knowledge_manifest_entries
+ * eval_datasets / eval_runs / agent_versions / knowledge_manifest_entries；
+ * 安全状态表（P1-2）同样无 DML——限流计数只经受控函数 EXECUTE（迁移内授权）。
  */
-export const DENIED_TABLES = ['eval_datasets', 'eval_runs', 'agent_versions', 'knowledge_manifest_entries'] as const
+export const DENIED_TABLES = ['eval_datasets', 'eval_runs', 'agent_versions', 'knowledge_manifest_entries', 'security_rate_buckets'] as const
 
 export const DB_USER_ROLE = 'biance_user'
 

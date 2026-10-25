@@ -12,6 +12,8 @@ import { STATUS_CODES } from 'node:http'
 import { log } from './logger.js'
 import { corsOptions } from './security/cors.js'
 import { trustProxyOption } from './security/trust.js'
+import { localGateConsume } from './security/localGate.js'
+import { clientIp } from './security/trust.js'
 import type { FastifyInstance } from 'fastify'
 
 export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInstance {
@@ -24,6 +26,20 @@ export function buildApp(opts: { cors: boolean } = { cors: true }): FastifyInsta
     trustProxy: trustProxyOption(),
     requestIdHeader: false,
     genReqId: () => crypto.randomUUID(),
+  })
+
+  // P1-2 本地入口闸门：onRequest 最前（先于鉴权/密码/body 解析）——每 IP 10/s
+  // 突发 20、进程 100/s 突发 200；无界 IP 不再等于无界资源。两进程共用本实现。
+  app.addHook('onRequest', async (req, reply) => {
+    const url = req.url.split('?')[0]
+    if (!url.startsWith('/api/') && url !== '/ws') return
+    const verdict = localGateConsume(clientIp(req))
+    if (!verdict.allowed) {
+      reply.code(429).header('retry-after', String(Math.max(1, Math.ceil(verdict.retryAfterMs / 1000)))).send({
+        statusCode: 429, error: 'Too Many Requests', message: '请求过于频繁，请稍后再试',
+        code: 'rate_limited', requestId: req.id,
+      })
+    }
   })
 
   // 每个响应返还 X-Request-ID（前端报障可复制；onSend 是最后可改头的阶段）
