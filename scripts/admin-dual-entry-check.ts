@@ -79,8 +79,9 @@ function baseDatabaseUrl(): URL {
 function startServer(entry: string, port: number, dbUrl: string, dataDir: string): { child: ChildProcess; log: string[] } {
   const child = spawn('npx', ['tsx', entry], {
     cwd: SERVER_DIR,
-    // BV_TRUSTED_PROXIES=127.0.0.1：P0-2 起 IP 走信任链解析，测试注入 XFF 需信任回环
-    env: { ...process.env, PORT: String(port), BV_DATA_DIR: dataDir, DATABASE_URL: dbUrl, BV_AUTO_MIGRATE: '0', BV_TRUSTED_PROXIES: '127.0.0.1' },
+    // BV_TRUSTED_PROXIES=127.0.0.1：P0-2 起 IP 走信任链解析，测试注入 XFF 需信任回环；
+    // BV_CSRF_KEY：固定测试密钥（P0-2b；不进生产）
+    env: { ...process.env, PORT: String(port), BV_DATA_DIR: dataDir, DATABASE_URL: dbUrl, BV_AUTO_MIGRATE: '0', BV_TRUSTED_PROXIES: '127.0.0.1', BV_CSRF_KEY: 'e'.repeat(64) },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const log: string[] = []

@@ -149,8 +149,9 @@ function startServer(overrides: Record<string, string>, entry = 'src/index.ts'):
   const child = spawn('npx', ['tsx', entry], {
     cwd: SERVER_DIR,
     // BV_TRUSTED_PROXIES=127.0.0.1：P0-2 起客户端 IP 走信任链解析——测试从回环
-    // 注入 XFF 模拟不同 IP（限速/锁定按 IP 分桶语义），需显式信任回环代理
-    env: { ...process.env, BV_TRUSTED_PROXIES: '127.0.0.1', ...overrides },
+    // 注入 XFF 模拟不同 IP（限速/锁定按 IP 分桶语义），需显式信任回环代理；
+    // BV_CSRF_KEY：固定测试密钥（P0-2b CSRF 端点/守卫；不进生产）
+    env: { ...process.env, BV_TRUSTED_PROXIES: '127.0.0.1', BV_CSRF_KEY: 'e'.repeat(64), ...overrides },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   const serverLog: string[] = []
@@ -304,6 +305,22 @@ try {
       check('R0a /api/health → 200 { ok, entry }（公网不披露内部细节）',
         h.status === 200 && Object.keys(body).sort().join(',') === 'entry,ok' && body.ok === true && body.entry === 'user-api',
         true)
+    }
+
+    // P0-2b：CSRF 端点与写来源守卫（真实服务器行为）
+    {
+      const csrf = await fetch(`http://127.0.0.1:${PORT}/api/auth/csrf`)
+      const csrfBody = await csrf.json() as { token?: unknown; expiresAt?: unknown }
+      check('R0b GET /api/auth/csrf → 200 token/expiresAt + no-store + 种子 cookie',
+        csrf.status === 200 && csrf.headers.get('cache-control') === 'no-store' &&
+        (csrf.headers.get('set-cookie') ?? '').includes('bv_csrf_seed=') &&
+        typeof csrfBody.token === 'string' && typeof csrfBody.expiresAt === 'string', true)
+      const evil = await fetch(`http://127.0.0.1:${PORT}/api/auth/logout`, { method: 'POST', headers: { origin: 'https://evil.example' } })
+      check('R0c 跨源 Origin 写请求 → 403', evil.status, 403)
+      const bad = await fetch(`http://127.0.0.1:${PORT}/api/auth/logout`, { method: 'POST', headers: { origin: `http://127.0.0.1:${PORT}`, 'x-csrf-token': 'garbage' } })
+      check('R0d 同源携带无效 CSRF token → 403', bad.status, 403)
+      const plain = await fetch(`http://127.0.0.1:${PORT}/api/auth/logout`, { method: 'POST' })
+      check('R0e 无 Origin 无 token（脚本兼容 verify 模式）→ 200', plain.status, 200)
     }
 
     for (const [route, status] of [['/login', 200], ['/dashboard', 200], ['/research', 200], ['/definitely-unknown', 404], ['/index.html', 404], ['/api/undefined-test-route', 401]] as const) {

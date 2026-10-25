@@ -16,6 +16,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { LOGIN_LOCK_FAILS, LOGIN_MAX_PER_WINDOW } from './env.js'
 import { LOGIN_LOCK_MS, LOGIN_WINDOW_MS, clearLoginGuard, loginGuardOf, saveLoginGuard } from './loginGuard.js'
 import { clientIp } from './security/trust.js'
+import { csrfKeysAvailable, csrfSeedCookie, csrfSeedSubjectOf, issueCsrfToken, sessionSubjectHash, verifyCsrfToken } from './security/csrf.js'
+import { registerSourceGuard } from './security/sourceGuard.js'
 import { isDbAvailable } from './db.js'
 import { log, kv, briefUa } from './logger.js'
 import { endSessionAudit, recordFailedLogin, startSessionAudit } from './audit.js'
@@ -43,6 +45,12 @@ export interface AuthRouteContext {
 export function unauthorized(): Error {
   return Object.assign(new Error('未登录或会话已过期'), { statusCode: 401 })
 }
+
+/**
+ * 匿名可访问的精确路由集合（P0-2b 白名单收敛）：/api/auth/* 前缀不再整段放行，
+ * 新增匿名端点必须在此显式列名（两入口共用；/api/auth/me 的鉴权在路由自身）。
+ */
+export const AUTH_ANON_ALLOW = new Set(['/api/auth/login', '/api/auth/logout', '/api/auth/me', '/api/auth/csrf'])
 
 /**
  * 客户端 IP（P0-2 起统一走信任链解析）：不再手工读 XFF/X-Real-IP——由 Fastify 按
@@ -80,6 +88,48 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
     if (!session) throw unauthorized()
     return session
   }
+
+  // P0-2b 写操作来源守卫：跨源 Origin 硬拒绝 + 携带 token 必验（verify 兼容阶段）
+  registerSourceGuard(app, {
+    verify: (req, token) => {
+      const raw = readSessionToken(req.headers.cookie)
+      if (raw !== undefined && findSession(raw, sessionPurpose) !== null) {
+        return verifyCsrfToken(token, sessionSubjectHash(raw), sessionPurpose)
+      }
+      const seed = csrfSeedSubjectOf(req.headers.cookie)
+      return seed !== null && verifyCsrfToken(token, seed, sessionPurpose)
+    },
+  })
+
+  /**
+   * GET /api/auth/csrf（P0-2b）：签发会话/种子绑定的 HMAC token；no-store。
+   * 已登录绑定会话（换会话失效）；未登录发放随机种子 Cookie 并绑定其哈希
+   * （种子仅用于 CSRF，不授予权限）。生产缺 BV_CSRF_KEY → 503（相关服务就绪拒绝）。
+   */
+  app.get('/api/auth/csrf', async (req, reply) => {
+    reply.header('cache-control', 'no-store')
+    if (!csrfKeysAvailable()) {
+      throw Object.assign(new Error('安全状态暂不可用，请稍后重试'), { statusCode: 503, code: 'security_state_unavailable' })
+    }
+    const raw = readSessionToken(req.headers.cookie)
+    let subjectHash: string | null = null
+    if (raw !== undefined && findSession(raw, sessionPurpose) !== null) {
+      subjectHash = sessionSubjectHash(raw)
+    } else {
+      const seed = csrfSeedSubjectOf(req.headers.cookie)
+      if (seed !== null) subjectHash = seed
+      else {
+        const seeded = csrfSeedCookie()
+        subjectHash = seeded.seedHash
+        reply.header('set-cookie', seeded.setCookie)
+      }
+    }
+    const issued = issueCsrfToken(subjectHash, sessionPurpose)
+    if (issued === null) {
+      throw Object.assign(new Error('安全状态暂不可用，请稍后重试'), { statusCode: 503, code: 'security_state_unavailable' })
+    }
+    return { token: issued.token, expiresAt: new Date(issued.expiresAt).toISOString() }
+  })
 
   app.post('/api/auth/login', async (req, reply) => {
     const body = (req.body ?? {}) as { username?: unknown; password?: unknown }
