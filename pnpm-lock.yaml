@@ -25,6 +25,8 @@ importers:
 
   packages/brand: {}
 
+  packages/platform-contracts: {}
+
   packages/shared-ui:
     dependencies:
       biance-vision-brooks:
@@ -73,6 +75,9 @@ importers:
 
   server:
     dependencies:
+      '@biance/platform-contracts':
+        specifier: workspace:*
+        version: link:../packages/platform-contracts
       '@fastify/cors':
         specifier: ^9.0.1
         version: 9.0.1

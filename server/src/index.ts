@@ -1,14 +1,12 @@
 import './env.js' // 入口首位：env 校验先于一切模块顶层写盘（C3 断言依赖）
-import Fastify from 'fastify'
-import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
 import fastifyWs from '@fastify/websocket'
 import fs from 'node:fs'
-import { STATUS_CODES } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { SocketStream } from '@fastify/websocket'
 import type WebSocket from 'ws'
+import { buildApp } from './fastifyApp.js'
 import {
   BinanceStream,
   compactTicker,
@@ -74,8 +72,7 @@ import type { SessionRecord } from './users.js'
 import { log, kv, fmtMs, briefUa } from './logger.js'
 import { initGeoBlock, isRegionBlocked, registerGeoBlock } from './geoblock.js'
 import { startQueue } from './queue.js'
-import { clientIpOf, registerAuthRoutes, unauthorized } from './authRoutes.js'
-import { corsOptions } from './security/cors.js'
+import { clientIpOf, registerAuthRoutes } from './authRoutes.js'
 import { WS_MAX_PAYLOAD_BYTES } from './security/limits.js'
 
 const clientIp = clientIpOf
@@ -247,30 +244,13 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 // Fastify
 // ---------------------------------------------------------------------------
-const app = Fastify({ logger: false, trustProxy: true })
+// P0-1：真正复用共享骨架 buildApp（fastifyApp.ts）——错误映射/基础构造与 admin-api
+// 单点定义；此前本文件自建 Fastify 实例 + 拷贝一份错误处理器（假共享：注释声称
+// 共用、实际两份实现漂移无人发现）。CORS 策略单点在 security/cors.ts。
+const app = buildApp({ cors: true })
 
-// 统一错误映射：路由内 throw Object.assign(new Error(msg), { statusCode, code? })
-// 转为 { statusCode, error, message, code? }——message 面向最终用户（前端原样展示）；
-// code 为机器可读业务码（如 chat_disabled / chat_limit_exceeded），仅 4xx 透传——
-// 5xx 不回显内部 message 也不透 code（防泄露 PG SQLSTATE / 系统错误码等内部细节），
-// 与 fastify 默认错误响应语义一致。
-app.setErrorHandler((err, req, reply) => {
-  const e = err as { statusCode?: number; code?: string; message?: string }
-  const statusCode = typeof e.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600 ? e.statusCode : 500
-  if (statusCode >= 500) log.error('http', '未处理异常', err)
-  const body: Record<string, unknown> = {
-    statusCode,
-    error: STATUS_CODES[statusCode] ?? 'Error',
-    message: statusCode >= 500 ? 'Internal Server Error' : String(e.message ?? ''),
-  }
-  if (statusCode < 500 && typeof e.code === 'string') body.code = e.code
-  void reply.code(statusCode).send(body)
-})
-
-// Q-3：CORS 单点配置（security/cors.ts）——默认同源不反射任意来源，显式白名单才放行
-await app.register(cors, corsOptions())
 // Q-2：WS 单帧 16 KiB 上限（security/limits.ts 单点常量）——超大帧按协议关闭，
-// 不再无界接收（正常 market/kline 订阅消息远小于此）
+// 不再无界接收（正常 market/kline 订阅消息远小于此）；仅 user-api 注册（admin 无长连接）
 await app.register(fastifyWs, { options: { maxPayload: WS_MAX_PAYLOAD_BYTES } })
 
 // ---------------------------------------------------------------------------

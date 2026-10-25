@@ -151,8 +151,16 @@ function wiringChecks(): void {
   check('W1 index.ts WS 注册携带单点常量 maxPayload（Q-2 接线）', index.includes('maxPayload: WS_MAX_PAYLOAD_BYTES'), true)
   check("W2 index.ts health 收敛为 { ok, entry }（Q-4 接线）", index.includes("app.get('/api/health', async () => ({ ok: true, entry: 'user-api' }))"), true)
   check('W3 CORS 反射 origin:true 已在两构造点废除（Q-3 接线）', !index.includes('origin: true') && !app.includes('origin: true'), true)
-  check('W4 两构造点均使用单点 corsOptions()', index.includes('corsOptions()') && app.includes('corsOptions()'), true)
+  check('W4 CORS 注册仅在共享构造点（index.ts 不再自注册 cors）', !index.includes('register(cors'), true)
   check('W5 Cookie 属性单点（users.ts 无第二份属性定义）', !read('../server/src/users.ts').includes('SameSite=Lax; Max-Age'), true)
+  // P0-1：真共享骨架——两入口均经 buildApp；index.ts 不再自建 Fastify 实例/错误处理器
+  check('W6 user-api 经 buildApp 构造（P0-1 真共享）', index.includes("buildApp({ cors: true })") && !index.includes('const app = Fastify(') && !index.includes('app.setErrorHandler'), true)
+  check('W7 admin-api 经 buildApp 构造', read('../server/src/adminApi.ts').includes('buildApp({ cors: false })'), true)
+  // ARCH-01：契约包纯度——不 import server/web/Node 内置、无相对逃逸（浏览器可安全引用）
+  const contracts = read('../packages/platform-contracts/src/index.ts')
+  const contractImports = [...contracts.matchAll(/from '([^']+)'/g)].map((m) => m[1])
+  check('W8 platform-contracts 零运行时依赖（无 node:/server/web/相对导入）',
+    contractImports.every((s) => !s.startsWith('node:') && !s.startsWith('../') && !s.includes('server') && !s.includes('web')), true)
 }
 
 // ---- main ----
