@@ -112,6 +112,38 @@ const fnResult = await userConn.unsafe(`SELECT security_consume_rate_limit('ra-f
 check('RA6b biance_user 可 EXECUTE 受控函数（迁移内授权）', Array.isArray(fnResult) && (fnResult as Array<{ r: unknown }>)[0] !== undefined, true)
 await userConn.end({ timeout: 1 })
 
+
+// ---- P1-6 租约（LS 组：获取/独占/续约/释放/过期抢占 fencing）----
+const lease = async (fn: string, ...args: unknown[]): Promise<unknown> => {
+  const r = await userConnUnsafe(fn, args)
+  return r
+}
+async function userConnUnsafe(fn: string, args: unknown[]): Promise<unknown> {
+  const u2 = postgres(userUrl.toString(), { max: 1, connect_timeout: 3, onnotice: () => {} })
+  try {
+    const res = await u2.unsafe(`SELECT ${fn} AS r`, args)
+    return (res as Array<{ r: unknown }>)[0]?.r
+  } finally {
+    await u2.end({ timeout: 1 })
+  }
+}
+const l1 = (await lease('security_acquire_lease($1,$2,$3,$4)', 'res-1', 'owner-a', 'test', 60000)) as { acquired: boolean; generation: number }
+check('LS1 获取租约（generation=1）', l1.acquired === true && l1.generation === 1, true)
+const l2 = (await lease('security_acquire_lease($1,$2,$3,$4)', 'res-1', 'owner-b', 'test', 60000)) as { acquired: boolean }
+check('LS2 未过期时他人获取被拒（独占）', l2.acquired, false)
+check('LS3 持有者续约成功', await lease('security_renew_lease($1,$2,$3)', 'res-1', 'owner-a', 60000), true)
+check('LS4 非持有者续约被拒', await lease('security_renew_lease($1,$2,$3)', 'res-1', 'owner-b', 60000), false)
+await lease('security_release_lease($1,$2)', 'res-1', 'owner-a')
+const l5 = (await lease('security_acquire_lease($1,$2,$3,$4)', 'res-1', 'owner-b', 'test', 60000)) as { acquired: boolean; generation: number }
+check('LS5 释放后他人可取', l5.acquired, true)
+// fencing：人为过期后抢占 → generation+1；原持有者（陈旧）续约必须失败
+const ownerConn = postgres(testUrl.toString(), { max: 1, connect_timeout: 3, onnotice: () => {} })
+await ownerConn.unsafe(`UPDATE security_leases SET lease_until = now() - interval '1 second' WHERE resource = 'res-1'`)
+await ownerConn.end({ timeout: 1 })
+const l6 = (await lease('security_acquire_lease($1,$2,$3,$4)', 'res-1', 'owner-a', 'test', 60000)) as { acquired: boolean; generation: number }
+check('LS6 过期抢占成功且 generation 递增（fencing：旧持有者失效）', l6.acquired === true && l6.generation === 2, true)
+check('LS7 陈旧持有者续约被拒（fencing 生效）', await lease('security_renew_lease($1,$2,$3)', 'res-1', 'owner-b', 60000), false)
+
 // 清理
 const cleanup = postgres(adminUrl.toString(), { max: 1, connect_timeout: 3, onnotice: () => {} })
 await cleanup.unsafe(`drop database if exists ${TEST_DB} with (force)`)
