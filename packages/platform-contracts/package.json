@@ -1,0 +1,8 @@
+{
+  "name": "@biance/platform-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "两端共享的纯契约：公开错误类型/机器码、请求关联字段（P0 最小集；事件 schema 按后续批次增量加入，不预建框架）"
+}

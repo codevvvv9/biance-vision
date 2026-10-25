@@ -4,4 +4,5 @@ packages:
   - shared
   - packages/shared-ui
   - packages/brand
+  - packages/platform-contracts
   - website

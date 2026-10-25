@@ -1,6 +1,9 @@
 /**
- * 共享 Fastify 应用骨架（W3-S3）：统一错误映射（与 index.ts v0.15.2 行为一致）
- * + 可选 CORS。user-api 与 admin-api 两个入口共用，改这里即两端同步。
+ * 共享 Fastify 应用骨架（P0-1 起为唯一构造点）：统一错误映射 + 可选 CORS。
+ * user-api（index.ts）与 admin-api（adminApi.ts）均经 buildApp 构造——错误映射/
+ * 基础配置单点定义；入口差异（CORS 仅 user 端、WS 仅 user 端）由调用方注册。
+ * 历史注记：W3-S3 时期注释声称两端共用、实际 index.ts 自建实例拷贝错误处理器
+ * （假共享，两份实现可静默漂移）——P0-1 已消除。
  */
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
