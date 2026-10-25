@@ -85,10 +85,10 @@ export async function registerResearchWorkers(boss: PgBoss): Promise<void> {
       // 编号并标 legacy（每任务一个编号，不与 API requestId 混用）
       const originRequestId = job.data.observability?.originRequestId ?? `legacy-${job.id.slice(0, 8)}`
       try {
-        log.info('research', '研究任务开始', kv({ run: job.data.runId.slice(0, 8), 来源请求: originRequestId, jobId: job.id.slice(0, 8), 尝试: job.attempts + 1 }))
+        log.info('research', '研究任务开始', kv({ run: job.data.runId.slice(0, 8), 来源请求: originRequestId, jobId: job.id.slice(0, 8), 尝试: (job as unknown as { attempts?: number }).attempts !== undefined ? (job as unknown as { attempts: number }).attempts + 1 : 1 }))
         await executeRun(job.data.runId)
       } catch (err) {
-        log.error('research', '研究运行失败', kv({ run: job.data.runId.slice(0, 8), 来源请求: originRequestId, jobId: job.id.slice(0, 8), 尝试: job.attempts + 1, 错误: (err as Error).message }))
+        log.error('research', '研究运行失败', kv({ run: job.data.runId.slice(0, 8), 来源请求: originRequestId, jobId: job.id.slice(0, 8), 尝试: (job as unknown as { attempts?: number }).attempts !== undefined ? (job as unknown as { attempts: number }).attempts + 1 : 1, 错误: (err as Error).message }))
       }
     }
   })
