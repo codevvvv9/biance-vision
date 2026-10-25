@@ -50,8 +50,13 @@ function artifactChecks(): void {
       continue
     }
     const files = nodeFs.readdirSync(dir)
-    const hasDebug = files.some((f) => f.endsWith('.js') && nodeFs.readFileSync(`${dir}/${f}`, 'utf8').includes('__BV_DEBUG__'))
-    check(`P3e ${dist} 生产产物零 __BV_DEBUG__（DBG-03）`, hasDebug, false)
+    // DBG-03 语义=未授权会话默认不挂：用户端产物整体零 __BV_DEBUG__；admin 端
+    // 允许 lazy 监控页 chunk 携带授权挂载代码（P3-2 设计内），主入口 chunk 必须零
+    const jsFiles = files.filter((f) => f.endsWith('.js'))
+    const isMain = (f: string): boolean => f.startsWith('index-')
+    const hasDebug = jsFiles.filter((f) => dist === 'dist' || isMain(f))
+      .some((f) => nodeFs.readFileSync(`${dir}/${f}`, 'utf8').includes('__BV_DEBUG__'))
+    check(`P3e ${dist} 产物 DBG-03（${dist === 'dist' ? '全零' : '主入口零'} __BV_DEBUG__）`, hasDebug, false)
     check(`P3f ${dist} 无公开 sourcemap（.map）`, files.some((f) => f.endsWith('.map')), false)
   }
 }

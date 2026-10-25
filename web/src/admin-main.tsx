@@ -1,4 +1,5 @@
-import { startTelemetry, mountDevDebug } from '@biance/shared-ui'/** Independent admin composition root. User providers and styles stay outside. */
+import { startTelemetry, mountDevDebug } from '@biance/shared-ui'
+/** Independent admin composition root. User providers and styles stay outside. */
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { ErrorBoundary, AuthProvider } from '@biance/shared-ui'
