@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures'
-test('all six menu links use one basename and preserve active route after refresh', async ({ page }) => {
+test('all seven menu links use one basename and preserve active route after refresh', async ({ page }) => {
   await page.goto('/admin/')
-  const paths = ['/admin', '/admin/ai', '/admin/knowledge', '/admin/agents', '/admin/prompts', '/admin/evals']
+  const paths = ['/admin', '/admin/ai', '/admin/knowledge', '/admin/agents', '/admin/prompts', '/admin/evals', '/admin/queues']
   const navigation = page.getByRole('navigation', { name: '管理导航' })
-  await expect(navigation.locator('a')).toHaveCount(6)
+  await expect(navigation.locator('a')).toHaveCount(7)
   for (let index = 0; index < paths.length; index++) {
     const link = navigation.locator('a').nth(index)
     await expect(link).toHaveAttribute('href', paths[index])
@@ -12,7 +12,7 @@ test('all six menu links use one basename and preserve active route after refres
     await expect(navigation.locator('.ant-menu-item-selected a')).toHaveAttribute('href', paths[index])
   }
   await page.reload()
-  await expect(navigation.locator('.ant-menu-item-selected a')).toHaveAttribute('href', '/admin/evals')
+  await expect(navigation.locator('.ant-menu-item-selected a')).toHaveAttribute('href', '/admin/queues')
 })
 test('login preserves deep link and errors, logout revokes and permits login again', async ({ page, apiFixture }) => {
   apiFixture.setAuthenticated(false)
