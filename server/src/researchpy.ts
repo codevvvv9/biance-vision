@@ -20,12 +20,17 @@ export class ResearchPyError extends Error {
   }
 }
 
-async function call<T>(path: string, body: unknown, timeoutMs: number): Promise<T> {
+async function call<T>(path: string, body: unknown, timeoutMs: number, originRequestId?: string): Promise<T> {
   let res: Response
   try {
     res = await fetch(`${RESEARCH_PY_URL}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      // P2a-2：来源请求编号传给 Python——Python 端日志与本任务同号（Python 自身
+      // 响应/日志另生成 requestId；originRequestId 是可信来源关联，方案 §9.3）
+      headers: {
+        'content-type': 'application/json',
+        ...(originRequestId !== undefined ? { 'x-origin-request-id': originRequestId } : {}),
+      },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     })

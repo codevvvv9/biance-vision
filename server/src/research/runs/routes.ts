@@ -269,7 +269,8 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       if (rows.length === 0) return badRequest(reply, '报价不存在或不属于当前用户')
     }
     const row = await createRun({ userId: session.username, create: input })
-    const queued = await enqueueResearchRun(row.id)
+    // P2a-2：任务载荷携带来源请求编号（API requestId）——worker/Python 日志同号关联
+    const queued = await enqueueResearchRun(row.id, { originRequestId: req.id, release: process.env.BV_RELEASE })
     if (!queued) {
       // 队列不可用：显式 503，不静默丢失（行保留 queued，恢复后可重投）
       // 503 未实际入队，不计交互次数（仅 202 计）

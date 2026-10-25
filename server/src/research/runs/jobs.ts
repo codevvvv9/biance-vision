@@ -14,12 +14,20 @@ import { executeRun } from './runner.js'
 import { kv, log } from '../../logger.js'
 import { pickExpiryClose } from '../event/calc.js'
 
-export type ResearchRunJob = { runId: string }
+/**
+ * 队列载荷的类型化可选观测字段（P2a-2，方案 §9.3）：创建任务时 originRequestId
+ * 取创建请求的 requestId（前端报障编号 → API 日志 → job → worker 日志全链同号）；
+ * 旧任务缺字段时 worker 生成来源编号并标 legacy，不清空队列。
+ */
+export type ResearchRunJob = {
+  runId: string
+  observability?: { originRequestId?: string; release?: string }
+}
 
-export async function enqueueResearchRun(runId: string): Promise<boolean> {
+export async function enqueueResearchRun(runId: string, observability?: ResearchRunJob['observability']): Promise<boolean> {
   const boss = getBoss()
   if (!boss) return false
-  await boss.send(Q_RESEARCH_RUN, { runId } satisfies ResearchRunJob, {
+  await boss.send(Q_RESEARCH_RUN, { runId, observability } satisfies ResearchRunJob, {
     singletonKey: `research-run:${runId}`,
     singletonSeconds: 300,
   })
@@ -73,10 +81,14 @@ export async function settleExpiredQuotes(): Promise<void> {
 export async function registerResearchWorkers(boss: PgBoss): Promise<void> {
   await boss.work<ResearchRunJob>(Q_RESEARCH_RUN, async (jobs) => {
     for (const job of jobs) {
+      // P2a-2：来源关联——payload 带 originRequestId 用之；旧任务生成 worker 来源
+      // 编号并标 legacy（每任务一个编号，不与 API requestId 混用）
+      const originRequestId = job.data.observability?.originRequestId ?? `legacy-${job.id.slice(0, 8)}`
       try {
+        log.info('research', '研究任务开始', kv({ run: job.data.runId.slice(0, 8), 来源请求: originRequestId, jobId: job.id.slice(0, 8), 尝试: job.attempts + 1 }))
         await executeRun(job.data.runId)
       } catch (err) {
-        log.error('research', '研究运行失败', kv({ run: job.data.runId.slice(0, 8), 错误: (err as Error).message }))
+        log.error('research', '研究运行失败', kv({ run: job.data.runId.slice(0, 8), 来源请求: originRequestId, jobId: job.id.slice(0, 8), 尝试: job.attempts + 1, 错误: (err as Error).message }))
       }
     }
   })
