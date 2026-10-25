@@ -225,6 +225,13 @@
       "when": 1792917000000,
       "tag": "0031_observability_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792918000000,
+      "tag": "0032_metrics_minute",
+      "breakpoints": true
     }
   ]
 }

@@ -82,6 +82,24 @@ if (!staticOnly) {
   const g = (groups as unknown as Array<{ count: number }>)[0]
   check('OG3 错误指纹聚合（同指纹 count=2）', g !== undefined && Number(g.count), 2)
 
+  // OM 组（P2b-1）：分桶计数 + 快照入库 + 受控聚合幂等
+  const { recordHttpMetric, snapshotMetrics, resetMetricsForTest, statusClassOf } = await import('../server/src/observability/metrics.js')
+  check('OM1 状态分类边界', statusClassOf(200) === 'ok' && statusClassOf(404) === '4xx' && statusClassOf(500) === '5xx', true)
+  resetMetricsForTest()
+  recordHttpMetric('user-api', '/api/tickers', 'GET', 200, 50)
+  recordHttpMetric('user-api', '/api/tickers', 'GET', 200, 6000)
+  recordHttpMetric('user-api', null, 'GET', 404, 20)
+  check('OM2 快照入 metric_batches', await snapshotMetrics('user-api', 'gate-test'), true)
+  const agg1 = await getDb()!.execute(sql`SELECT observability_aggregate_batches(100) AS n`)
+  check('OM3 聚合领取批次', Number((agg1 as unknown as Array<{ n: number }>)[0].n) >= 1, true)
+  const minute = await getDb()!.execute(sql`SELECT counts FROM observability_metrics_minute WHERE dimension = 'GET /api/tickers ok' LIMIT 1`)
+  const mc = (minute as unknown as Array<{ counts: { count: number; latency: Record<string, number> } }>)[0]
+  check('OM4 维度聚合与延迟桶（50ms→le100、6000ms→le10000）', mc !== undefined && mc.counts.count === 2 && mc.counts.latency.le100 === 1 && mc.counts.latency.le10000 === 1, true)
+  const agg2 = await getDb()!.execute(sql`SELECT observability_aggregate_batches(100) AS n`)
+  void agg2
+  const countAfter = await getDb()!.execute(sql`SELECT counts->>'count' AS c FROM observability_metrics_minute WHERE dimension = 'GET /api/tickers ok' LIMIT 1`)
+  check('OM5 重放聚合幂等（不重复加 count）', Number((countAfter as unknown as Array<{ c: string }>)[0].c), 2)
+
   const cleanup = postgres(admin.toString(), { max: 1, connect_timeout: 3, onnotice: () => {} })
   await cleanup.unsafe(`drop database if exists ${TEST_DB} with (force)`)
   await cleanup.end({ timeout: 1 })

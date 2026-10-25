@@ -36,13 +36,16 @@ export function registerObservabilityAdminRoutes(
     const errors = await db.execute(sql`SELECT
       count(*) FILTER (WHERE last_seen > now() - interval '15 minutes') AS recent,
       count(*) FILTER (WHERE status = 'open') AS open FROM observability_error_groups`)
+    const hb = await db.execute(sql`SELECT value->>'at' AS at FROM app_settings WHERE key = 'observability:worker:heartbeat' LIMIT 1`)
     const i = (inbox as unknown as Array<Record<string, unknown>>)[0] ?? {}
     const e = (errors as unknown as Array<Record<string, unknown>>)[0] ?? {}
+    const hbAt = Number((hb as unknown as Array<{ at: string }>)[0]?.at ?? 0)
     return {
       dbAvailable: true,
       sink,
       inbox: { recent15m: Number(i.recent ?? 0), total: Number(i.total ?? 0) },
       errorGroups: { recent15m: Number(e.recent ?? 0), open: Number(e.open ?? 0) },
+      workerHeartbeat: { at: hbAt, ageMs: hbAt > 0 ? Date.now() - hbAt : null, stale: hbAt === 0 || Date.now() - hbAt > 90_000 },
       observedAt: new Date().toISOString(),
     }
   })

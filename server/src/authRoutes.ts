@@ -19,7 +19,8 @@ import { clientIp } from './security/trust.js'
 import { csrfKeysAvailable, csrfSeedCookie, csrfSeedSubjectOf, issueCsrfToken, sessionSubjectHash, verifyCsrfToken } from './security/csrf.js'
 import { registerSourceGuard } from './security/sourceGuard.js'
 import { RATE_POLICIES, rateLimitConsume, rateLimitedError } from './security/rateLimit.js'
-import { isDbAvailable } from './db.js'
+import { getDb, isDbAvailable } from './db.js'
+import { sql } from 'drizzle-orm'
 import { log, kv, briefUa } from './logger.js'
 import { endSessionAudit, recordFailedLogin, startSessionAudit } from './audit.js'
 import {
@@ -136,6 +137,21 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
       throw Object.assign(new Error('安全状态暂不可用，请稍后重试'), { statusCode: 503, code: 'security_state_unavailable' })
     }
     return { token: issued.token, expiresAt: new Date(issued.expiresAt).toISOString() }
+  })
+
+  // P2b-2 健康语义：live=进程能响应即 200（不查依赖）；ready=身份存储可用才 200
+  // （对外仅 ready 状态，详细依赖状态在管理 overview；探活不触发依赖扇出）
+  app.get('/api/health/live', async () => ({ ok: true }))
+  app.get('/api/health/ready', async (_req, reply) => {
+    if (!isDbAvailable()) return reply.code(503).send({ ready: false })
+    try {
+      const conn = getDb()
+      if (conn === null) return reply.code(503).send({ ready: false })
+      await conn.execute(sql`SELECT 1`)
+      return { ready: true }
+    } catch {
+      return reply.code(503).send({ ready: false })
+    }
   })
 
   app.post('/api/auth/login', async (req, reply) => {

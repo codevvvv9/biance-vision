@@ -80,7 +80,7 @@ app.addHook('preHandler', async (req, reply) => {
   const url = req.url.split('?')[0]
   if (!url.startsWith('/api/')) return
   // P0-2b：/api/auth/* 前缀白名单收敛为精确路由集合（新增匿名可访问端点必须显式列名）
-  if (url === '/api/health' || AUTH_ANON_ALLOW.has(url)) return
+  if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' || AUTH_ANON_ALLOW.has(url)) return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {

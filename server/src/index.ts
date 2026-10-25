@@ -308,7 +308,7 @@ app.addHook('preHandler', async (req, reply) => {
     reply.code(404).send({ message: 'Not Found' })
     return
   }
-  if (url === '/api/health' || AUTH_ANON_ALLOW.has(url)) return
+  if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' || AUTH_ANON_ALLOW.has(url)) return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {
