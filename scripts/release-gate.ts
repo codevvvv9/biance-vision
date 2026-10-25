@@ -19,6 +19,8 @@ const skipDb = process.env.GATE_SKIP_DB === '1'
 
 const steps: Step[] = [
   { name: 'typecheck（全仓）', cmd: 'pnpm typecheck' },
+  // P0-4：安全专项（Q 快赢+P0 来源/CSRF/requestId/错误契约；无 DB 依赖不随 GATE_SKIP_DB 跳过）
+  { name: '安全专项门禁（security:gate-check）', cmd: 'pnpm security:gate-check' },
   { name: '结构引擎因果性（456 项）', cmd: 'pnpm brooks:causality' },
   { name: '结构引擎自测（36 项）', cmd: 'pnpm brooks:selftest' },
   { name: '产品计算锚点（30 项）', cmd: 'pnpm research:calc-check' },
