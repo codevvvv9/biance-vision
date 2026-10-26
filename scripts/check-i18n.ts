@@ -130,8 +130,37 @@ for (const ns of readdirSync(path.join(LOCALES, 'zh-CN'))) {
   }
 }
 
+// ---- admin key 存在性（v0.18.2 后加：2026-10-26 队列页词条漏录，线上满屏回显 ui.colQueue）----
+// 扫 admin 目录三种字面量用法，逐一校验 zh-CN admin 词典存在（en 一致性已由上一节覆盖）：
+//   text("k")        → ui.k          （useAdminText 封装）
+//   t("group.k")     → group.k       （group 须为 admin 词典顶层组）
+//   "menu.k" 字面量  → menu.k        （routes.tsx labelKey/hintKey）
+// 非字面量（动态拼接）无法静态断言，跳过；key 缺失属线上可见 bug，硬失败。
+let missingKeys = 0
+{
+  const adminDir = path.join(WEB_SRC, 'admin')
+  const zhAdmin = JSON.parse(readFileSync(path.join(LOCALES, 'zh-CN', 'admin.json'), 'utf8'))
+  const known = new Set(flatKeys(zhAdmin))
+  const groups = new Set(Object.keys(zhAdmin))
+  for (const file of walk(adminDir)) {
+    const display = path.relative(ROOT, file)
+    const src = readFileSync(file, 'utf8')
+    const used: string[] = []
+    for (const m of src.matchAll(/\btext\(\s*(['"])([A-Za-z][A-Za-z0-9_]*)\1\s*[,)]/g)) used.push(`ui.${m[2]}`)
+    for (const m of src.matchAll(/\bt\(\s*(['"])([a-z][A-Za-z0-9_]*)\.([A-Za-z0-9_]+)\1\s*[,)]/g))
+      if (groups.has(m[2])) used.push(`${m[2]}.${m[3]}`)
+    for (const m of src.matchAll(/(['"])menu\.([A-Za-z0-9_]+)\1/g)) used.push(`menu.${m[2]}`)
+    for (const key of used)
+      if (!known.has(key)) {
+        console.log(`[admin-key] ${display}: 词典缺 key → ${key}`)
+        missingKeys++
+      }
+  }
+}
+
 console.log('---')
 console.log(`未迁移文案行: ${total}（波次4 admin/AiSettingsModal 管理面按方案允许最后迁移）`)
 console.log(`词典 key 不一致: ${keyMismatch}`)
-if (keyMismatch > 0) process.exit(1)
+console.log(`admin 词典缺 key: ${missingKeys}`)
+if (keyMismatch > 0 || missingKeys > 0) process.exit(1)
 if (strict && total > 0) process.exit(1)

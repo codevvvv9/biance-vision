@@ -17,7 +17,9 @@
     "evals": "Evals & models",
     "evalsHint": "Datasets / training / metrics",
     "observability": "Monitoring",
-    "observabilityHint": "Error groups and request lookup"
+    "observabilityHint": "Error groups and request lookup",
+    "queues": "Queues",
+    "queuesHint": "Backlog / purge"
   },
   "gate": {
     "verifying": "Verifying session…",
@@ -727,7 +729,23 @@
     "auditAction_knowledge_batch_publish": "Batch publish",
     "auditAction_knowledge_batch_reparse": "Batch reparse",
     "auditAction_knowledge_batch_delete": "Batch delete",
-    "auditAction_prediction_confirm": "Confirm prediction"
+    "auditAction_prediction_confirm": "Confirm prediction",
+    "queueHint": "Queue backlog and oldest-job age per queue (auto-refresh every 30s); market:* backlog expires automatically past its retention window, manual purge is whitelisted only.",
+    "colQueue": "Queue",
+    "colCreated": "Backlog",
+    "colActive": "Active",
+    "colRetry": "Retry",
+    "colCompleted": "Completed",
+    "colFailed": "Failed",
+    "colOldest": "Oldest age",
+    "colRetention": "Retention",
+    "colAction": "Action",
+    "purgeBacklog": "Purge backlog",
+    "purgeConfirmTitle": "Purge backlog",
+    "purgeConfirmBody": "This purges {created} backlog jobs from queue {queue}. This cannot be undone.",
+    "purgeDone": "Purged {count} backlog jobs from {queue}",
+    "preciousTag": "No expiry",
+    "preciousHint": "Jobs in this queue have no retention (research results must not be dropped); resolve backlog from the business side."
   },
   "observability": {
     "title": "Monitoring",
