@@ -18,7 +18,7 @@
 .stage:fullscreen .fsBtn { width: 40px; height: 40px; font-size: 16px; right: 16px; bottom: 16px; }
 .fsFallback { position: fixed; inset: 0; z-index: 80; aspect-ratio: auto; width: 100vw; height: 100dvh; margin: 0; border: none; border-radius: 0; background: #0a1118; }
 
-.overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 18px; text-align: center; background: linear-gradient(180deg, #0a111acc, #0a111ad9); }
+.overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 18px; text-align: center; background: radial-gradient(58% 52% at 50% 50%, #0a111ab3, #0a111a33 72%), linear-gradient(180deg, #0a111a4d, #0a111a6e); }
 .overlay[data-mode='playing'] { display: none; }
 .overlay[data-mode='over'] { background: #0a111a99; backdrop-filter: blur(2.5px); }
 .tip { margin: 0; color: #e9eee5; font-size: 15px; line-height: 1.6; }
