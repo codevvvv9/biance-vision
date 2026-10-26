@@ -39,7 +39,7 @@ function rankFor(locale: Locale, seconds: number) {
  * Canvas + rAF only — no new runtime dependency. The DOM overlay is part of
  * the server-rendered card, so first paint never depends on the game loop.
  */
-export function DuckRun({ locale }: { locale: Locale }) {
+export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // Shared pointer channel: the React handler writes, the game loop reads.
@@ -109,7 +109,7 @@ export function DuckRun({ locale }: { locale: Locale }) {
       playTop = Math.max(24, H * .1)
       playH = H - playTop - Math.max(9, H * .05)
       duckX = Math.max(10, W * .02) + (W - Math.max(20, W * .04)) * .2
-      duckH = Math.min(66, Math.max(40, H * .19))
+      duckH = Math.min(62, Math.max(36, H * .17))
       duckR = duckH * .3
       playTopRef.current = playTop
       playHRef.current = playH
@@ -695,7 +695,7 @@ export function DuckRun({ locale }: { locale: Locale }) {
     ? text(locale, `Run complete: ${result.time} seconds, ${result.dodged} risks dodged, ${result.evidence} evidence collected.`, `本次航行 ${result.time} 秒，避开 ${result.dodged} 个风险，收集 ${result.evidence} 条证据。`)
     : ''
 
-  return <section className={styles.scene} aria-label={text(locale, 'DuckStrat risk-run mini game', 'DuckStrat 风险漂流小游戏')} data-mode={mode}>
+  return <section className={styles.scene} data-fill={fill ? 'true' : undefined} aria-label={text(locale, 'DuckStrat risk-run mini game', 'DuckStrat 风险漂流小游戏')} data-mode={mode}>
     <div className={styles.heading}><span className={styles.eyebrow}>{text(locale, 'RISK RUN', '风险漂流')}</span><span className={styles.sceneIndex}>{best === null ? text(locale, 'BEST —', '最佳 —') : `BEST ${best}s`}</span></div>
     <div ref={stageRef} className={`${styles.stage}${fsFallback ? ` ${styles.fsFallback}` : ''}`} data-mode={mode} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onContextMenu={event => { if (mode === 'playing') event.preventDefault() }}>
       <canvas ref={canvasRef} className={styles.canvas} role="img" aria-label={text(locale, 'Steerable duck dodging risk labels on a flowing market river', '小黄鸭在市场水流中躲避风险标签')} />

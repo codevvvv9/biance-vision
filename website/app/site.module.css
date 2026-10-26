@@ -480,24 +480,29 @@
 .site :global(.pricing-amount) { font-size: 34px; font-weight: 600; }
 .site :global(.pricing-amount span) { font-size: 14px; }
 
-/* DuckStrat: reserved two-column scene, progressively enhanced SVG interaction. */
-.site :global(.hero-intro) { display: grid; grid-template-columns: 0.86fr 1.24fr; align-items: center; gap: 46px; }
+/* DuckStrat: full-viewport hero — the live-site duo (copy + narrative duck) on the left, the game on the right. */
+.site :global(.hero-wide) { position: relative; display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr); gap: clamp(28px, 3vw, 52px); align-items: stretch; width: 100%; max-width: 1760px; margin-inline: auto; min-height: 100vh; min-height: 100svh; padding: 79px clamp(24px, 4.5vw, 72px) 32px; }
+.site :global(.hero-wide .hero-intro) { align-self: center; }
+.site :global(.hero-game) { align-self: stretch; min-height: 0; display: flex; }
+.site :global(.hero-game > *) { flex: 1; min-width: 0; }
+.site :global(.hero-intro) { display: grid; grid-template-columns: 1fr 1.04fr; align-items: center; gap: 44px; }
 .site :global(.hero-intro .hero-copy) { position: relative; text-align: left; min-width: 0; }
-.site :global(.hero-intro .hero-copy > *:not(.hero-map-bg)) { position: relative; z-index: 1; }
-.site :global(.hero-map-bg) { position: absolute; inset: -34px -46px -24px -74px; z-index: 0; pointer-events: none; opacity: .55; }
-.site :global(.hero-map-bg svg) { display: block; width: 100%; height: 100%; }
-.site :global(.hero-map-bg .routeFlow) { animation: heroRouteDrift 30s linear infinite; }
-@keyframes heroRouteDrift { to { stroke-dashoffset: -264; } }
 .site :global(.hero-intro h1) { font-size: clamp(42px, 4.4vw, 64px); letter-spacing: -2.7px; line-height: 1.08; margin-top: 27px; }
 .site :global(.hero-intro .hero-gradient) { color: #f0d891; background: linear-gradient(110deg, #f5cc58, #f5e6b7); background-clip: text; }
 .site :global(.hero-intro .hero-kicker) { font-size: 8px; letter-spacing: 1px; }
 .site :global(.hero-intro .hero-copy > p) { font-size: 13px; margin-inline: 0; line-height: 1.9; }
 .site :global(.hero-intro .button-row), .site :global(.hero-intro .hero-footnote) { justify-content: flex-start; }
 .site :global(.hero-intro .hero-footnote) { font-size: 7px; gap: 9px; letter-spacing: .7px; }
-.site :global(.hero-product) { margin-top: 75px; }
+.site :global(.hero-product) { margin-top: 84px; }
 @media (max-width: 1100px) {
   .site :global(.hero-intro) { gap: 30px; }
   .site :global(.hero-intro h1) { font-size: 48px; }
+}
+@media (max-width: 1000px) {
+  .site :global(.hero-wide) { display: block; min-height: 0; max-width: none; margin-inline: 0; padding: 100px 24px 0; }
+  .site :global(.hero-game) { display: block; margin-top: 35px; }
+  .site :global(.hero-intro) { grid-template-columns: 1fr; gap: 35px; }
+  .site :global(.hero-intro > section) { width: min(100%, 600px); justify-self: center; }
 }
 @media (max-width: 900px) {
   .site :global(.hero-intro) { grid-template-columns: 1fr; gap: 35px; }
