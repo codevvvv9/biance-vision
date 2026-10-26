@@ -1,6 +1,6 @@
 # Biance Vision 官网 GEO/SGO 首版实施方案
 
-> 状态：已随 v0.18.2 部署上线（2026-10-26 线上核验 SEO 输出正确）；站长平台验证 / AI 引用观测 / 真实用户验收待执行；域名迁移 duckstrat.com 进行中（见 §7）
+> 状态：已随 v0.18.2 部署上线（2026-10-26 线上核验 SEO 输出正确）；域名已迁移 duckstrat.com（旧域名 301）；站长平台验证 / AI 引用观测 / 真实用户验收待执行（见 §7）
 >
 > 日期：2026-10-23
 >
@@ -195,5 +195,5 @@ Bing 的引用报告覆盖其支持的 AI 场景，不代表全平台表现，�
 ## 7. 2026-10-26 部署核验与域名迁移
 
 - 官网实况（推翻 §6 末行「本轮未部署」的旧状态）：`biance-vision-website:0.18.2` 已在线，`WEBSITE_ORIGIN=https://btcpilot.duckdns.org`；公网实测根路径 302 语言自适应、`/en` 的 `<html lang>`、canonical/hreflang（en/zh-CN/x-default）、`sitemap.xml`、`robots.txt` 全部按设计输出。
-- 域名迁移至正式域名 `duckstrat.com`（Cloudflare Registrar，灰云仅 DNS 直连 VPS）：`WEBSITE_ORIGIN`/Caddy 同步切换，旧 duckdns 双域名 301 永久重定向以传递索引权重；站长平台（Search Console / Bing Webmaster）待用新域名接入。
+- 域名迁移已执行完成（2026-10-26）：`duckstrat.com`（Cloudflare Registrar，灰云仅 DNS 直连 VPS）上线，canonical/hreflang/sitemap（136 URL 零旧域残留）/JSON-LD/robots 全量切至新域名；旧 duckdns 双域名 301 永久重定向传递索引权重；带 Origin 写冒烟与 fail-closed 反向用例通过。镜像侧要点：GitHub 变量 `vars.WEBSITE_ORIGIN` 已更新并对 v0.18.2/v0.18.3 重跑 release——canonical 为构建期静态烙印，改变量必须重跑在用 tag。站长平台（Search Console / Bing Webmaster）待用新域名接入（Cloudflare DNS TXT 验证）。操作实录见 LOCAL_NOTES「域名迁移 duckstrat.com 实录」。
 - 首页 `<title>` 由纯品牌标语调整为「品牌 — 品类词」组合（AI crypto market research terminal），内页维持「页面标题 | Biance Vision」模板不变。
