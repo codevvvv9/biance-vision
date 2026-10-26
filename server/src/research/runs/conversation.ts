@@ -1,3 +1,5 @@
+import { memberCalls } from '../../membership/context.js'
+import { membershipError } from '../../membership/service.js'
 /**
  * 会话与意图规划（P2，improvement-plan §4.1）：
  * conversations/conversation_messages 持久化；意图路由（concept/structure/perp/event/replay/news/system）
@@ -549,6 +551,7 @@ async function postMessageInner(conv: ConversationRow, content: string): Promise
   // 不建研究 run、不写持仓/报价，与草稿流程完全隔离；配额已由端点
   // assertChatAllowed/recordChatMessage 覆盖。
   if (intent === 'translate') {
+    if (memberCalls.getStore()?.features?.translate === false) throw membershipError('套餐未包含翻译功能', 403, 'membership_feature_unavailable')
     const { translateWithFallback, parseTranslateRequest } = await import('../translate.js')
     const parsed = parseTranslateRequest(text)
     const out = await translateWithFallback(text, parsed)

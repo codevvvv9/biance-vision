@@ -1,3 +1,5 @@
+import { registerMembershipUserRoutes } from './membership/routes.js'
+import { settleMemberStream } from './membership/meter.js'
 import './env.js' // 入口首位：env 校验先于一切模块顶层写盘（C3 断言依赖）
 import fastifyStatic from '@fastify/static'
 import fastifyWs from '@fastify/websocket'
@@ -310,7 +312,7 @@ app.addHook('preHandler', async (req, reply) => {
     return
   }
   if (url === '/api/health' || url === '/api/health/live' || url === '/api/health/ready' ||
-    AUTH_ANON_ALLOW.has(url) || url === '/api/security/csp-report') return
+    AUTH_ANON_ALLOW.has(url) || (req.method === 'GET' && url === '/api/public/membership-plans') || url === '/api/security/csp-report') return
   try {
     await auth.requireLiveSession(req)
   } catch (err) {
@@ -368,6 +370,7 @@ const auth = registerAuthRoutes(app, { entryKind: 'user', clientIp })
 const requireSession = auth.requireSession
 // Global metering runs before model handlers, after live session validation.
 registerAiAccessGuard(app, { requireSession })
+registerMembershipUserRoutes(app, { requireSession })
 // P2a-3：遥测批量上报端点（user 会话；batch 配额 enforce）
 registerCspReportRoute(app, { purpose: 'user', clientIp })
 registerTelemetryRoute(app, { purpose: 'user', requireSession, clientIp })
@@ -550,6 +553,7 @@ app.post('/api/ai/chat', async (req, reply) => {
     // 用户级交互计数：成功完成才计（失败不计，与 recordAiUsage 含失败尝试的防刷口径不同）
     await recordChatMessage(session.username)
     if (started) {
+      await settleMemberStream(req, true, full, conv.id)
       reply.raw.end()
       await appendConversationMessages(conv, [{ role: 'assistant', content: full }])
       // 记忆提取为后台任务：不阻塞响应、不占用户配额
@@ -559,7 +563,10 @@ app.post('/api/ai/chat', async (req, reply) => {
     return { text: full }
   } catch (err) {
     const msg = (err as Error).message || 'AI 对话失败'
-    if (started) reply.raw.end(`\n⚠ ${msg}`)
+    if (started) {
+      await settleMemberStream(req, false)
+      reply.raw.end(`\n⚠ ${msg}`)
+    }
     else throw err
   }
 })

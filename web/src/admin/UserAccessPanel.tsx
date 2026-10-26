@@ -11,6 +11,8 @@ import { useDirtyForm, useConfirmDiscard } from "./ui/forms";
 import { Feedback, Loading } from "./ui/feedback";
 import { Modal, overlayContainer } from "./ui/overlays";
 import { useAdminText } from "./ui/text";
+import type { MembershipStatus } from "biance-vision-brooks";
+import { useMemberLabel } from "./MembershipForms";
 export function UserAccessPanel({
   username,
   onClose,
@@ -27,6 +29,7 @@ export function UserAccessPanel({
         <AccessDialog
           username={username}
           initial={resource.data.access}
+          membership={resource.data.membership}
           onClose={onClose}
         />
       ) : (
@@ -41,13 +44,16 @@ export function UserAccessPanel({
 function AccessDialog({
   username,
   initial,
+  membership,
   onClose,
 }: {
   username: string;
   initial: Access | null;
+  membership?: MembershipStatus;
   onClose: () => void;
 }): JSX.Element {
   const text = useAdminText(),
+    L = useMemberLabel(),
     { modal } = App.useApp(),
     discard = useConfirmDiscard();
   const [access, setAccess] = useState(initial),
@@ -109,7 +115,9 @@ function AccessDialog({
       maskClosable={!busy}
     >
       <Feedback error={error} success={success} />
-      {access ? (
+      {membership?.managed ? (
+        <p>{L('membership')}: {membership.current?.name ?? L('expired')} · {L('usedToday')} {membership.usedToday} / {membership.current?.dailyLimit ?? '∞'}</p>
+      ) : access ? (
         <Form layout="vertical" onFinish={() => void save()}>
           <p>
             {text("usedQuota", {

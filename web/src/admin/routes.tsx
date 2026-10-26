@@ -147,6 +147,7 @@ function QueueIcon(): JSX.Element {
 
 /** Paths are internal to the router basename; no deployment prefixes. */
 export const ADMIN_ROUTES: AdminRouteDef[] = [
+  { id: "membership", path: "membership", labelKey: "menu.membership", hintKey: "menu.membershipHint", icon: <LogIcon />, load: () => import("./AdminMembershipPage") },
   {
     id: "dashboard",
     index: true,

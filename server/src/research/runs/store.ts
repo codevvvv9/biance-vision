@@ -1,3 +1,6 @@
+import { memberCalls } from '../../membership/context.js'
+import { activeMembership, exactProfile, membershipError } from '../../membership/service.js'
+import { MembershipPlanSchema } from 'biance-vision-brooks'
 /**
  * 研究运行持久化（RunStore 的 PG 实现）与进程内进度总线。
  * 对应 docs/specs/agent-orchestration.md：每步持久化可恢复、取消检查、
@@ -218,6 +221,24 @@ export async function freezeRunConfig(
     const { refreshCapabilities } = await import('../../admin/capabilities.js')
     await refreshCapabilities()
     raw.capabilities = getCapabilities()
+  }
+  if (userId) {
+    const context = memberCalls.getStore()
+    const admitted = context?.username === userId && context.research && context.researchName
+    const membership = admitted ? null : await activeMembership(userId)
+    if (admitted) {
+      if (!context.features?.research) throw membershipError('套餐未包含研究功能', 403, 'membership_feature_unavailable')
+      const profile = context.research!
+      raw.capabilities = { ...(raw.capabilities as object), chat: { enabled: true, baseUrl: profile.baseUrl, model: profile.model, secretRef: `membership-profile:${context.researchName}`, maxTokens: profile.maxTokens, temperature: profile.temperature } }
+      raw.membership = { versionId: context.versionId, revision: context.revision }
+    }
+    if (membership?.config) {
+      const plan = MembershipPlanSchema.parse(membership.config)
+      if (!plan.features.research) throw membershipError('套餐未包含研究功能', 403, 'membership_feature_unavailable')
+      const profile = exactProfile(plan.researchProfile)
+      raw.capabilities = { ...(raw.capabilities as object), chat: { enabled: true, baseUrl: profile.baseUrl, model: profile.model, secretRef: `membership-profile:${plan.researchProfile}`, maxTokens: profile.maxTokens, temperature: profile.temperature } }
+      raw.membership = { versionId: membership.version_id, revision: membership.revision }
+    }
   }
   // P0-6 提示词终解析：五个模板全文冻结进 raw.prompts（{name,templateId,version,content,source}）；
   // 执行阶段只读冻结内容，不再解析发布指针（红线 #2）。注册表清空时回退工程默认+日志。

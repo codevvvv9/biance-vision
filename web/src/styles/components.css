@@ -1749,3 +1749,9 @@
   cursor: pointer;
 }
 .msg-translate-toggle:hover { color: var(--cyan); text-decoration: underline; }
+
+.membership-card { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; line-height: 1.6; background: var(--bg-1); }
+.membership-card p { margin: 6px 0; }
+.membership-card progress { width: 100%; height: 6px; accent-color: var(--cyan); }
+.membership-card a,.membership-card button { margin-right: 12px; color: var(--cyan); }
+.membership-card button { cursor: pointer; background: transparent; border: 0; }

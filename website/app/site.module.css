@@ -476,3 +476,6 @@
 .site :global(.article-source li p) { font-size:12px; margin:5px 0; }
 .site :global(.article-next .button-row) { flex-wrap:wrap; }
 @media(max-width:759px) { .site :global(.research-figure) { padding:8px; } .site :global(.article-next .button-row) { align-items:stretch; flex-direction:column; } }
+.site :global(.pricing-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 20px; margin: 28px 0; }
+.site :global(.pricing-amount) { font-size: 34px; font-weight: 600; }
+.site :global(.pricing-amount span) { font-size: 14px; }

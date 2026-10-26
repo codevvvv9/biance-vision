@@ -1,3 +1,4 @@
+import { MembershipCard, useMembershipState } from '../membership/Membership'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, RefObject } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
@@ -88,15 +89,14 @@ export default function WorkbenchPage(): JSX.Element {
   const zh = i18n.language.startsWith('zh')
   const websiteLocale = zh ? 'zh' : 'en'
   const { user, logout } = useAuth()
+  const membership = useMembershipState().data
+  const quota = membership ? { remaining: membership.managed ? ['expired', 'disabled'].includes(membership.status) ? 0 : membership.remainingToday : membership.legacyAccess?.remaining ?? null } : null
   const location = useLocation(), navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const compact = useCompact()
   const [saved] = useState(() => readDraft(user?.username ?? null))
   const [entry, setEntry] = useState<ResearchEntryDraftV1 | null>(() => { try { return parseEntry(sessionStorage.getItem(ENTRY_KEY)) } catch { return null } })
   const [entryNotice, setEntryNotice] = useState('')
-  const [quota, setQuota] = useState<{ managed: boolean; remaining: number | null } | null>(null)
-  const refreshQuota = useCallback(async (): Promise<void> => { if (!user) return; try { setQuota(await api('/users/me/ai-access')) } catch { /* Server still enforces quota if status cannot load. */ } }, [user])
-  useEffect(() => { void refreshQuota() }, [refreshQuota])
   useEffect(() => { try { if (sessionStorage.getItem(ENTRY_KEY) && !entry) { sessionStorage.removeItem(ENTRY_KEY); setEntryNotice(zh ? '官网问题已失效，请重新输入或选择下方示例问题。' : 'Your website question expired. Write a question or choose an example below.') } } catch { /* Manual input remains available. */ } }, [])
   const [scene, setScene] = useState<Scene>(saved.scene)
   const [symbol, setSymbol] = useState(saved.symbol)
@@ -244,7 +244,6 @@ export default function WorkbenchPage(): JSX.Element {
     const raw = drafts[scene]; setDrafts(prev => ({ ...prev, [scene]: '' })); setPageError('')
     nearBottom.current = true
     const sent = await conv.send(raw)
-    void refreshQuota()
     if (!sent) setDrafts(prev => ({ ...prev, [scene]: prev[scene] || raw }))
     inputRef.current?.focus()
   }
@@ -363,7 +362,7 @@ export default function WorkbenchPage(): JSX.Element {
         <div className="wb-compose-wrap">
           {entry && user && <div className="wb-entry" role="region" aria-label={zh ? '官网问题恢复' : 'Restore website question'}><p>{zh ? '官网有一个待恢复的问题。恢复仅填写输入框，由你确认发送。' : 'A website question is ready to restore. Review and send it yourself.'}</p><blockquote>{entry.question}</blockquote>{(Object.values(drafts).some(d => d.trim()) || selectedConversation || selectedRun) && <p>{zh ? '当前有草稿或历史会话。替换会切换到新会话，请先保存需要保留的文字。' : 'There is a draft or history open. Restoring starts a new conversation. Save any text you wish to keep first.'}</p>}<button disabled={locked} onClick={applyEntry}>{zh ? '恢复官网问题' : 'Restore website question'}</button><button onClick={keepDraft}>{zh ? '保留当前草稿' : 'Keep current draft'}</button></div>}
           {entryNotice && <p className="wb-caption" role="status">{entryNotice}</p>}
-          {quota?.managed && <p className="wb-caption" role="status">{zh ? `剩余 AI 交互次数：${quota.remaining}` : `AI interactions remaining: ${quota.remaining}`} · <a href={`/${websiteLocale}/contact`}>{zh ? '联系开通会员服务' : 'Contact us for membership'}</a></p>}
+          <MembershipCard />
           {pageError && <p className="wb-alert" role="alert">{pageError} <a href={`/${websiteLocale}/guides/getting-started`}>{zh ? '查看首次使用指南' : 'Getting started'}</a></p>}
           {conv.historyError && selectedConversation && <p className="wb-alert" role="alert">{t('research:wb.restoreFailed', { msg: conv.historyError })}</p>}
           <ContextCard symbol={symbol} horizon={horizon} product={SCENES[scene].product}

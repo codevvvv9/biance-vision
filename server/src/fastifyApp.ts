@@ -82,6 +82,7 @@ export function buildApp(opts: BuildAppOptions = { cors: true }): FastifyInstanc
   // SQLSTATE / 系统错误码等内部细节）。retryAfterSeconds 从 err 读取（429 等）。
   app.setErrorHandler((err, req, reply) => {
     const e = err as { statusCode?: number; code?: string; message?: string; retryAfterSeconds?: number }
+    if (err.name === 'ZodError') { e.statusCode = 400; e.code = 'validation_error' }
     const statusCode = typeof e.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600 ? e.statusCode : 500
     if (statusCode >= 500) log.error('http', '未处理异常', err)
     // P2a-1：错误进诊断收件箱（可丢：同步有界不抛）；5xx 全量 + 4xx 计数样本，

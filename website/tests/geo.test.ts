@@ -7,7 +7,7 @@ import { crawlerRules, protectedPaths, searchAgents } from '../lib/crawlers'
 import { validateCidrs } from '../lib/locale'
 
 test('all 13 explicit bilingual MDX pairs have checked sources, stable dates, matching TOCs and related cases', async () => {
-  assert.deepEqual(await checkContent(), { articles: 13, pages: 34 })
+  assert.deepEqual(await checkContent(), { articles: 13, pages: 36 })
   assert.equal(published.filter(p => p.kind === 'guide').length, 8)
   assert.equal(published.filter(p => p.kind === 'demo').length, 3)
   assert.equal(new Set(pagePaths).size, pagePaths.length)

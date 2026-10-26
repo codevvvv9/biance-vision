@@ -57,6 +57,8 @@ services:
     mem_limit: 512m
     environment:
       WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:-http://localhost:3100}
+      # pricing 页服务端直连用户 API 取会员目录（价格进初始 HTML）；app 为 compose 服务名
+      WEBSITE_API_ORIGIN: ${WEBSITE_API_ORIGIN:-http://app:3200}
       WEBSITE_PUBLIC_CONFIG_DIR: /app/website-public
       WEBSITE_TRUST_PROXY: "1"
       WEBSITE_CN_IP_LIST: /app/website/data/cn-ipv4.txt

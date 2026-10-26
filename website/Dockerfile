@@ -11,13 +11,14 @@ COPY packages/shared-ui/package.json packages/shared-ui/
 RUN pnpm --filter @biance/website... install --frozen-lockfile
 COPY website website
 COPY packages/brand packages/brand
+COPY shared shared
 # Only the public IPv4 CIDR list is copied; backend data and keys never enter this image.
 COPY website/data/cn-ipv4.txt website/data/cn-ipv4.txt
 ARG WEBSITE_ORIGIN=http://localhost:3100
 ARG GOOGLE_SITE_VERIFICATION=
 ARG BING_SITE_VERIFICATION=
 ENV WEBSITE_ORIGIN=$WEBSITE_ORIGIN GOOGLE_SITE_VERIFICATION=$GOOGLE_SITE_VERIFICATION BING_SITE_VERIFICATION=$BING_SITE_VERIFICATION NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter @biance/website build
+RUN pnpm --filter biance-vision-brooks build && pnpm --filter @biance/website build
 
 FROM node:22-alpine
 WORKDIR /app
