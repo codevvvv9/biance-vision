@@ -1,6 +1,6 @@
-# 将两个既有域名替换到下面站点块；官网与终端共用用户域名。
-# 网站 CSP 由 Next 专属 headers 设置，不能套用到 SPA。
-bv.example.com {
+# DuckStrat production routing: public site + user terminal, isolated admin entry.
+# CSP is owned by Next; keep the user API / SPA policy independent.
+duckstrat.com {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -39,7 +39,7 @@ bv.example.com {
 	}
 }
 
-admin.example.com {
+admin.duckstrat.com {
 	encode zstd gzip
 	redir / /admin 302
 	basic_auth {
@@ -56,4 +56,17 @@ admin.example.com {
 		Referrer-Policy no-referrer
 		X-Robots-Tag "noindex, nofollow"
 	}
+}
+
+# Keep canonical redirects for bookmarks and historical search links.
+www.duckstrat.com {
+    redir https://duckstrat.com{uri} permanent
+}
+
+btcpilot.duckdns.org {
+    redir https://duckstrat.com{uri} permanent
+}
+
+btcpilot-admin.duckdns.org {
+    redir https://admin.duckstrat.com{uri} permanent
 }

@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import { useMemo, useState } from 'react'
 import { Alert, Button, Form, Input, Space, Typography } from 'antd'
 import {
@@ -139,7 +140,7 @@ function ProvisionDialog({
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(
-                    `Biance Vision\n${L('login')}: ${delivery.publicOrigin ?? ''}${delivery.loginPath}\n${L('username2')}: ${delivery.username}\n${L('password')}: ${delivery.password}\n${L('plan')}: ${delivery.membership.current?.name} / ${delivery.membership.current?.nameEn}\n${L('expires')}: ${delivery.membership.current?.endsAt ? new Date(delivery.membership.current.endsAt).toLocaleString() : L('lifetime')}`,
+                    `${brand.name}\n${L('login')}: ${delivery.publicOrigin ?? ''}${delivery.loginPath}\n${L('username2')}: ${delivery.username}\n${L('password')}: ${delivery.password}\n${L('plan')}: ${delivery.membership.current?.name} / ${delivery.membership.current?.nameEn}\n${L('expires')}: ${delivery.membership.current?.endsAt ? new Date(delivery.membership.current.endsAt).toLocaleString() : L('lifetime')}`,
                   )
                   setCopied(true)
                 } catch {

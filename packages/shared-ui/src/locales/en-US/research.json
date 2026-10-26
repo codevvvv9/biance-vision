@@ -373,7 +373,7 @@
     "short": "Short"
   },
   "wb": {
-    "brandSub": "Bitcoin research agent",
+    "brandSub": "Price action & strategy research",
     "homeAria": "Research workbench home",
     "expandNav": "Expand navigation",
     "collapseNav": "Collapse navigation",
@@ -404,7 +404,7 @@
     "viewThisRun": "View this research {{id}} ↗",
     "understanding": "Understanding the question…",
     "readingRun": "Reading research…",
-    "visionResearch": "VISION · research",
+    "visionResearch": "DuckStrat · research",
     "toBottom": "Back to bottom ↓",
     "restoreFailed": "Cannot restore conversation: {{msg}}",
     "scenesAria": "Research scene",

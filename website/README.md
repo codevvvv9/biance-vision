@@ -1,4 +1,4 @@
-# Biance Vision 公开官网
+# DuckStrat 公开官网
 
 独立 Next.js App Router / React 19 应用；现有终端继续使用 React 18。
 
@@ -51,7 +51,7 @@ pnpm access:check
 
 浏览器检查在 macOS 使用已安装 Chrome，其他平台运行 `pnpm --dir website exec playwright install chromium`，也可设置 `CHROME_PATH`。终端衔接检查需本地网关，API 使用受控响应；并发硬额度检查另建临时 PostgreSQL 数据库与数据目录，不使用真实模型 Key。完整发布仍需原有 `pnpm release:gate`、真实账号/worker 验证、用户试用和部署资源检查。
 
-生产构建用 `website/Dockerfile`（standalone），运行 `node --import ./website/runtime/access-log.mjs website/server.js`。普通 `pnpm --dir website start` 用于本地构建预览，生产不使用 `next start`。发布前执行 `WEBSITE_ORIGIN=https://既有用户域名 pnpm --dir website check:release`，并在实际部署核查联系渠道、同域路由、管理隔离、SSE、WebSocket、地区策略和资源预算。
+生产构建用 `website/Dockerfile`（standalone），运行 `node --import ./website/runtime/origin-guard.mjs --import ./website/runtime/access-log.mjs website/server.js`。普通 `pnpm --dir website start` 用于本地构建预览，生产不使用 `next start`。发布前执行 `WEBSITE_ORIGIN=https://既有用户域名 pnpm --dir website check:release`，并在实际部署核查联系渠道、同域路由、管理隔离、SSE、WebSocket、地区策略和资源预算。
 
 
 ## GEO/SGO 内容维护与观测
@@ -65,3 +65,15 @@ Google / Bing meta 验证值分别通过公开构建参数 `GOOGLE_SITE_VERIFICA
 生产默认启用 `WEBSITE_ACCESS_LOG_DIR=/app/website-logs`，写入专用 volume，14 天保留、总计 20 MiB、单文件 1 MiB、256 条队列上限。只记已批准的公开页面 GET/HEAD，六个字段；无 IP / 查询参数 / 请求头 / Cookie / 正文。分块大小为 null，HEAD 为 0；日志故障不阻断响应。本地缺省未设目录时不开启。日志不可作为用户计数或付费转化统计。
 
 固定 12 题在 `evaluation/prompts.json`。可执行 `pnpm --dir website exec tsx scripts/prepare-observations.ts baseline /absolute/new.csv`，生成 48 行未观测表；独立会话人工填写实际证据，不以脚本生成表格冒充已检查平台。生产提交与复查步骤、技术 QA、待执行的站长 / 真实用户任务见 [GEO/SGO QA](../docs/references/website-geo-sgo-qa-2026-10-24.md)。
+
+
+## DuckStrat 品牌与首屏
+
+公开名称、定位、承诺和原创鸭子轮廓由 `@biance/brand/identity` 维护，兼容 React 18/19。
+`check:release` 与 `build` 都检查当前文案无旧品牌残留、SVG 副本一致；历史材料不在扫描范围。
+首屏采用 SVG + Motion；三段叙事仅播放一次，支持暂停/重播、键盘和触控。
+离开视口或切到后台暂停；减少动态效果、无 JS 或可选动画模块失败时展示静态结尾。
+全部内容为品牌教学示意，不调用行情/研究 API。来源和验收见 `docs/duckstrat-brand.md`。
+
+构建产生 `.next/build-identity.json`；生产镜像嵌入该身份并在启动前校验运行时 origin。
+只修改容器环境不能替换静态页面中的旧 origin；发现不一致应重新构建，不能跳过守卫。

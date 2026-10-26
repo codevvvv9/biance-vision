@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import type { CSSProperties } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -24,7 +25,7 @@ export default function RegisterPage(): JSX.Element {
           <Logo />
           <div className="auth-brand-text">
             <span className="auth-title">
-              <SplitText text="BIANCE VISION" delay={0.12} gradient={['#00e5ff', '#a78bfa']} />
+              <SplitText text={brand.name} delay={0.12} gradient={['#f5cc58', '#f4e3a7']} />
             </span>
             <span className="auth-sub fx-in" style={{ '--fx-i': 8 } as CSSProperties}>{tc('brand.sub')}</span>
           </div>

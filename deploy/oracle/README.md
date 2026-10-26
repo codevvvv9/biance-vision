@@ -124,3 +124,9 @@ bash deploy/oracle/migrate-remote.sh                     # 恢复三个包并拉
 
 - 原「本机 compose + otun/ngrok/cloudflared 三轨隧道」可保留作演示/备用入口；Oracle 栈独立运行，两者共用同一套发版镜像。
 - 上线前记得 `pnpm release:gate` 全绿再打 tag（CI 仅做构建推镜像，质量门槛在本地）。
+
+## DuckStrat 域名与品牌
+
+当前使用 `duckstrat.com` 与 `admin.duckstrat.com`；旧域名长期 301，保留路径与参数。
+构建期和运行时 `WEBSITE_ORIGIN` 必须一致。品牌、分享图或 origin 修改需重新构建官网镜像；
+部署验收与回滚遵循 [VPS 域名说明](../vps/README.md#41-duckstrat-域名与品牌发版)。

@@ -1,3 +1,5 @@
+import mark from '@biance/brand/mark.svg'
+import { brand } from '@biance/brand/identity'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -26,21 +28,7 @@ const TABS: Tab[] = [
 const QUICK = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
 
 export function Logo(): JSX.Element {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="bv-lg" x1="0" y1="0" x2="24" y2="24">
-          <stop offset="0" stopColor="#00e5ff" />
-          <stop offset="1" stopColor="#7c5cff" />
-        </linearGradient>
-      </defs>
-      <path d="M12 1.8 21 7v10l-9 5.2L3 17V7z" stroke="url(#bv-lg)" strokeWidth="1.6" />
-      <rect x="7" y="9.5" width="2.4" height="5" rx=".5" fill="#00d68f" />
-      <rect x="7.9" y="7" width=".7" height="11" fill="#00d68f" opacity=".6" />
-      <rect x="13.5" y="8" width="2.4" height="6" rx=".5" fill="#ff4d6a" />
-      <rect x="14.5" y="5.5" width=".7" height="13" fill="#ff4d6a" opacity=".6" />
-    </svg>
-  )
+  return <img src={mark} width="32" height="32" alt="" aria-hidden="true" />
 }
 
 function BellIcon({ off }: { off: boolean }): JSX.Element {
@@ -166,7 +154,7 @@ export default function Header(): JSX.Element {
       <div className="brand">
         <Logo />
         <div className="brand-text">
-          <span className="brand-name">BIANCE VISION</span>
+          <span className="brand-name">{brand.name}</span>
           <span className="brand-sub">{t('brand.sub')}</span>
         </div>
       </div>
@@ -236,7 +224,7 @@ export default function Header(): JSX.Element {
             </button>
             {menuOpen && (
               <div className="user-menu-panel" role="menu">
-                {/* 管理入口已随 admin 域名隔离全部移入 btcpilot-admin 独立域名（主域名 /admin 双层 404） */}
+                {/* 管理入口已随 admin 域名隔离全部移入 admin.duckstrat.com 独立域名（主域名 /admin 双层 404） */}
                 {ai.status.configured && (
                   <button
                     className="menu-item"

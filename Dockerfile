@@ -34,6 +34,7 @@ RUN pnpm --filter biance-vision-server --filter biance-vision-brooks install --f
 COPY --from=build /app/shared/dist ./shared/dist
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/server/drizzle ./server/drizzle
+COPY --from=build /app/packages/brand ./packages/brand
 COPY --from=build /app/web/dist ./web/dist
 COPY --from=build /app/web/dist-admin ./web/dist-admin
 # 容器内必须监听 0.0.0.0，宿主/隧道才能访问到

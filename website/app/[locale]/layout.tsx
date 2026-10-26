@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -12,11 +13,11 @@ export const dynamicParams = false
 export function generateStaticParams() { return locales.map(locale => ({ locale })) }
 export const metadata: Metadata = {
   metadataBase: new URL(publicOrigin()),
-  title: { default: 'Biance Vision', template: '%s | Biance Vision' },
-  applicationName: 'Biance Vision',
+  title: { default: brand.name, template: `%s | ${brand.name}` },
+  applicationName: brand.name,
   verification: { google: process.env.GOOGLE_SITE_VERIFICATION || undefined, other: process.env.BING_SITE_VERIFICATION ? { 'msvalidate.01': process.env.BING_SITE_VERIFICATION } : undefined },
-  icons: { icon: '/favicon.ico', apple: '/site-assets/mark.svg' },
-  openGraph: { type: 'website', siteName: 'Biance Vision', images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Biance Vision — Evidence before conviction.' }] },
+  icons: { icon: '/site-assets/mark.svg', apple: '/site-assets/mark.svg' },
+  openGraph: { type: 'website', siteName: brand.name, images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: `${brand.name} — ${brand.promise.en}` }] },
   twitter: { card: 'summary_large_image', images: ['/opengraph-image'] },
 }
 
