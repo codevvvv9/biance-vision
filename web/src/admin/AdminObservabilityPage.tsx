@@ -1,12 +1,18 @@
 /**
  * 管理端监控页（P2a-4）：三视图最小集——概览（sink 状态/计数/新鲜度）、
  * 错误聚合列表（fingerprint 分组 TopN）、请求精确检索（requestId/originRequestId/
- * 用户名）。趋势图与告警在 P2b 批次。
+ * 用户名）。趋势图在 P2b 批次。
  * 空数据/加载失败/降级有独立状态（不用 0 假装采集正常）；日志按文本渲染。
+ * 视觉走 admin 统一体系：antd 深色主题（app/Theme）+ ui/admin.module.css 原语，
+ * 词条在 admin 词典 observability 组（zh/en 双语）。
  */
 import { useCallback, useEffect, useState } from "react"
 import { api } from "@biance/shared-ui"
 import { useTranslation } from "react-i18next"
+import { Button, Card, Empty, Input, Statistic, Table, Tag, Typography } from "antd"
+import { useAdminText } from "./ui/text"
+import { Feedback } from "./ui/feedback"
+import styles from "./ui/admin.module.css"
 
 interface Overview {
   dbAvailable: boolean
@@ -49,12 +55,20 @@ interface LogRow {
 
 const fmtTime = (v: string | number | null): string => {
   if (v === null) return "—"
-  const d = typeof v === "number" ? new Date(v) : new Date(v)
+  const d = new Date(v)
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString()
 }
 
+const severityTag = (v: string): JSX.Element => (
+  <Tag color={v === "critical" || v === "high" ? "error" : v === "warn" || v === "warning" ? "warning" : "default"}>{v}</Tag>
+)
+const stateTag = (v: string): JSX.Element => (
+  <Tag color={v === "open" ? "error" : v === "resolved" ? "success" : "processing"}>{v}</Tag>
+)
+
 export default function AdminObservabilityPage() {
   const { t } = useTranslation("admin")
+  const text = useAdminText()
   const [overview, setOverview] = useState<Overview | null>(null)
   const [errors, setErrors] = useState<ErrorGroupRow[] | null>(null)
   const [logs, setLogs] = useState<LogRow[] | null>(null)
@@ -78,7 +92,7 @@ export default function AdminObservabilityPage() {
     }
   }, [])
 
-  const [diagGrant, setDiagGrant] = useState<{ expiresAt: string } | null>(null)
+  const [diagGrant, setDiagGrant] = useState<{ grantId: string; expiresAt: string } | null>(null)
   const grantDiagnostics = useCallback(async () => {
     try {
       const r = await api<{ grantId: string; expiresAt: string }>('/admin/observability/diagnostics', { method: 'POST', body: { target: 'admin' } })
@@ -94,7 +108,7 @@ export default function AdminObservabilityPage() {
   const revokeDiagnostics = useCallback(async () => {
     if (diagGrant === null) return
     try {
-      await api(`/admin/observability/diagnostics/${(diagGrant as unknown as { grantId: string }).grantId}`, { method: 'DELETE' })
+      await api(`/admin/observability/diagnostics/${diagGrant.grantId}`, { method: 'DELETE' })
       delete (window as unknown as { __BV_DEBUG__?: unknown }).__BV_DEBUG__
       setDiagGrant(null)
     } catch (e) {
@@ -128,125 +142,149 @@ export default function AdminObservabilityPage() {
   }, [query])
 
   return (
-    <div className="observability-page">
-      <header className="page-head">
-        <h2>{t("observability.title")}</h2>
-        <button onClick={() => { void refresh() }}>{t("observability.refresh")}</button>
-      </header>
-      {loadError !== null && <p className="error-banner">{loadError}</p>}
+    <div className={styles.stack}>
+      <Feedback error={loadError ?? undefined} />
 
-      <section>
-        <h3>{t("observability.overview")}</h3>
-        {overview === null ? <p>{t("observability.loading")}</p> : (
-          <div className="stat-grid">
-            <div><b>{overview.inbox.recent15m}</b><span>{t("observability.inboxRecent")}</span></div>
-            <div><b>{overview.errorGroups.recent15m}</b><span>{t("observability.errorsRecent")}</span></div>
-            <div><b>{overview.errorGroups.open}</b><span>{t("observability.errorsOpen")}</span></div>
-            <div><b>{overview.sink.dropped}</b><span>{t("observability.dropped")}</span></div>
-            <div><b>{fmtTime(overview.sink.lastFlushAt)}</b><span>{t("observability.lastFlush")}</span></div>
-            <div><b>{overview.sink.lastErrorAt === null ? "—" : fmtTime(overview.sink.lastErrorAt)}</b><span>{t("observability.lastError")}</span></div>
+      <Card
+        title={t("observability.overview")}
+        extra={<Button onClick={() => { void refresh() }}>{t("observability.refresh")}</Button>}
+      >
+        {overview === null ? (
+          <Typography.Text type="secondary">{t("observability.loading")}</Typography.Text>
+        ) : (
+          <div className={styles.grid}>
+            <Statistic title={t("observability.inboxRecent")} value={overview.inbox.recent15m} />
+            <Statistic title={t("observability.errorsRecent")} value={overview.errorGroups.recent15m} />
+            <Statistic title={t("observability.errorsOpen")} value={overview.errorGroups.open} />
+            <Statistic title={t("observability.dropped")} value={overview.sink.dropped} />
+            <Statistic title={t("observability.lastFlush")} value={fmtTime(overview.sink.lastFlushAt)} />
+            <Statistic title={t("observability.lastError")} value={fmtTime(overview.sink.lastErrorAt)} />
           </div>
         )}
-        {overview !== null && !overview.dbAvailable && <p className="error-banner">{t("observability.dbDown")}</p>}
-      </section>
-
-      <section>
-        <h3>{t("observability.alerts")}</h3>
-        {alerts === null ? <p>{t("observability.loading")}</p> : alerts.length === 0 ? (
-          <p className="muted">{t("observability.noAlerts")}</p>
-        ) : (
-          <table className="data-table">
-            <thead><tr>
-              <th>{t("observability.rule")}</th><th>{t("observability.severity")}</th>
-              <th>{t("observability.state")}</th><th>{t("observability.firstSeen")}</th>
-              <th>{t("observability.lastSeen")}</th><th></th>
-            </tr></thead>
-            <tbody>
-              {alerts.map((a) => (
-                <tr key={a.ruleKey + a.dimension}>
-                  <td>{a.ruleKey}</td>
-                  <td>{a.severity}</td>
-                  <td>{a.state}{a.ackedBy !== null ? ` (${a.ackedBy})` : ""}</td>
-                  <td>{fmtTime(a.firstSeen)}</td>
-                  <td>{fmtTime(a.lastSeen)}</td>
-                  <td>{a.state === "open" && <button onClick={() => { void ackAlert(a.ruleKey) }}>{t("observability.ack")}</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {overview !== null && !overview.dbAvailable && (
+          <Feedback error={t("observability.dbDown")} />
         )}
-      </section>
+      </Card>
 
-      <section>
-        <h3>{t("observability.errorGroups")}</h3>
-        {errors === null ? <p>{t("observability.loading")}</p> : errors.length === 0 ? (
-          <p className="muted">{t("observability.emptyErrors")}</p>
+      <Card title={t("observability.alerts")}>
+        {alerts === null ? (
+          <Typography.Text type="secondary">{t("observability.loading")}</Typography.Text>
+        ) : alerts.length === 0 ? (
+          <Empty description={t("observability.noAlerts")} />
         ) : (
-          <table className="data-table">
-            <thead><tr>
-              <th>{t("observability.fingerprint")}</th><th>{t("observability.source")}</th>
-              <th>{t("observability.count")}</th><th>{t("observability.lastSeen")}</th>
-            </tr></thead>
-            <tbody>
-              {errors.map((e) => (
-                <tr key={`${e.fingerprint}:${e.release}`}>
-                  <td title={e.fingerprint}>{e.fingerprint.slice(0, 40)}</td>
-                  <td>{e.source}</td>
-                  <td>{e.count}</td>
-                  <td>{fmtTime(e.lastSeen)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<AlertRow>
+            rowKey={(a) => a.ruleKey + a.dimension}
+            size="small"
+            pagination={false}
+            dataSource={alerts}
+            columns={[
+              { title: t("observability.rule"), dataIndex: "ruleKey", key: "rule", render: (v: string) => <span className={styles.mono}>{v}</span> },
+              { title: t("observability.severity"), dataIndex: "severity", key: "severity", render: severityTag },
+              {
+                title: t("observability.state"), dataIndex: "state", key: "state",
+                render: (v: string, r: AlertRow) => <>{stateTag(v)}{r.ackedBy !== null && <Typography.Text type="secondary"> ({r.ackedBy})</Typography.Text>}</>,
+              },
+              { title: t("observability.firstSeen"), dataIndex: "firstSeen", key: "firstSeen", render: fmtTime },
+              { title: t("observability.lastSeen"), dataIndex: "lastSeen", key: "lastSeen", render: fmtTime },
+              {
+                key: "action",
+                render: (_: unknown, r: AlertRow) =>
+                  r.state === "open" && (
+                    <Button size="small" onClick={() => { void ackAlert(r.ruleKey) }}>{t("observability.ack")}</Button>
+                  ),
+              },
+            ]}
+          />
         )}
-      </section>
+      </Card>
 
-      <section>
-        <h3>{t("observability.diagnostics")}</h3>
-        <p className="muted">{t("observability.diagnosticsHint")}</p>
-        {diagGrant === null
-          ? <button onClick={() => { void grantDiagnostics() }}>{t("observability.grantDiag")}</button>
-          : <button onClick={() => { void revokeDiagnostics() }}>{t("observability.revokeDiag")}</button>}
-      </section>
+      <Card title={t("observability.errorGroups")}>
+        {errors === null ? (
+          <Typography.Text type="secondary">{t("observability.loading")}</Typography.Text>
+        ) : errors.length === 0 ? (
+          <Empty description={t("observability.emptyErrors")} />
+        ) : (
+          <Table<ErrorGroupRow>
+            rowKey={(e) => `${e.fingerprint}:${e.release}`}
+            size="small"
+            pagination={false}
+            dataSource={errors}
+            columns={[
+              {
+                title: t("observability.fingerprint"), dataIndex: "fingerprint", key: "fingerprint",
+                render: (v: string) => <span className={styles.mono} title={v}>{v.slice(0, 40)}</span>,
+              },
+              { title: t("observability.source"), dataIndex: "source", key: "source" },
+              { title: t("observability.count"), dataIndex: "count", key: "count" },
+              { title: t("observability.lastSeen"), dataIndex: "lastSeen", key: "lastSeen", render: fmtTime },
+            ]}
+          />
+        )}
+      </Card>
 
-      <section>
-        <h3>{t("observability.logs")}</h3>
-        <div className="search-row">
-          <input
-            placeholder={t("observability.requestIdPlaceholder")}
-            value={query.requestId}
-            onChange={(e) => setQuery((q) => ({ ...q, requestId: e.target.value, username: "" }))}
-          />
-          <input
-            placeholder={t("observability.usernamePlaceholder")}
-            value={query.username}
-            onChange={(e) => setQuery((q) => ({ ...q, username: e.target.value, requestId: "" }))}
-          />
-          <button onClick={() => { void searchLogs() }}>{t("observability.search")}</button>
+      <Card title={t("observability.diagnostics")}>
+        <Typography.Paragraph type="secondary">{t("observability.diagnosticsHint")}</Typography.Paragraph>
+        <Button
+          danger={diagGrant !== null}
+          onClick={() => { void (diagGrant === null ? grantDiagnostics() : revokeDiagnostics()) }}
+        >
+          {diagGrant === null ? t("observability.grantDiag") : t("observability.revokeDiag")}
+        </Button>
+      </Card>
+
+      <Card title={t("observability.logs")}>
+        <div className={styles.toolbar}>
+          <div className={styles.filters}>
+            <Input
+              style={{ width: 280 }}
+              allowClear
+              placeholder={t("observability.requestIdPlaceholder")}
+              value={query.requestId}
+              onChange={(e) => setQuery((q) => ({ ...q, requestId: e.target.value, username: "" }))}
+              onPressEnter={() => { void searchLogs() }}
+            />
+            <Input
+              style={{ width: 180 }}
+              allowClear
+              placeholder={t("observability.usernamePlaceholder")}
+              value={query.username}
+              onChange={(e) => setQuery((q) => ({ ...q, username: e.target.value, requestId: "" }))}
+              onPressEnter={() => { void searchLogs() }}
+            />
+            <Button onClick={() => { void searchLogs() }}>{t("observability.search")}</Button>
+          </div>
         </div>
-        {logs === null ? <p className="muted">{t("observability.logsHint")}</p> : logs.length === 0 ? (
-          <p className="muted">{t("observability.noMatch")}</p>
+        {logs === null ? (
+          <Typography.Text type="secondary">{t("observability.logsHint")}</Typography.Text>
+        ) : logs.length === 0 ? (
+          <Empty description={t("observability.noMatch")} />
         ) : (
-          <table className="data-table">
-            <thead><tr>
-              <th>{t("observability.time")}</th><th>{t("observability.source")}</th>
-              <th>{t("observability.kind")}</th><th>requestId</th><th>payload</th>
-            </tr></thead>
-            <tbody>
-              {logs.map((l, i) => (
-                <tr key={i}>
-                  <td>{fmtTime(l.receivedAt)}</td>
-                  <td>{l.source}</td>
-                  <td>{l.kind}</td>
-                  <td title={l.originRequestId ?? ""}>{l.requestId === null ? "—" : l.requestId.slice(0, 13)}</td>
-                  <td className="payload-cell">{JSON.stringify(l.payload).slice(0, 160)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<LogRow>
+            rowKey={(_, i) => String(i)}
+            size="small"
+            pagination={false}
+            dataSource={logs}
+            columns={[
+              { title: t("observability.time"), dataIndex: "receivedAt", key: "time", render: fmtTime },
+              { title: t("observability.source"), dataIndex: "source", key: "source" },
+              { title: t("observability.kind"), dataIndex: "kind", key: "kind" },
+              {
+                title: "requestId", dataIndex: "requestId", key: "requestId",
+                render: (v: string | null, l: LogRow) => (
+                  <span className={styles.mono} title={l.originRequestId ?? ""}>{v === null ? "—" : v.slice(0, 13)}</span>
+                ),
+              },
+              {
+                title: "payload", dataIndex: "payload", key: "payload",
+                render: (v: unknown) => <span className={styles.mono}>{JSON.stringify(v).slice(0, 160)}</span>,
+              },
+            ]}
+          />
         )}
-        <p className="muted">{t("observability.samplingNote")}</p>
-      </section>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 12 }}>
+          {t("observability.samplingNote")}
+        </Typography.Paragraph>
+      </Card>
     </div>
   )
 }

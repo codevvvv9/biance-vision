@@ -17,7 +17,9 @@
     "evals": "评测与模型",
     "evalsHint": "数据集 / 训练 / 指标",
     "observability": "监控",
-    "observabilityHint": "错误聚合与请求检索"
+    "observabilityHint": "错误聚合与请求检索",
+    "queues": "队列健康",
+    "queuesHint": "积压 / 清理"
   },
   "gate": {
     "verifying": "会话验证中…",
@@ -727,7 +729,23 @@
     "auditAction_knowledge_batch_publish": "批量发布",
     "auditAction_knowledge_batch_reparse": "批量重解析",
     "auditAction_knowledge_batch_delete": "批量删除",
-    "auditAction_prediction_confirm": "确认预测"
+    "auditAction_prediction_confirm": "确认预测",
+    "queueHint": "各队列积压与滞留时长（30 秒自动刷新）；market:* 积压超过保留期会自动过期，仅白名单队列支持手动清理。",
+    "colQueue": "队列",
+    "colCreated": "积压",
+    "colActive": "执行中",
+    "colRetry": "重试",
+    "colCompleted": "已完成",
+    "colFailed": "失败",
+    "colOldest": "最早滞留",
+    "colRetention": "保留",
+    "colAction": "操作",
+    "purgeBacklog": "清理积压",
+    "purgeConfirmTitle": "确认清理积压",
+    "purgeConfirmBody": "将清理队列 {queue} 的 {created} 条积压任务，此操作不可撤销。",
+    "purgeDone": "已清理 {queue} 的 {count} 条积压",
+    "preciousTag": "不自动过期",
+    "preciousHint": "该队列任务不设保留期（研究结果等不可丢弃），积压请从业务侧处理。"
   },
   "observability": {
     "title": "监控",

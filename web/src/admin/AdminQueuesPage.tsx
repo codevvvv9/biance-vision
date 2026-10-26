@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { App, Button, Card, Space, Table, Tag, Tooltip } from "antd";
+import { App, Button, Card, Table, Tag, Tooltip, Typography } from "antd";
 import {
   loadQueueHealth,
   purgeQueue,
@@ -89,11 +89,12 @@ export default function AdminQueuesPage(): JSX.Element {
   return (
     <div className={styles.stack}>
       <Feedback error={error || resource.error} success={success} />
-      <Card>
-        <div className={styles.toolbar}>
-          <p>{text("queueHint")}</p>
-          <Button onClick={() => void resource.reload()}>{text("refresh")}</Button>
-        </div>
+      <Card
+        extra={<Button onClick={() => void resource.reload()}>{text("refresh")}</Button>}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          {text("queueHint")}
+        </Typography.Paragraph>
         <Table<QueueHealthRow>
           rowKey="name"
           size="small"
