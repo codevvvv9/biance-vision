@@ -1,6 +1,6 @@
 # DuckStrat 品牌与首屏交互
 
-状态：verified（本地实现、浏览器与镜像验收，2026-10-26）。线上版本以发布 tag 与部署检查为准。
+状态：verified（本地实现、浏览器、镜像与线上验收，2026-10-26）。线上已发布 `v0.20.0`。
 
 ## 身份与边界
 
@@ -71,6 +71,19 @@ Cloudflare 保持现有 DNS only 接入；官网、用户 API 与管理 API 的�
 
 ## 发布与回滚
 
-遵循 PR → CI → 合并 → tag → 镜像 → 部署流程。部署前确认当前无活跃用户/研究，记录原镜像 digest；
+遵循 PR → CI → 合并 → tag → 镜像 → 部署流程。部署前确认无进行中研究并核对在线连接，记录原镜像 digest；
+在线连接默认等待退出，本次经用户明确同意短暂重连后切换。
 应用、管理 API 和官网使用同一版本，复验公开路由、品牌、重定向、登录、SSE 和 WebSocket。
 保留上一版本镜像与配置，用原 digest 回退；品牌发布不需要数据迁移或重命名会话键。
+
+### v0.20.0 线上验收（2026-10-26）
+
+- [实现 PR #74](https://github.com/codevvvv9/biance-vision/pull/74) 已合并；tag 对应 `b796dcec3acbeceb5bfeb561d5ce9444e5d5ec3b`，[镜像发布流水线](https://github.com/codevvvv9/biance-vision/actions/runs/40283497047) 成功。
+- 应用 / 管理 API / worker 使用 `ghcr.io/codevvvv9/biance-vision@sha256:b0ecf5c76a366a364e2153840d0fc24cd9cd4dbe7ccb17109263458207b44d99`。
+- 官网使用 `ghcr.io/codevvvv9/biance-vision-website@sha256:77270802971c7c33980468305583fb8faccfb79e093fb0818f3a69e9e7ea8b5e`。镜像内品牌资源与发布源码哈希一致，服务就绪检查通过。
+- `research-py` 保持原有 `0.18.4` 镜像与内存配置；本次不涉及数据库迁移。上一版本应用与官网镜像、环境配置和可执行回滚脚本均已保留，未清理回滚资源。
+- sitemap 的 36 个公开页面逐一返回 200，服务端 HTML 使用 DuckStrat 和新主域名；公网 Chrome 验证首屏自动播放到结尾，无页面运行异常。
+- `www` 与旧用户域名返回 301，路径和查询参数保留；旧管理域名跳转到新管理域名。主站 `/admin` 与 `/api/admin` 返回 404，独立管理域名未经 Basic Auth 返回 401。
+- 现有用户账号经公网真实登录成功；同一会话收到 150 个行情 ticker 的 WebSocket 消息，并成功回放自己已有研究的 SSE 终态事件。外站 Origin 写入请求返回 403。
+- 现有 superadmin 账号经独立管理 API 容器内入口登录成功，用户、资料、Agent 能力、队列健康和会员套餐读取均返回 200；外层 Basic Auth 单独验收。以上验证会话均主动注销，未创建研究任务或触发模型调用。
+- worker 重启后持续采集并落库行情。公开路由、身份校验及长连接检查均在切换后执行。
