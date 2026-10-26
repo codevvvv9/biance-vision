@@ -481,8 +481,13 @@
 .site :global(.pricing-amount span) { font-size: 14px; }
 
 /* DuckStrat: reserved two-column scene, progressively enhanced SVG interaction. */
-.site :global(.hero-intro) { display: grid; grid-template-columns: 1fr 1.04fr; align-items: center; gap: 58px; }
-.site :global(.hero-intro .hero-copy) { text-align: left; min-width: 0; }
+.site :global(.hero-intro) { display: grid; grid-template-columns: 0.86fr 1.24fr; align-items: center; gap: 46px; }
+.site :global(.hero-intro .hero-copy) { position: relative; text-align: left; min-width: 0; }
+.site :global(.hero-intro .hero-copy > *:not(.hero-map-bg)) { position: relative; z-index: 1; }
+.site :global(.hero-map-bg) { position: absolute; inset: -34px -46px -24px -74px; z-index: 0; pointer-events: none; opacity: .55; }
+.site :global(.hero-map-bg svg) { display: block; width: 100%; height: 100%; }
+.site :global(.hero-map-bg .routeFlow) { animation: heroRouteDrift 30s linear infinite; }
+@keyframes heroRouteDrift { to { stroke-dashoffset: -264; } }
 .site :global(.hero-intro h1) { font-size: clamp(42px, 4.4vw, 64px); letter-spacing: -2.7px; line-height: 1.08; margin-top: 27px; }
 .site :global(.hero-intro .hero-gradient) { color: #f0d891; background: linear-gradient(110deg, #f5cc58, #f5e6b7); background-clip: text; }
 .site :global(.hero-intro .hero-kicker) { font-size: 8px; letter-spacing: 1px; }
