@@ -19,6 +19,7 @@ import { currentBlobStoreKind } from './knowledge/blobstore.js'
 import { probeVectorSupport } from './knowledge/vector.js'
 import { registerResearchWorkers } from './research/runs/jobs.js'
 import { registerAdminWorkers } from './admin/jobs.js'
+import { writeWorkerHeartbeat } from './observability/workerHeartbeat.js'
 
 type IngestJob = SeriesKey
 type BackfillJob = SeriesKey & { fromOpenTime: number; toOpenTime: number }
@@ -144,8 +145,7 @@ await boss.work('observability:aggregate', async () => {
   if (!db) return
   try {
     await db.execute(sql`SELECT observability_aggregate_batches(100)`)
-    await db.execute(sql`INSERT INTO app_settings (key, value) VALUES ('observability:worker:heartbeat', jsonb_build_object('at', (extract(epoch FROM now())*1000)::bigint, 'pid', ${String(process.pid)}))
-      ON CONFLICT (key) DO UPDATE SET value = jsonb_build_object('at', (extract(epoch FROM now())*1000)::bigint, 'pid', ${String(process.pid)})`)
+    await writeWorkerHeartbeat()
   } catch (e) {
     log.warn('observability', '指标聚合/心跳失败（下轮重试）：', (e as Error).message)
   }
