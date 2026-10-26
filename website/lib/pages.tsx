@@ -1,4 +1,4 @@
-import { DuckHero } from '@/components/DuckHero'
+import { DuckRun } from '@/components/DuckRun'
 import { brand } from '@biance/brand/identity'
 import { Arrow, Crosshair } from '@/components/Icons'
 import { ResearchDemo } from '@/components/ResearchDemo'
@@ -35,7 +35,7 @@ export function HomePage({ locale }: { locale: Locale }) {
     <section className="hero container">
       <div className="hero-background" aria-hidden="true"><span className="orb orb-one" /><span className="orb orb-two" /><span className="hero-grid" /></div>
       <div className="hero-intro"><div className="hero-copy"><a className="hero-kicker" href={`/${locale}/methodology`}><span className="status-dot" />{text(locale, 'PRICE ACTION & STRATEGY RESEARCH', '价格行为与策略研究工作台')} <Arrow /></a><h1>{text(locale, 'Navigate risk.', '先避风险，')}<br /><span className="hero-gradient">{text(locale, 'Make informed decisions.', '再做判断。')}</span></h1><p>{text(locale, 'Look past the noise. Test the evidence.\nBuild a strategy that knows when to wait.', '绕开噪声与过度自信，让策略建立在证据之上。\n看清成立与失效的条件，也知道何时等待。')}</p><div className="button-row"><a className="button button-primary" href={`/${locale}/demo`}>{text(locale, 'View research demo', '查看研究演示')} <Arrow /></a><a className="button button-ghost" href={`/${locale}/contact`}>{text(locale, 'Request access', '申请开通')} <Arrow diagonal /></a></div><div className="hero-footnote"><span>{text(locale, 'PRICE ACTION', '价格行为')}</span><i /><span>{text(locale, 'EVIDENCE & COUNTEREVIDENCE', '证据与反证')}</span><i /><span>{text(locale, 'YOUR JUDGMENT', '你的研究判断')}</span></div></div>
-      <DuckHero locale={locale} /></div>
+      <DuckRun locale={locale} /></div>
       <div className="hero-product"><div className="product-glow" aria-hidden="true" /><div className="product-overline"><span className="overline-line" /><span>{text(locale, 'A WINDOW INTO THE WORKFLOW', '从研究过程，看见产品')}</span><span className="overline-line" /></div><ResearchDemo locale={locale} compact /><div className="product-under"><span className="decorative-corner">⌞</span><span>{text(locale, 'EXPLORE THE REASONING, NOT JUST THE RESULT.', '探索推理过程，而不只看结果。')}</span><span className="decorative-corner">⌟</span></div></div>
     </section>
     <section className="principles-strip container" aria-label={text(locale, 'Research principles', '研究原则')}><span>{text(locale, 'Built around a simple belief', '我们相信，一份好的研究应该')}</span><strong>{text(locale, 'Context first.', '先看上下文。')}</strong><strong>{text(locale, 'Both sides.', '同时看两面。')}</strong><strong>{text(locale, 'Nothing hidden.', '让依据可追溯。')}</strong></section>
