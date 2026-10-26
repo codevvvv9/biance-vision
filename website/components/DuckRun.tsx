@@ -73,7 +73,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
     const BEAK = new Path2D(duck.beak)
     const WING = new Path2D(duck.wing)
 
-    let W = 0, H = 0, k = 1
+    let W = 0, H = 0, k = 1, oi = 1
     let playTop = 0, playH = 1, duckX = 0, duckH = 46, duckR = 14
     let raf = 0
     let inView = true, visible = !document.hidden
@@ -106,21 +106,24 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
 
     const metrics = () => {
       k = Math.max(.45, W / 560)
+      // Obstacle/UI scale: capped so fullscreen widens the river instead of
+      // inflating the risks — the field breathes, the hazards stay dense-but-small.
+      oi = Math.min(k, 1.45)
       playTop = Math.max(24, H * .1)
       playH = H - playTop - Math.max(9, H * .05)
       duckX = Math.max(10, W * .02) + (W - Math.max(20, W * .04)) * .2
-      duckH = Math.min(62, Math.max(36, H * .17))
+      duckH = Math.min(52, Math.max(32, H * .15))
       duckR = duckH * .3
       playTopRef.current = playTop
       playHRef.current = playH
     }
 
-    const labelFont = (px: number) => `600 ${Math.max(9, Math.round(px * k))}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif`
+    const labelFont = (px: number, scale = k) => `600 ${Math.max(9, Math.round(px * scale))}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif`
     const monoFont = (px: number, weight = '') => `${weight} ${Math.round(px)}px "SFMono-Regular", Consolas, "PingFang SC", monospace`.trim()
 
     const measurePill = (label: string) => {
-      ctx.font = labelFont(10.5)
-      return ctx.measureText(label).width + 46 * k
+      ctx.font = labelFont(10.5, oi)
+      return ctx.measureText(label).width + 46 * oi
     }
 
     const burst = (x: number, y: number, color: string, count: number, spread = 130) => {
@@ -207,7 +210,16 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
         if (!clash) break
         yFrac = .14 + rand() * .72
       }
-      G.obstacles.push({ kind: 'pill', x: W + 12, y: yFrac, label, glyph: risk.glyph, w: measurePill(label), wK: k, counted: false, seed: Math.floor(rand() * 1e9) })
+      G.obstacles.push({ kind: 'pill', x: W + 12, y: yFrac, label, glyph: risk.glyph, w: measurePill(label), wK: oi, counted: false, seed: Math.floor(rand() * 1e9) })
+      // Endless-runner rhythm (three.js homepage DNA): risks occasionally arrive
+      // as a small vertical cluster, so the stream reads in beats, not drizzle.
+      if (playing && G.t > 6 && rand() < .2) {
+        const drift = rand() < .5 ? -1 : 1
+        const y2 = Math.min(.9, Math.max(.1, yFrac + drift * (.24 + rand() * .08)))
+        const risk2 = config.current.risks[Math.floor(rand() * config.current.risks.length)]!
+        const label2 = locale === 'zh' ? risk2.zh : risk2.en
+        G.obstacles.push({ kind: 'pill', x: W + 12 + rand() * 30, y: y2, label: label2, glyph: risk2.glyph, w: measurePill(label2), wK: oi, counted: false, seed: Math.floor(rand() * 1e9) })
+      }
     }
 
     const candleSegments = (wall: Wall) => {
@@ -224,7 +236,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
       while (y < bottom - 2 && segs.length < 9 && guard < 24) {
         guard += 1
         if (y >= gapTop && y < gapBottom) { y = gapBottom; continue }
-        let end = Math.min(y + heights[segs.length % heights.length]! * Math.max(.7, k), bottom)
+        let end = Math.min(y + heights[segs.length % heights.length]! * Math.max(.7, oi), bottom)
         if (end > gapTop && y < gapTop) end = gapTop
         if (end - y >= 9) segs.push([y, end])
         y = Math.max(end, y + 2)
@@ -248,7 +260,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
           lo = Math.max(lo, o.gapY - half + .02)
           hi = Math.min(hi, o.gapY + half - .02)
         } else {
-          const half = (30 * k) / playH / 2 + .05
+          const half = (30 * oi) / playH / 2 + .05
           if (o.y > (lo + hi) / 2) hi = Math.min(hi, o.y - half)
           else lo = Math.max(lo, o.y + half)
         }
@@ -261,12 +273,14 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
       G.worldX += G.speed * dt
       if (playing) {
         G.t += dt
-        G.speed = (128 + Math.min(G.t * 3.1, 215)) * config.current.speedScale
+        // World speed follows the field width (k), so a wider river flows at the
+        // same perceived pace and keeps its per-width obstacle density.
+        G.speed = (128 + Math.min(G.t * 3.1, 215)) * config.current.speedScale * k
         if (G.kbd.up) pointerY.current -= 340 * k * dt / playH
         if (G.kbd.down) pointerY.current += 340 * k * dt / playH
       } else {
         G.idleT += dt
-        G.speed = 92
+        G.speed = 92 * k
         autopilot(dt)
       }
       pointerY.current = Math.min(.97, Math.max(.03, pointerY.current))
@@ -275,12 +289,12 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
       G.spawnIn -= dt
       if (G.spawnIn <= 0) {
         spawnObstacle()
-        G.spawnIn = playing ? Math.max(.5, 1.32 - G.t * .011) : 1.6
+        G.spawnIn = (playing ? Math.max(.5, 1.32 - G.t * .011) : 1.6) / k
       }
       G.evIn -= dt
       if (G.evIn <= 0) {
         G.evidenceList.push({ x: W + 10, y: .15 + rand() * .7, seed: Math.floor(rand() * 1e9), taken: false })
-        G.evIn = playing ? 2.2 + rand() * 1.6 : 3 + rand() * 2
+        G.evIn = (playing ? 2.2 + rand() * 1.6 : 3 + rand() * 2) / k
       }
       if (playing) G.wallIn -= dt
 
@@ -297,7 +311,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
       if (playing) {
         G.invuln = Math.max(0, G.invuln - dt)
         for (const o of G.obstacles) {
-          const width = o.kind === 'pill' ? o.w : Math.max(9, 13 * k)
+          const width = o.kind === 'pill' ? o.w : Math.max(9, 13 * oi)
           if (!o.counted && o.x + width < duckX - duckR) {
             o.counted = true
             G.dodged += 1
@@ -305,11 +319,11 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
           }
           if (G.invuln > 0) continue
           if (o.kind === 'pill') {
-            const h = Math.max(24, Math.min(34, 30 * k))
+            const h = Math.max(22, Math.min(34, 30 * oi))
             const cy = playTop + o.y * playH
             if (circleRect(duckX, duckY, duckR, o.x, cy - h / 2, o.x + o.w, cy + h / 2)) damage()
           } else {
-            const bw = Math.max(9, 13 * k)
+            const bw = Math.max(9, 13 * oi)
             for (const [top, bottom] of candleSegments(o).segs) {
               if (circleRect(duckX, duckY, duckR, o.x, top + 1, o.x + bw, bottom - 1)) { damage(); break }
             }
@@ -319,7 +333,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
           const ey = playTop + e.y * playH
           const dx = e.x - duckX
           const dy = ey - duckY
-          if (dx * dx + dy * dy < (duckR + 8 * k) ** 2) {
+          if (dx * dx + dy * dy < (duckR + 8 * oi) ** 2) {
             e.taken = true
             G.evidence += 1
             burst(e.x, ey, '#a6e8d4', 10, 90)
@@ -419,7 +433,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
         ctx.save()
         ctx.translate(e.x, y)
         ctx.rotate(Math.PI / 4 + Math.sin(G.t + e.seed) * .2)
-        const r = Math.max(4.5, 6 * k)
+        const r = Math.max(4.5, 6 * oi)
         ctx.fillStyle = `rgba(134,205,183,${(.22 * pulse).toFixed(3)})`
         ctx.fillRect(-r * 1.7, -r * 1.7, r * 3.4, r * 3.4)
         ctx.fillStyle = '#86cdb7'
@@ -431,10 +445,10 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
 
       for (const o of G.obstacles) {
         if (o.kind === 'pill') {
-          if (o.wK !== k) { o.w = measurePill(o.label); o.wK = k }
-          const h = Math.max(24, Math.min(34, 30 * k))
+          if (o.wK !== oi) { o.w = measurePill(o.label); o.wK = oi }
+          const h = Math.max(22, Math.min(34, 30 * oi))
           const y = playTop + o.y * playH + Math.sin(G.worldX * .006 + o.seed) * 2.5
-          const icon = 15 * Math.max(.8, k)
+          const icon = 15 * Math.max(.8, oi)
           ctx.save()
           ctx.translate(o.x, y - h / 2)
           ctx.beginPath()
@@ -446,21 +460,21 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
           ctx.stroke()
           ctx.fillStyle = '#c6a29c12'
           ctx.beginPath()
-          ctx.roundRect(7 * k, (h - icon) / 2, icon, icon, 3)
+          ctx.roundRect(7 * oi, (h - icon) / 2, icon, icon, 3)
           ctx.fill()
           ctx.fillStyle = '#cba59e'
-          ctx.font = monoFont(9 * k)
+          ctx.font = monoFont(9 * oi)
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
-          ctx.fillText(o.glyph, 7 * k + icon / 2, h / 2 + .5)
+          ctx.fillText(o.glyph, 7 * oi + icon / 2, h / 2 + .5)
           ctx.fillStyle = '#d9bdb7'
-          ctx.font = labelFont(10.5)
+          ctx.font = labelFont(10.5, oi)
           ctx.textAlign = 'left'
-          ctx.fillText(o.label, 7 * k + icon + 7 * k, h / 2 + .5)
+          ctx.fillText(o.label, 7 * oi + icon + 7 * oi, h / 2 + .5)
           ctx.restore()
           ctx.textBaseline = 'alphabetic'
         } else {
-          const bw = Math.max(9, 13 * k)
+          const bw = Math.max(9, 13 * oi)
           for (const [top, bottom] of candleSegments(o).segs) {
             const seeded = mulberry(o.seed + Math.round(top))
             const bear = seeded() < .55
@@ -472,7 +486,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
             ctx.stroke()
             ctx.fillStyle = bear ? '#b9564f' : '#8a403b'
             ctx.beginPath()
-            ctx.roundRect(o.x, top + 5 * k, bw, Math.max(6, bottom - top - 10 * k), 2)
+            ctx.roundRect(o.x, top + 5 * oi, bw, Math.max(6, bottom - top - 10 * oi), 2)
             ctx.fill()
           }
         }

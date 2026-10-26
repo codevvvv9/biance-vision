@@ -480,39 +480,36 @@
 .site :global(.pricing-amount) { font-size: 34px; font-weight: 600; }
 .site :global(.pricing-amount span) { font-size: 14px; }
 
-/* DuckStrat: full-viewport hero — the live-site duo (copy + narrative duck) on the left, the game on the right. */
-.site :global(.hero-wide) { position: relative; display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr); gap: clamp(28px, 3vw, 52px); align-items: stretch; width: 100%; max-width: 1760px; margin-inline: auto; min-height: 100vh; min-height: 100svh; padding: 79px clamp(24px, 4.5vw, 72px) 32px; }
+/* DuckStrat: full-viewport hero — one fused copy+narrative panel on the left, the game on the right. */
+.site :global(.hero-wide) { position: relative; display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr); gap: clamp(28px, 3vw, 52px); align-items: stretch; width: 100%; max-width: 1760px; margin-inline: auto; min-height: calc(100vh - 89px); min-height: calc(100svh - 89px); padding: 79px clamp(24px, 4.5vw, 72px) 32px; }
 .site :global(.hero-wide .hero-intro) { align-self: center; }
 .site :global(.hero-game) { align-self: stretch; min-height: 0; display: flex; }
 .site :global(.hero-game > *) { flex: 1; min-width: 0; }
-.site :global(.hero-intro) { display: grid; grid-template-columns: 1fr 1.04fr; align-items: center; gap: 44px; }
+/* Fused panel: copy strip and the narrative duck share one card (same shell language as the scene cards). */
+.site :global(.hero-intro) { display: flex; flex-direction: column; padding: 18px 24px 14px; border: 1px solid #d2cba31c; border-radius: 18px; background: linear-gradient(145deg, #161e2480, #0d151e90); box-shadow: 0 24px 90px #00000018; }
 .site :global(.hero-intro .hero-copy) { position: relative; text-align: left; min-width: 0; }
-.site :global(.hero-intro h1) { font-size: clamp(42px, 4.4vw, 64px); letter-spacing: -2.7px; line-height: 1.08; margin-top: 27px; }
-.site :global(.hero-intro .hero-gradient) { color: #f0d891; background: linear-gradient(110deg, #f5cc58, #f5e6b7); background-clip: text; }
+/* The display title is retired; the words stay for screen readers and crawlers. */
+.site :global(.hero-intro .hero-titleSr) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .site :global(.hero-intro .hero-kicker) { font-size: 8px; letter-spacing: 1px; }
-.site :global(.hero-intro .hero-copy > p) { font-size: 13px; margin-inline: 0; line-height: 1.9; }
-.site :global(.hero-intro .button-row), .site :global(.hero-intro .hero-footnote) { justify-content: flex-start; }
-.site :global(.hero-intro .hero-footnote) { font-size: 7px; gap: 9px; letter-spacing: .7px; }
+.site :global(.hero-intro .hero-copy > p) { font-size: 13px; margin: 8px 0 0; line-height: 1.9; }
+.site :global(.hero-intro .button-row) { margin-top: 13px; justify-content: flex-start; }
+.site :global(.hero-intro .hero-footnote) { margin-top: 12px; justify-content: flex-start; font-size: 7px; gap: 9px; letter-spacing: .7px; }
+/* DuckHero fused in: nested card shell stripped, and the scene width follows the viewport height so the panel always fits the hero. Its meaning line is dropped here — the game card on the right carries the same words. Height budget: 89px header + 79px hero pad + ~330px panel chrome + 32px bottom pad; 1.556 = 560/360. */
+.site :global(.hero-intro > section) { border: 0; background: none; box-shadow: none; padding: 10px 2px 0; width: min(100%, max(240px, calc((100svh - 545px) * 1.556))); margin: 10px auto 0; }
+.site :global(.hero-intro > section > div:nth-child(3)) { min-height: 40px; }
+.site :global(.hero-intro > section > div:nth-child(4)) { padding-top: 8px; margin-top: 6px; }
+.site :global(.hero-intro > section > p:last-child) { display: none; }
 .site :global(.hero-product) { margin-top: 84px; }
-@media (max-width: 1100px) {
-  .site :global(.hero-intro) { gap: 30px; }
-  .site :global(.hero-intro h1) { font-size: 48px; }
-}
 @media (max-width: 1000px) {
   .site :global(.hero-wide) { display: block; min-height: 0; max-width: none; margin-inline: 0; padding: 100px 24px 0; }
   .site :global(.hero-game) { display: block; margin-top: 35px; }
-  .site :global(.hero-intro) { grid-template-columns: 1fr; gap: 35px; }
-  .site :global(.hero-intro > section) { width: min(100%, 600px); justify-self: center; }
+  .site :global(.hero-intro) { padding: 18px 16px 16px; border-radius: 14px; }
+  .site :global(.hero-intro > section) { width: 100%; max-width: 600px; margin: 14px auto 0; }
 }
 @media (max-width: 900px) {
-  .site :global(.hero-intro) { grid-template-columns: 1fr; gap: 35px; }
-  .site :global(.hero-intro .hero-copy) { max-width: 620px; }
-  .site :global(.hero-intro h1) { font-size: clamp(46px, 8vw, 64px); }
-  .site :global(.hero-intro > section) { width: min(100%, 600px); justify-self: center; }
   .site :global(.hero-product) { margin-top: 48px; }
 }
 @media (max-width: 600px) {
-  .site :global(.hero-intro h1) { font-size: 46px; letter-spacing: -2px; }
   .site :global(.hero-intro .hero-copy > p) { font-size: 12px; padding: 0; }
   .site :global(.hero-intro .hero-kicker) { font-size: 7px; letter-spacing: .7px; }
   .site :global(.hero-intro .hero-footnote) { font-size: 6px; gap: 7px; }
