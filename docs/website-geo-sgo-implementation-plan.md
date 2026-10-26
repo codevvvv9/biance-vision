@@ -1,6 +1,6 @@
 # Biance Vision 官网 GEO/SGO 首版实施方案
 
-> 状态：首版工程实现与官网范围本地验收完成；未部署，站长平台 / AI 引用 / 真实用户验收待执行
+> 状态：已随 v0.18.2 部署上线（2026-10-26 线上核验 SEO 输出正确）；站长平台验证 / AI 引用观测 / 真实用户验收待执行；域名迁移 duckstrat.com 进行中（见 §7）
 >
 > 日期：2026-10-23
 >
@@ -191,3 +191,9 @@ Bing 的引用报告覆盖其支持的 AI 场景，不代表全平台表现，�
 - 12 题与 48 行四平台观测表已交付；未观测项保持未观测。站长平台校验可使用公开 meta 构建参数，尚无实际账户验证或收录证据。
 
 完整命令、截图、日志边界及待验证事项见 [GEO/SGO 本地 QA](references/website-geo-sgo-qa-2026-10-24.md)。§5 综合验收保持未勾选，工程局部检查结果单独记录。原完整发布门槛的研究 smoke 失败尚未解决，本轮未部署。
+
+## 7. 2026-10-26 部署核验与域名迁移
+
+- 官网实况（推翻 §6 末行「本轮未部署」的旧状态）：`biance-vision-website:0.18.2` 已在线，`WEBSITE_ORIGIN=https://btcpilot.duckdns.org`；公网实测根路径 302 语言自适应、`/en` 的 `<html lang>`、canonical/hreflang（en/zh-CN/x-default）、`sitemap.xml`、`robots.txt` 全部按设计输出。
+- 域名迁移至正式域名 `duckstrat.com`（Cloudflare Registrar，灰云仅 DNS 直连 VPS）：`WEBSITE_ORIGIN`/Caddy 同步切换，旧 duckdns 双域名 301 永久重定向以传递索引权重；站长平台（Search Console / Bing Webmaster）待用新域名接入。
+- 首页 `<title>` 由纯品牌标语调整为「品牌 — 品类词」组合（AI crypto market research terminal），内页维持「页面标题 | Biance Vision」模板不变。
