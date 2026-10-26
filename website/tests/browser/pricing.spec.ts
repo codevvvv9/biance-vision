@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test'
 import { config, versionId } from '../../../web/tests/admin/membership-data'
+test('server-rendered catalog is readable with JavaScript disabled', async ({ browser }) => {
+  test.skip(process.env.WEBSITE_SSR_CATALOG_TEST !== '1', 'Requires a controlled WEBSITE_API_ORIGIN catalog fixture.')
+  const context = await browser.newContext({ javaScriptEnabled: false })
+  const page = await context.newPage()
+  await page.goto(`${process.env.WEBSITE_TEST_URL || 'http://127.0.0.1:3100'}/en/pricing`)
+  await expect(page.getByRole('heading', {name:'Monthly',exact:true})).toBeVisible()
+  await expect(page.locator('.pricing-grid')).toContainText('15 USDT')
+  await context.close()
+})
 for (const locale of ['zh', 'en'])
   test(`published pricing loads real API data and handles unavailable updates (${locale})`, async ({
     page,

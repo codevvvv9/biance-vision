@@ -8,9 +8,11 @@ test('initial 提供时首帧即带数据（服务端渲染注入）', () => {
     load: async () => ({ v: 1 }),
     intervalSeconds: () => 60,
     initial: seed,
+    initialUpdatedAt: 123456,
   })
   assert.equal(store.getSnapshot().data, seed)
   assert.equal(store.getSnapshot().loading, false)
+  assert.equal(store.getSnapshot().updatedAt, 123456)
 })
 
 test('未提供 initial 时首帧为 undefined（既有行为不变）', () => {

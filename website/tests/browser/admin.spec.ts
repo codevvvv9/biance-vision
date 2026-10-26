@@ -23,7 +23,7 @@ test('administrator publishes contacts and delivers a provisioned account only a
     await route.fulfill({ status: path.endsWith('/provision') ? 201 : 200, json: body })
   })
   await page.addInitScript(() => localStorage.setItem('app-lang', 'zh-CN'))
-  await page.goto(`${admin}/admin/`)
+  await page.goto(`${admin}/admin/panel`)
   await page.getByRole('tab', { name: '官网设置', exact: true }).click()
   await expect(page.getByText('官网公开联系方式', { exact: true })).toBeVisible()
   await page.getByLabel('Telegram 用户名', { exact: true }).fill('real_contact')
