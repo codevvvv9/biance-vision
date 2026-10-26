@@ -408,11 +408,11 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
       const spacing = 26 * k
       const offX = -(G.worldX * .06) % spacing
       ctx.fillStyle = '#b6c6cd'
-      ctx.globalAlpha = .05
+      ctx.globalAlpha = .09
       for (let gx = offX; gx < W; gx += spacing) {
         for (let gy = playTop % spacing; gy < H; gy += spacing) ctx.fillRect(gx, gy, 1.3, 1.3)
       }
-      ctx.globalAlpha = .1
+      ctx.globalAlpha = .16
       ctx.strokeStyle = '#9bb9b7'
       ctx.lineWidth = 1
       ctx.setLineDash([9, 25])
