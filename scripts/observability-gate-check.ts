@@ -129,6 +129,15 @@ if (!staticOnly) {
   tryRecord('user', '198.51.100.9', { kind: 'http_error', requestId: 'req-gate-1', payload: { statusCode: 500, code: null, message: null, method: 'GET', route: '/api/x' } }, { fingerprint: 'http:500:none' })
   await stopDiagnosticSink()
   const { getDb, sql } = await import('../server/src/db.js')
+  const { writeWorkerHeartbeat } = await import('../server/src/observability/workerHeartbeat.js')
+  await writeWorkerHeartbeat('gate-first')
+  const firstHeartbeat = await getDb()!.execute(sql`SELECT value FROM app_settings WHERE key = 'observability:worker:heartbeat'`)
+  const firstHeartbeatValue = firstHeartbeat[0]?.value as { pid: string; at: number } | undefined
+  check('OH1 真实 PG 预编译参数写入心跳（避免 jsonb 参数 42P18）',
+    firstHeartbeatValue?.pid === 'gate-first' && Number(firstHeartbeatValue?.at) > Date.now() - 10_000, true)
+  await writeWorkerHeartbeat('gate-restarted')
+  const nextHeartbeat = await getDb()!.execute(sql`SELECT value FROM app_settings WHERE key = 'observability:worker:heartbeat'`)
+  check('OH2 worker 重启后更新同一条心跳', nextHeartbeat.length === 1 && (nextHeartbeat[0]?.value as { pid: string } | undefined)?.pid === 'gate-restarted', true)
   const rows = await getDb()!.execute(sql`SELECT source, kind, request_id FROM observability_inbox WHERE request_id = 'req-gate-1'`)
   check('OG2 stop flush 后 inbox 落库（两条独立 event）', (rows as unknown as unknown[]).length, 2)
   const groups = await getDb()!.execute(sql`SELECT fingerprint, count FROM observability_error_groups WHERE fingerprint = 'http:500:none'`)
