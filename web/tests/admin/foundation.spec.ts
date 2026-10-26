@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures'
-test('all nine menu links use one basename and preserve active route after refresh', async ({ page }) => {
+test('all ten menu links use one basename and preserve active route after refresh', async ({ page }) => {
   await page.goto('/admin/')
-  const paths = ['/admin', '/admin/panel', '/admin/ai', '/admin/knowledge', '/admin/agents', '/admin/prompts', '/admin/evals', '/admin/queues', '/admin/observability']
+  const paths = ['/admin/membership', '/admin', '/admin/panel', '/admin/ai', '/admin/knowledge', '/admin/agents', '/admin/prompts', '/admin/evals', '/admin/queues', '/admin/observability']
   const navigation = page.getByRole('navigation', { name: '管理导航' })
-  await expect(navigation.locator('a')).toHaveCount(9)
+  await expect(navigation.locator('a')).toHaveCount(10)
   for (let index = 0; index < paths.length; index++) {
     const link = navigation.locator('a').nth(index)
     await expect(link).toHaveAttribute('href', paths[index])

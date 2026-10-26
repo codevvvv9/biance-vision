@@ -1,5 +1,8 @@
 # 将两个既有域名替换到下面站点块；官网与终端共用用户域名。
 # 网站 CSP 由 Next 专属 headers 设置，不能套用到 SPA。
+# 域名迁移并行期：一个站点块用逗号挂两个域名，Caddy 会为两个域名各自签发证书、
+# 走同一套路由——旧域名保留观察、新域名即指即用，观察期满删掉旧域名即可：
+#   bv-old.example.com, bv-new.example.com {
 bv.example.com {
 	encode zstd gzip
 	header {

@@ -58,5 +58,29 @@
   },
   "api": {
     "requestFailed": "Request failed (HTTP {{code}})"
+  },
+  "membership": {
+    "retry": "Retry",
+    "legacyAccount": "Legacy account",
+    "trial": "Trial",
+    "active": "Active",
+    "expired": "Expired",
+    "disabled": "Disabled",
+    "account": "Account",
+    "plan": "Plan",
+    "expires": "Expires",
+    "lifetime": "Lifetime",
+    "myMembership": "My membership",
+    "expires2": "Expires",
+    "membershipProgress": "Membership progress",
+    "usedToday": "Used today",
+    "remaining": "Remaining",
+    "unlimited": "Unlimited",
+    "resets": "Resets",
+    "upcoming": "Upcoming",
+    "lastUpdated": "Last updated",
+    "contactAdminToRenew": "Contact admin to renew",
+    "copyMembershipDetails": "Copy membership details",
+    "refresh": "Refresh"
   }
 }

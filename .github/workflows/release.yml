@@ -44,13 +44,13 @@ jobs:
         run: |
           mkdir -p release
           tar -czf release/biance-vision-${{ github.ref_name }}.tar.gz \
-            server/dist web/dist web/dist-admin \
+            server/dist server/drizzle web/dist web/dist-admin \
             shared/package.json shared/dist \
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             server/package.json web/package.json \
             Dockerfile website/Dockerfile website/.next/standalone website/.next/static website/public website/data website/runtime \
-            website/package.json packages/shared-ui/package.json packages/brand website/next.config.ts \
-            docker-compose.yml docker README.md
+            website/package.json packages/shared-ui/package.json packages/brand packages/platform-contracts website/next.config.ts \
+            docker-compose.yml docker deploy/vps deploy/oracle README.md
 
       # Docker 镜像：app 与 worker 同镜像（worker 以不同入口跑），research-py 独立构建
       - uses: docker/setup-buildx-action@v3

@@ -59,7 +59,9 @@
     "website:check": "pnpm --filter @biance/website test",
     "website:browser-check": "pnpm --filter @biance/website test:browser",
     "access:check": "tsx scripts/ai-access-check.ts",
-    "knowledge:enhance-eval": "tsx scripts/knowledge-enhance-eval.ts"
+    "knowledge:enhance-eval": "tsx scripts/knowledge-enhance-eval.ts",
+    "membership:check": "tsx scripts/membership-check.ts && tsx scripts/membership-polling-check.ts",
+    "membership:load": "tsx scripts/membership-load.ts"
   },
   "devDependencies": {
     "@types/node": "^22.5.0",

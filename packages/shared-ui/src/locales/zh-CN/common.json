@@ -58,5 +58,29 @@
   },
   "api": {
     "requestFailed": "请求失败 (HTTP {{code}})"
+  },
+  "membership": {
+    "retry": "重试",
+    "legacyAccount": "待迁移账号",
+    "trial": "试用中",
+    "active": "会员有效",
+    "expired": "会员已到期",
+    "disabled": "已停用",
+    "account": "账号",
+    "plan": "套餐",
+    "expires": "到期",
+    "lifetime": "长期有效",
+    "myMembership": "我的会员",
+    "expires2": "有效期至",
+    "membershipProgress": "有效期进度",
+    "usedToday": "今日已用",
+    "remaining": "剩余",
+    "unlimited": "不限",
+    "resets": "重置",
+    "upcoming": "待生效",
+    "lastUpdated": "上次更新",
+    "contactAdminToRenew": "联系管理员续费",
+    "copyMembershipDetails": "复制套餐信息",
+    "refresh": "刷新"
   }
 }

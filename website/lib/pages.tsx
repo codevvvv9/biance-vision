@@ -13,11 +13,12 @@ export function pageInfo(locale: Locale, path: string) {
   const item = publication(path)?.translations[locale]
   if (item) return { title: item.title, description: item.summary }
   const entries: Record<string, { title: string; description: string }> = {
-    '': { title: text(locale, 'Biance Vision — AI crypto market research terminal', 'Biance Vision — AI 加密市场研究终端'), description: text(locale, 'Biance Vision connects price action, supporting evidence and counterevidence in an AI crypto market research terminal. Explore the demo and request access.', 'Biance Vision 将价格行为、支持证据与反对证据连接成可追溯的研究结论，查看 AI 驱动的加密市场研究终端演示并申请开通。') },
+    '': { title: text(locale, 'Evidence before conviction.', '先有证据，再有判断。'), description: text(locale, 'Biance Vision connects price action, supporting evidence and counterevidence in an AI crypto market research terminal. Explore the demo and request access.', 'Biance Vision 将价格行为、支持证据与反对证据连接成可追溯的研究结论，查看 AI 驱动的加密市场研究终端演示并申请开通。') },
     methodology: { title: text(locale, 'A method you can follow.', '看得见的研究方法。'), description: text(locale, 'From a frozen market snapshot to structure, evidence, counterevidence and conditional conclusions. Explore the Biance Vision research approach.', '从冻结行情快照，到结构分析、证据与反证，再到有条件的结论，了解 Biance Vision 的研究方法。') },
     demo: { title: text(locale, 'Follow a question through the evidence.', '沿着问题，读懂证据。'), description: text(locale, 'Explore three original teaching cases: trend pullback, range breakout and waiting for confirmation. No account required. Not live research.', '无需账号，探索趋势回调、区间突破与等待确认三个原创教学案例。演示非实时研究。') },
     guides: { title: text(locale, 'A little context. A clearer view.', '多一点上下文，多一分清晰。'), description: text(locale, 'Practical field notes on starting research, reading evidence, price action context and entering event quotes.', '了解首次研究、证据阅读、价格行为上下文与事件报价填写的实用指南。') },
     contact: { title: text(locale, 'Let’s start with your research.', '从你的研究需求聊起。'), description: text(locale, 'Tell us what you want to research. Discuss access conditions, receive account instructions and start your first research in Biance Vision.', '说明研究需求，人工确认使用方式与开通条件，获取账号说明，开始第一次 Biance Vision 研究。') },
+    pricing: { title: text(locale, 'Membership plans', '会员套餐'), description: text(locale, 'Biance Vision membership plans: access is enabled after manual payment confirmation, with no automatic billing. Chat, research and translation share a daily AI interaction quota.', 'Biance Vision 会员套餐：人工确认收款后开通，不自动扣款。聊天、研究与翻译共用每日 AI 交互次数。') },
   }
   return entries[path]
 }

@@ -1,3 +1,5 @@
+import { assertProfilesRetained } from './membership/service.js'
+import { registerMembershipAdminRoutes } from './membership/routes.js'
 /**
  * 管理 API 独立入口（W3-S3，docs/admin-isolation-plan.md §3.2/§3.1 apps/admin-api）：
  * 与 user-api（index.ts）同镜像不同进程——只注册管理能力，不注册任何用户路由
@@ -145,6 +147,7 @@ registerAdminRoutes(app, { requireSuperadmin })
 registerInsightsAdminRoutes(app, { requireSuperadmin })
 registerWebsiteSettingsRoutes(app, { requireSuperadmin })
 registerProvisionUserRoutes(app, { requireSuperadmin })
+registerMembershipAdminRoutes(app, { requireSuperadmin })
 
 // 知识库（multipart 上传；解析入队由共享 pg-boss 交给 worker 消费）
 await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 20 } })
@@ -164,6 +167,8 @@ app.get('/api/admin/ai/config', async (req) => {
 
 app.put('/api/admin/ai/config', async (req) => {
   const session = requireSuperadmin(req)
+  const incoming = (req.body as { profiles?: Record<string, unknown> } | null)?.profiles
+  if (incoming) await assertProfilesRetained(Object.keys(getAiProfilesMasked()).filter(name => !Object.hasOwn(incoming, name)))
   saveAiProfiles((req.body ?? {}) as Record<string, unknown>, session.username)
   recordAudit(session, {
     action: 'settings_update',
@@ -177,6 +182,7 @@ app.put('/api/admin/ai/config', async (req) => {
 app.delete('/api/admin/ai/config', async (req) => {
   const session = requireSuperadmin(req)
   const name = (req.query as { name?: string }).name
+  await assertProfilesRetained(name ? [name] : Object.keys(getAiProfilesMasked()))
   if (name) {
     clearAiProfile(name, session.username)
     recordAudit(session, { action: 'settings_update', target: 'ai', detail: `删除 AI 档案「${name}」` })

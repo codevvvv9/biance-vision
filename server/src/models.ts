@@ -1068,3 +1068,36 @@ export type IngestStateRow = typeof ingestState.$inferSelect
 export type NewIngestStateRow = typeof ingestState.$inferInsert
 export type StructureEventRow = typeof structureEvents.$inferSelect
 export type NewStructureEventRow = typeof structureEvents.$inferInsert
+
+/** Membership commercial data: immutable published versions; only usage tables writable by user-api. */
+export const membershipPlans = pgTable('membership_plans', {
+  id:text('id').primaryKey(), draft:jsonb('draft').notNull(),revision:integer('revision').notNull().default(1),
+  publishedVersionId:text('published_version_id'),enabled:boolean('enabled').notNull().default(false),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),updatedBy:text('updated_by').notNull(),
+})
+export const membershipPlanVersions = pgTable('membership_plan_versions', {
+  id:text('id').primaryKey(),planId:text('plan_id').notNull(),revision:integer('revision').notNull(),config:jsonb('config').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),createdBy:text('created_by').notNull(),
+})
+export const membershipCampaigns = pgTable('membership_campaigns', {
+  id:text('id').primaryKey(),name:text('name').notNull(),enabled:boolean('enabled').notNull().default(false),capacity:integer('capacity').notNull(),startsAt:timestamp('starts_at',{withTimezone:true}),endsAt:timestamp('ends_at',{withTimezone:true}),revision:integer('revision').notNull().default(1),updatedBy:text('updated_by').notNull(),
+})
+export const membershipAccounts = pgTable('membership_accounts', {
+  username:text('username').primaryKey(),disabled:boolean('disabled').notNull().default(false),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),updatedBy:text('updated_by').notNull(),
+})
+export const membershipGrants = pgTable('membership_grants', {
+  id:text('id').primaryKey(),username:text('username').notNull(),versionId:text('version_id').notNull(),startsAt:timestamp('starts_at',{withTimezone:true}).notNull(),endsAt:timestamp('ends_at',{withTimezone:true}),revokedAt:timestamp('revoked_at',{withTimezone:true}),note:text('note').notNull(),createdBy:text('created_by').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+})
+export const membershipReceipts = pgTable('membership_receipts', {
+  id:text('id').primaryKey(),username:text('username').notNull(),grantId:text('grant_id').notNull(),operationId:text('operation_id').notNull().unique(),fingerprint:text('fingerprint').notNull(),action:text('action').notNull(),expectedAmount:numeric('expected_amount',{precision:18,scale:6}).notNull(),paidAmount:numeric('paid_amount',{precision:18,scale:6}).notNull(),currency:text('currency').notNull(),paidAt:timestamp('paid_at',{withTimezone:true}).notNull(),paymentReference:text('payment_reference').notNull(),note:text('note').notNull(),createdBy:text('created_by').notNull(),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),voidedAt:timestamp('voided_at',{withTimezone:true}),voidReason:text('void_reason'),
+})
+export const membershipRedemptions = pgTable('membership_redemptions', {
+  campaignId:text('campaign_id').notNull(),username:text('username').notNull(),receiptId:text('receipt_id').notNull().unique(),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},table=>[primaryKey({columns:[table.campaignId,table.username]})])
+export const membershipUsage = pgTable('membership_usage', {
+  username:text('username').notNull(),day:text('day').notNull(),used:integer('used').notNull().default(0),windowAt:bigint('window_at',{mode:'number'}).notNull().default(0),windowUsed:integer('window_used').notNull().default(0),
+},table=>[primaryKey({columns:[table.username,table.day]})])
+export const membershipReservations = pgTable('membership_reservations', {
+  id:text('id').primaryKey(),username:text('username').notNull(),day:text('day').notNull(),operationKey:text('operation_key'),fingerprint:text('fingerprint').notNull(),state:text('state').notNull(),response:jsonb('response'),statusCode:integer('status_code'),createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+})
+export const membershipRefreshSettings = pgTable('membership_refresh_settings', {
+  id:text('id').primaryKey(),config:jsonb('config').notNull(),revision:integer('revision').notNull(),updatedAt:timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),updatedBy:text('updated_by').notNull(),
+})

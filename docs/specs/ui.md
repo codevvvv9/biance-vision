@@ -178,3 +178,9 @@
 ## Integrated admin and W4 release (2026-10-24)
 
 Status: verified for the documented automated, isolated integration and production read-only checks in v0.17.3. Customer trials remain pending. The admin homepage now uses Ant Design users/audit/website views with `view` query state, scoped provisioning and allowance/reset dialogs, dirty-form protection and the canonical W4 brand asset. The frozen legacy CSS boundary is removed. The five existing domain migrations are retained. See docs/releases/v0.17.3-integration.md for integration boundaries and verification.
+
+## 会员管理与状态刷新（2026-10-26，implemented）
+
+管理端 `/admin/membership`：套餐草稿/发布/上下架、分页会员详情及续费、优惠名额、刷新设置；原用户生成入口改选发布套餐，额度与 AI 自动绑定。用户终端会员卡显示有效期进度、用量、待生效续费、联系方式；旧账号保留待迁移及原剩余额度。官网 `/zh/pricing`、`/en/pricing` 展示公开套餐与真实活动名额。
+
+三个刷新间隔后台独立配置（默认 60 秒，30–300 秒），查询完成后串行调度，隐藏/离线暂停，失败退避并显示旧数据更新时间；组件共用页面 store。到期/停用由每次 AI 请求后端实时拦截，轮询不承担判权。细则与验收见 [会员方案](membership.md)。

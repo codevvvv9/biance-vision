@@ -206,6 +206,8 @@ await boss.work('observability:cleanup', async () => {
   try {
     await db.execute(sql`DELETE FROM observability_inbox WHERE received_at < now() - interval '14 days'`)
     await db.execute(sql`DELETE FROM observability_error_groups WHERE last_seen < now() - interval '30 days'`)
+    const { recoverAbandonedMembershipReservations } = await import('./membership/meter.js')
+    await recoverAbandonedMembershipReservations()
     await db.execute(sql`DELETE FROM security_rate_buckets WHERE expires_at < now() - interval '1 hour'`)
     await db.execute(sql`DELETE FROM request_idempotency WHERE expires_at < now() - interval '1 day'`)
     await db.execute(sql`DELETE FROM observability_alerts WHERE state = 'resolved' AND resolved_at < now() - interval '30 days'`)

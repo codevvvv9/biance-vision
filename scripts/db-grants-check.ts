@@ -29,7 +29,9 @@ const SERVER_DIR = new URL('../server/', import.meta.url).pathname
 const TEST_DB = 'bv_grants_check'
 
 let failures = 0
+let checks = 0
 function check(name: string, ok: boolean, detail = ''): void {
+  checks++
   console.log(`${ok ? '✔' : '✖'} ${name}${!ok && detail !== '' ? `（${detail}）` : ''}`)
   if (!ok) failures++
 }
@@ -58,6 +60,8 @@ async function main(): Promise<void> {
   const root = postgres(admin.toString(), { max: 1, onnotice: () => {} })
   await root.unsafe(`drop database if exists ${TEST_DB} with (force)`)
   await root.unsafe(`create database ${TEST_DB} owner ${base.username}`)
+  // Role passwords are cluster-wide. Preserve the existing deployment's credential during this test.
+  const [previousRole] = await root.unsafe("SELECT rolpassword FROM pg_authid WHERE rolname='biance_user'")
   await root.end({ timeout: 1 })
 
   try {
@@ -108,6 +112,17 @@ async function main(): Promise<void> {
     const chunksWrite = await u`insert into knowledge_chunks (id, doc_id, doc_version_id, chunk_index, kind, text) values ('g4','d','d#1',1,'text','x')`
       .then(() => 'allowed', (e: { code?: string }) => e.code)
     check('G8 knowledge_chunks INSERT 被拒（42501，解析写只在 worker/admin）', chunksWrite === '42501', String(chunksWrite))
+
+    const { RW_TABLES, RO_TABLES } = await import('../server/src/dbGrants.js')
+    for (const table of RO_TABLES.filter(t => t.startsWith('membership_'))) {
+      const selected = await u.unsafe(`SELECT count(*) FROM ${table}`).then(() => true, () => false)
+      const write = await u.unsafe(`INSERT INTO ${table} DEFAULT VALUES`).then(() => 'allowed', (e: {code?: string}) => e.code)
+      check(`会员商业表 ${table} 只读`, selected && write === '42501', String(write))
+    }
+    for (const table of RW_TABLES.filter(t => t.startsWith('membership_'))) {
+      const [rights] = await u.unsafe(`SELECT has_table_privilege(current_user,'${table}','SELECT,INSERT,UPDATE,DELETE') AS allowed`)
+      check(`会员计量表 ${table} 可读写`, rights.allowed === true)
+    }
 
     // 纯管理表：全被拒
     for (const t of ['eval_datasets', 'eval_runs', 'agent_versions', 'knowledge_manifest_entries']) {
@@ -160,10 +175,11 @@ async function main(): Promise<void> {
       { max: 1, onnotice: () => {} },
     )
     await root2.unsafe(`drop database if exists ${TEST_DB} with (force)`).catch(() => {})
+    if (previousRole) await root2.unsafe(`ALTER ROLE biance_user PASSWORD ${previousRole.rolpassword === null ? 'NULL' : `'${String(previousRole.rolpassword).replace(/'/g, "''")}'`}`)
     await root2.end({ timeout: 1 }).catch(() => {})
   }
 }
 
 await main()
-console.log(failures === 0 ? '\n数据库分权自测全部通过 ✔（12 项）' : `\n失败 ${failures} 项 ✖`)
+console.log(failures === 0 ? `\n数据库分权自测全部通过 ✔（${checks} 项）` : `\n失败 ${failures} 项 ✖`)
 process.exit(failures === 0 ? 0 : 1)

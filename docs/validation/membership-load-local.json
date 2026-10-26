@@ -1,0 +1,26 @@
+{
+  "kind": "local-isolated-service-baseline",
+  "timestamp": "2026-10-26T02:32:42.599Z",
+  "durationSeconds": 900.003,
+  "pages": 1000,
+  "intervalSeconds": 60,
+  "syntheticSession": true,
+  "loadClientMaxSockets": 50,
+  "requests": 15312,
+  "errors": 0,
+  "errorRate": 0,
+  "maxInFlight": 1000,
+  "errorSamples": [],
+  "steady": {
+    "samples": 14311,
+    "p50": 2.93,
+    "p95": 5.1,
+    "p99": 8.02
+  },
+  "entryBurst": {
+    "samples": 1001,
+    "p95": 324.17,
+    "p99": 334
+  },
+  "limitations": "Local shared PostgreSQL container; synthetic session resolution excludes authentication and reverse-proxy overhead. Production-equivalent deployment still requires its own acceptance run."
+}

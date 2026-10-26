@@ -1,252 +1,203 @@
-import { useState } from "react";
+import { useMemo, useState } from 'react'
+import { Alert, Button, Form, Input, Space, Typography } from 'antd'
 import {
-  Button,
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Space,
-  Typography,
-} from "antd";
-import AiSettingsModal from "./AiSettingsModal";
+  createPollingStore,
+  type MembershipGrantInput,
+  type MembershipPlanRecord,
+  type MembershipRefresh,
+  type MembershipStatus,
+} from 'biance-vision-brooks'
+import { api } from '../api'
+import { usePolling } from '../membership/polling'
+import { useDirtyForm, useConfirmDiscard } from './ui/forms'
+import { Modal } from './ui/overlays'
 import {
-  loadProfiles,
-  provisionUser,
-  type Delivery,
-} from "./features/panel/api";
-import { useResource } from "./ui/resource";
-import { Feedback } from "./ui/feedback";
-import { useAdminText } from "./ui/text";
-import { useDirtyForm, useConfirmDiscard } from "./ui/forms";
-import { Modal } from "./ui/overlays";
+  MembershipGrantFields,
+  newGrant,
+  useMemberLabel,
+} from './MembershipForms'
 export function ProvisionUserPanel({
   onCreated,
 }: {
-  onCreated: () => void;
+  onCreated: () => void
 }): JSX.Element {
-  const text = useAdminText(),
-    confirmDiscard = useConfirmDiscard();
-  const [open, setOpen] = useState(false);
+  const L = useMemberLabel(),
+    [open, setOpen] = useState(false)
   return (
     <>
       <Button type="primary" onClick={() => setOpen(true)}>
-        {text("provisionUser")}
+        {L('createUserAndAiAccess')}
       </Button>
       {open && (
-        <ProvisionDialog
-          onCreated={onCreated}
-          onClose={() => setOpen(false)}
-          confirmDiscard={confirmDiscard}
-        />
+        <ProvisionDialog onCreated={onCreated} onClose={() => setOpen(false)} />
       )}
     </>
-  );
+  )
+}
+type Delivery = {
+  username: string
+  password: string
+  publicOrigin: string | null
+  loginPath: string
+  membership: MembershipStatus
 }
 function ProvisionDialog({
   onCreated,
   onClose,
-  confirmDiscard,
 }: {
-  onCreated: () => void;
-  onClose: () => void;
-  confirmDiscard: (dirty?: boolean) => Promise<boolean>;
+  onCreated: () => void
+  onClose: () => void
 }): JSX.Element {
-  const text = useAdminText(),
-    profiles = useResource(loadProfiles);
-  const [username, setUsername] = useState(""),
-    [profile, setProfile] = useState("default");
-  const [total, setTotal] = useState<number | null>(10),
-    [daily, setDaily] = useState<number | null>(10),
-    [minute, setMinute] = useState<number | null>(6);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
+  const L = useMemberLabel(),
+    discard = useConfirmDiscard(),
+    [username, setUsername] = useState(''),
+    [value, setValue] = useState<MembershipGrantInput>(newGrant),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(''),
     [delivery, setDelivery] = useState<Delivery | null>(null),
-    [aiOpen, setAiOpen] = useState(false),
-    [copied, setCopied] = useState(false);
-  const dirty =
-    !delivery &&
-    (username !== "" ||
-      profile !== "default" ||
-      total !== 10 ||
-      daily !== 10 ||
-      minute !== 6);
-  useDirtyForm(dirty || Boolean(delivery));
-  // Credentials exist only in this mounted dialog. No URL, logging or storage writes.
+    [copied, setCopied] = useState(false),
+    [dirty, setDirty] = useState(false)
+  const store = useMemo(
+      () =>
+        createPollingStore<{
+          plans: MembershipPlanRecord[]
+          refresh: MembershipRefresh
+        }>({
+          load: (signal) => api('/admin/membership/plans', { signal }),
+          intervalSeconds: (d) => d.refresh.adminSeconds,
+        }),
+      [],
+    ),
+    r = usePolling(store)
+  useDirtyForm(dirty || !!delivery)
   const close = async () => {
-    if (!busy && (await confirmDiscard(dirty || Boolean(delivery)))) onClose();
-  };
-  const create = async () => {
-    if (busy || total == null || minute == null) return;
-    setBusy(true);
-    setError("");
+    if (!busy && (await discard(dirty || !!delivery))) onClose()
+  }
+  const submit = async () => {
+    if (busy) return
+    setBusy(true)
+    setError('')
     try {
-      const result = await provisionUser({
-        ...(username.trim() ? { username: username.trim() } : {}),
-        profileName: profile,
-        totalLimit: total,
-        dailyLimit: daily,
-        requestsPerMinute: minute,
-      });
-      setDelivery(result);
-      setCopied(false);
-      onCreated();
+      const d = await api<Delivery>('/admin/users/provision', {
+        method: 'POST',
+        body: {
+          ...value,
+          ...(username.trim() ? { username: username.trim() } : {}),
+        },
+      })
+      setDelivery(d)
+      setDirty(false)
+      onCreated()
     } catch (e) {
-      setError((e as Error).message);
+      setError((e as Error).message)
     } finally {
-      setBusy(false);
+      setBusy(false)
     }
-  };
-  const copy = async () => {
-    if (!delivery) return;
-    try {
-      await navigator.clipboard.writeText(
-        `Biance Vision\n${text("loginEntry")}: ${delivery.publicOrigin ?? ""}${delivery.loginPath}\n${text("username")}: ${delivery.username}\n${text("password")}: ${delivery.password}\n${text("totalLimit")}: ${delivery.access.totalLimit}\n${text("gettingStarted")}: ${delivery.publicOrigin ?? ""}/zh/guides/getting-started`,
-      );
-      setCopied(true);
-    } catch {
-      setError(text("copyCredentialsFailed"));
-    }
-  };
-  const selected = profiles.data?.profiles[profile];
+  }
   return (
     <Modal
       open
-      title={text("provisionUser")}
+      title={L('createAccountWithMembership')}
       footer={null}
       onCancel={() => void close()}
+      width={720}
       closable={!busy}
       maskClosable={!busy}
-      width={680}
     >
-      <Feedback error={error || profiles.error} />
+      {(error || r.error) && <Alert type="error" message={error || r.error} />}
       {delivery ? (
         <div role="status">
-          <Typography.Paragraph>{text("deliveryHint")}</Typography.Paragraph>
+          <Typography.Paragraph>
+            {L('passwordIsDisplayedOnlyHereCopyItBeforeClosing')}
+          </Typography.Paragraph>
           <Form layout="vertical">
-            <Form.Item label={text("username")} htmlFor="delivery-username">
+            <Form.Item label={L('username2')}>
               <Input
-                id="delivery-username"
+                aria-label={L('username2')}
                 readOnly
                 value={delivery.username}
-                onFocus={(e) => e.currentTarget.select()}
               />
             </Form.Item>
-            <Form.Item
-              label={text("randomPassword")}
-              htmlFor="delivery-password"
-            >
+            <Form.Item label={L('password')}>
               <Input.Password
-                id="delivery-password"
+                aria-label={L('password')}
                 readOnly
                 autoComplete="off"
                 value={delivery.password}
-                onFocus={(e) => e.currentTarget.select()}
               />
             </Form.Item>
           </Form>
-          <Space wrap>
-            <Button onClick={() => void copy()}>
-              {text(copied ? "copied" : "copyCredentials")}
+          <p>
+            {delivery.membership.current?.name} /{' '}
+            {delivery.membership.current?.nameEn} ·{' '}
+            {delivery.membership.current?.endsAt
+              ? new Date(delivery.membership.current.endsAt).toLocaleString()
+              : L('lifetime')}
+          </p>
+          <Space>
+            <Button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(
+                    `Biance Vision\n${L('login')}: ${delivery.publicOrigin ?? ''}${delivery.loginPath}\n${L('username2')}: ${delivery.username}\n${L('password')}: ${delivery.password}\n${L('plan')}: ${delivery.membership.current?.name} / ${delivery.membership.current?.nameEn}\n${L('expires')}: ${delivery.membership.current?.endsAt ? new Date(delivery.membership.current.endsAt).toLocaleString() : L('lifetime')}`,
+                  )
+                  setCopied(true)
+                } catch {
+                  setError(L('copyFailedSelectAndCopyManually'))
+                }
+              }}
+            >
+              {copied ? L('copied') : L('copyDelivery')}
             </Button>
             <Button
               type="primary"
               onClick={() => {
-                setDelivery(null);
-                onClose();
+                setDelivery(null)
+                onClose()
               }}
             >
-              {text("clearCredentials")}
+              {L('clearAndClose')}
             </Button>
           </Space>
         </div>
       ) : (
-        <Form layout="vertical" onFinish={() => void create()}>
-          <p>{text("provisionHint")}</p>
-          <Form.Item
-            label={text("optionalUsername")}
-            htmlFor="provision-username"
-          >
+        <Form layout="vertical" onFinish={() => void submit()}>
+          <Form.Item label={L('usernameOptional')}>
             <Input
-              id="provision-username"
-              maxLength={32}
               value={username}
               autoComplete="off"
-              onChange={(e) => setUsername(e.target.value)}
+              maxLength={32}
+              onChange={(e) => {
+                setUsername(e.target.value)
+                setDirty(true)
+              }}
             />
           </Form.Item>
-          <Form.Item label={text("aiProfile")}>
-            <Select
-              aria-label={text("aiProfile")}
-              value={profile}
-              onChange={setProfile}
-              options={Object.entries(profiles.data?.profiles ?? {}).map(
-                ([value, p]) => ({ value, label: `${value} · ${p.model}` }),
-              )}
-            />
-          </Form.Item>
-          <Form.Item label={text("totalLimit")}>
-            <InputNumber
-              aria-label={text("totalLimit")}
-              min={1}
-              max={100000}
-              value={total}
-              onChange={setTotal}
-            />
-          </Form.Item>
-          <Form.Item label={text("dailyLimit")}>
-            <InputNumber
-              aria-label={text("dailyLimit")}
-              min={1}
-              max={100000}
-              value={daily}
-              onChange={setDaily}
-            />
-          </Form.Item>
-          <Form.Item label={text("requestsPerMinute")}>
-            <InputNumber
-              aria-label={text("requestsPerMinute")}
-              min={1}
-              max={60}
-              value={minute}
-              onChange={setMinute}
-            />
-          </Form.Item>
-          <p>{text("quotaCountingHint")}</p>
-          {selected && (
-            <p>
-              {selected.model} · {selected.maxTokens ?? "—"} tokens
-            </p>
-          )}
-          <Space wrap>
-            <Button onClick={() => setAiOpen(true)}>
-              {text("editAiProfile")}
-            </Button>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={busy}
-              disabled={
-                !selected?.apiKeyMasked ||
-                !Number.isInteger(total) ||
-                Number(total) < 1 ||
-                !Number.isInteger(minute) ||
-                Number(minute) < 1
-              }
-            >
-              {text("saveAndDeliver")}
-            </Button>
-          </Space>
+          <MembershipGrantFields
+            value={value}
+            onChange={(v) => {
+              setValue(v)
+              setDirty(true)
+            }}
+            plans={r.data?.plans ?? []}
+          />
+          <Alert
+            type="info"
+            message={L(
+              'accountAccessPaymentAndIntroductorySlotAreSavedAtomically',
+            )}
+          />
+          <Button
+            style={{ marginTop: 16 }}
+            type="primary"
+            htmlType="submit"
+            loading={busy}
+            disabled={!value.versionId}
+          >
+            {L('createAndDeliver')}
+          </Button>
         </Form>
       )}
-      {aiOpen && (
-        <AiSettingsModal
-          onClose={() => {
-            setAiOpen(false);
-            void profiles.reload();
-          }}
-          onSaved={() => void profiles.reload()}
-        />
-      )}
     </Modal>
-  );
+  )
 }

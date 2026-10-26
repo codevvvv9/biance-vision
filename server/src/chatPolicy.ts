@@ -1,3 +1,4 @@
+import { memberCalls } from './membership/context.js'
 /**
  * 用户级聊天管控（ChatPolicy）：管理端可对单个用户禁用 AI 助手或设每日交互上限。
  *
@@ -135,6 +136,7 @@ export function checkChatAllowed(policy: ChatPolicy, usedToday: number): void {
  * 委托 checkChatAllowed 判定（计数直查 PG——管理端刚改限额/他处计数立即可见）。
  */
 export async function assertChatAllowed(username: string): Promise<void> {
+  if (memberCalls.getStore()?.username === username) return
   checkChatAllowed(policyOf(username), await getChatUsageToday(username))
 }
 
@@ -147,6 +149,7 @@ export async function assertChatAllowed(username: string): Promise<void> {
  * 本模块按「交互次数」宽松口径统计，重放多计可接受，不另做去重。
  */
 export async function recordChatMessage(username: string): Promise<void> {
+  if (memberCalls.getStore()?.username === username) return
   const conn = getDb()
   if (conn === null || !isDbAvailable()) {
     log.warn('chatPolicy', '用量计数写失败（PG 不可用，本次计数丢失——非硬控制口径可接受）')

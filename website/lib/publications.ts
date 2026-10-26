@@ -22,7 +22,7 @@ export type Publication = {
 // The build validator checks the external JSON before it becomes a deployable artifact.
 export const publications = raw as Publication[]
 export function publishedContent(items: Publication[] = publications) { return items.filter(p => p.status === 'published') }
-export function publicPaths(items: Publication[] = publications) { return ['', 'demo', 'guides', 'contact', ...publishedContent(items).map(p => p.path)] }
+export function publicPaths(items: Publication[] = publications) { return ['', 'demo', 'guides', 'contact', 'pricing', ...publishedContent(items).map(p => p.path)] }
 export const published = publishedContent()
 export const pagePaths = publicPaths()
 export function publication(path: string) { return published.find(p => p.path === path) }

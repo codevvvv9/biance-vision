@@ -1,3 +1,4 @@
+import { memberCalls } from './membership/context.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR, loadJson, saveJson } from './store.js'
@@ -106,6 +107,8 @@ export function aiModelName(): string {
 
 /** 按用户解析生效档案：先匹配绑定用户的档案，否则 default */
 export function resolveAiProfile(username: string): AiProfile | null {
+  const context = memberCalls.getStore()
+  if (context?.username === username && context.chat) return context.chat
   syncStoreFromDisk()
   for (const p of Object.values(store.profiles)) {
     if (p.allowedUsers?.includes(username) && isComplete(p)) return p
@@ -322,6 +325,7 @@ function todayStr(): string {
 
 /** 超出当日限额时抛 429（限额取该用户生效档案的配置） */
 export function checkAiQuota(username: string, profile: AiProfile): void {
+  if (memberCalls.getStore()?.username === username) return
   const limit = profile.dailyLimit ?? 0
   if (limit <= 0 || usage.date !== todayStr()) return
   const used = usage.counts[username] ?? 0
@@ -332,6 +336,7 @@ export function checkAiQuota(username: string, profile: AiProfile): void {
 
 /** 记一次对话（含发送到模型但失败的尝试，防止反复重试刷接口） */
 export function recordAiUsage(username: string): void {
+  if (memberCalls.getStore()?.username === username) return
   const today = todayStr()
   if (usage.date !== today) usage = { date: today, counts: {} }
   usage.counts[username] = (usage.counts[username] ?? 0) + 1

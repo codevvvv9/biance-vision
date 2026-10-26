@@ -246,6 +246,13 @@
       "when": 1792920000000,
       "tag": "0034_diagnostic_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792972800000,
+      "tag": "0035_membership",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,6 @@
+import { registerMembershipMeter } from './membership/meter.js'
+import { memberCalls } from './membership/context.js'
+import { membershipStatus } from './membership/service.js'
 import { eq, sql } from 'drizzle-orm'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { getDb } from './db.js'
@@ -79,10 +82,12 @@ export function isMeteredAiPath(method: string, path: string): boolean {
 }
 
 export function registerAiAccessGuard(app: FastifyInstance, deps: { requireSession: (req: FastifyRequest) => SessionRecord }): void {
+  registerMembershipMeter(app, deps, isMeteredAiPath)
   const reservations = new WeakMap<FastifyRequest, Reservation>()
   app.addHook('preHandler', async req => {
     if (!isMeteredAiPath(req.method, req.routeOptions.url || req.url.split('?')[0])) return
     const session = deps.requireSession(req)
+    if (memberCalls.getStore()?.username === session.username) return
     const reservation = await reserveAiAccess(session.username)
     if (reservation) reservations.set(req, reservation)
   })
@@ -99,6 +104,8 @@ export function registerAiAccessGuard(app: FastifyInstance, deps: { requireSessi
   })
   app.get('/api/users/me/ai-access', async (req, reply) => {
     const session = deps.requireSession(req)
+    const membership = await membershipStatus(session.username)
+    if (membership.managed) { reply.header('Cache-Control', 'no-store'); return { managed: true, totalLimit: membership.current?.dailyLimit ?? null, used: membership.usedToday, remaining: membership.remainingToday, contactPath: '/en/contact', membership } }
     const access = await readAiAccess(session.username)
     reply.header('Cache-Control', 'no-store')
     return { managed: !!access, totalLimit: access?.totalLimit ?? null, used: access?.used ?? null,

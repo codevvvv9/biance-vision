@@ -1,3 +1,5 @@
+import { MemberUserPanel } from './MemberUserPanel'
+import { useMemberLabel } from './MembershipForms'
 import { useCallback, useState } from "react";
 import {
   App,
@@ -60,6 +62,7 @@ function DailyLimit({
   );
 }
 function Users(): JSX.Element {
+  const L = useMemberLabel(), [memberUser, setMemberUser] = useState<string | null>(null);
   const text = useAdminText(),
     resource = useResource(fetchAdminUsers),
     { modal } = App.useApp();
@@ -188,6 +191,7 @@ function Users(): JSX.Element {
                   >
                     {text(user.chatPolicy.disabled ? "enable" : "disable")}
                   </Button>
+                  {user.role === "user" && <Button size="small" onClick={() => setMemberUser(user.username)}>{L('membershipRenew')}</Button>}
                   {user.role === "user" && (
                     <Button
                       size="small"
@@ -211,6 +215,7 @@ function Users(): JSX.Element {
           ]}
         />
       </Card>
+      {memberUser && <MemberUserPanel username={memberUser} onClose={() => setMemberUser(null)} />}
       {accessUser && (
         <UserAccessPanel
           key={accessUser}

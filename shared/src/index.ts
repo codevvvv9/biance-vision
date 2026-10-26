@@ -48,3 +48,4 @@ export { analyzeBrooks, DEFAULT_OPTIONS } from './analyze.js'
 // ── 行情与 API 契约（zod；server 与 web 同源引用） ──
 export * from './market.js'
 export * from './contract/index.js'
+export * from './polling.js'

@@ -1,3 +1,4 @@
+import { memberCalls } from '../membership/context.js'
 /**
  * LLM 角色执行器客户端（OpenAI 兼容 /chat/completions）。
  * 对应 docs/specs/agent-orchestration.md 的 LlmClient；chat 能力未配置时
@@ -5,7 +6,15 @@
  * 预算（maxLlmCalls）由调用方按 usage 计数在服务端强制，模型输出不能提高上限。
  */
 import type { LlmClient } from './orchestrator/types.js'
+import { aiProfileByName, getAiProfilesMasked } from '../ai.js'
 import { getCapabilities, resolveSecret } from '../admin/capabilities.js'
+
+function resolveMembershipKey(name: string): string {
+  if (!getAiProfilesMasked()[name]) throw new Error('会员 AI 档案不可用')
+  const key = aiProfileByName(name)?.apiKey
+  if (!key) throw new Error('会员 AI 密钥不可用')
+  return key
+}
 
 export class LlmNotConfiguredError extends Error {
   constructor() {
@@ -42,12 +51,16 @@ export class OpenAICompatibleLlm implements LlmClient {
   private readonly model: string
   private readonly apiKey: string | null
   private readonly maxTokens: number
+  private readonly temperature?: number
+  private readonly outputCap?: number
 
-  constructor(input: { baseUrl: string; model: string; secretRef?: string; maxTokens?: number }) {
+  constructor(input: { baseUrl: string; model: string; secretRef?: string; maxTokens?: number; temperature?: number }) {
     this.baseUrl = input.baseUrl.replace(/\/+$/, '')
     this.model = input.model
-    this.apiKey = resolveSecret(input.secretRef)
-    this.maxTokens = input.maxTokens ?? 2000
+    this.apiKey = input.secretRef?.startsWith('membership-profile:') ? resolveMembershipKey(input.secretRef.slice('membership-profile:'.length)) : resolveSecret(input.secretRef)
+    this.maxTokens = input.maxTokens && input.maxTokens > 0 ? input.maxTokens : 2000
+    this.temperature = input.temperature
+    this.outputCap = input.secretRef?.startsWith('membership-profile:') && input.maxTokens && input.maxTokens > 0 ? input.maxTokens : undefined
     if (!this.baseUrl || !this.model) throw new LlmNotConfiguredError()
   }
 
@@ -77,8 +90,8 @@ export class OpenAICompatibleLlm implements LlmClient {
             { role: 'system', content: input.system },
             { role: 'user', content: input.user },
           ],
-          max_tokens: input.maxTokens ?? this.maxTokens,
-          temperature: input.temperature ?? 0.2,
+          max_tokens: this.outputCap ? Math.min(input.maxTokens ?? this.maxTokens, this.outputCap) : input.maxTokens ?? this.maxTokens,
+          temperature: input.temperature ?? this.temperature ?? 0.2,
         }),
         signal: AbortSignal.timeout(Math.max(1_000, timeout)),
       })
@@ -108,17 +121,19 @@ export class OpenAICompatibleLlm implements LlmClient {
  * frozenCaps：run 冻结配置中的 capabilities。评审三轮-3：调用方显式传入冻结配置时
  * 严格尊重它——冻结为关闭（{enabled:false}，无 baseUrl）也有效，绝不回退全局实时配置；
  * 只有完全未传（undefined，历史 run 无冻结能力字段的兼容路径）才读全局生效配置。 */
-export function resolveLlmClient(frozenCaps?: { chat?: { enabled?: boolean; baseUrl?: string; model?: string; secretRef?: string } } | null): OpenAICompatibleLlm | null {
+export function resolveLlmClient(frozenCaps?: { chat?: { enabled?: boolean; baseUrl?: string; model?: string; secretRef?: string; maxTokens?: number; temperature?: number } } | null): OpenAICompatibleLlm | null {
   if (frozenCaps !== undefined) {
     const frozen = frozenCaps?.chat
     if (frozen === undefined || frozen === null) return null
     if (frozen.enabled !== true || frozen.baseUrl === undefined || frozen.baseUrl === '' || frozen.model === undefined || frozen.model === '') return null
     try {
-      return new OpenAICompatibleLlm({ baseUrl: frozen.baseUrl, model: frozen.model, secretRef: frozen.secretRef })
+      return new OpenAICompatibleLlm({ baseUrl: frozen.baseUrl, model: frozen.model, secretRef: frozen.secretRef, maxTokens: frozen.maxTokens, temperature: frozen.temperature })
     } catch {
       return null
     }
   }
+  const ctx = memberCalls.getStore()
+  if (ctx?.chat && ctx.chatName) return new OpenAICompatibleLlm({ baseUrl: ctx.chat.baseUrl, model: ctx.chat.model, secretRef: `membership-profile:${ctx.chatName}`, maxTokens: ctx.chat.maxTokens, temperature: ctx.chat.temperature })
   const cap = getCapabilities().chat
   if (!cap?.enabled || !cap.baseUrl || !cap.model) return null
   try {

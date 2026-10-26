@@ -1,3 +1,4 @@
+import { MembershipProvider, MembershipCard } from './membership/Membership'
 import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -45,6 +46,7 @@ function AuthedApp(): JSX.Element {
         <Header />
         <TickerTape />
         <main className="main">
+          <MembershipCard />
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route
@@ -130,6 +132,7 @@ function Shell(): JSX.Element {
         <AuthedApp />
       ) : (
         <main className="main">
+          <MembershipCard />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -144,9 +147,9 @@ function Shell(): JSX.Element {
 export default function App(): JSX.Element {
   return (
     <ErrorBoundary>
-      <AuthProvider>
+      <AuthProvider><MembershipProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Shell /></BrowserRouter>
-      </AuthProvider>
+      </MembershipProvider></AuthProvider>
     </ErrorBoundary>
   )
 }

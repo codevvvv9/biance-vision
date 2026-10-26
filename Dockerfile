@@ -8,6 +8,7 @@ COPY web/package.json web/
 COPY shared/package.json shared/
 COPY packages/shared-ui/package.json packages/shared-ui/
 COPY packages/brand/package.json packages/brand/
+COPY packages/platform-contracts/package.json packages/platform-contracts/
 COPY website/package.json website/
 RUN pnpm install --frozen-lockfile
 COPY . .
@@ -25,6 +26,7 @@ COPY web/package.json web/
 COPY shared/package.json shared/
 COPY packages/shared-ui/package.json packages/shared-ui/
 COPY packages/brand/package.json packages/brand/
+COPY packages/platform-contracts/package.json packages/platform-contracts/
 COPY website/package.json website/
 # shared 的运行时依赖（zod 等）也要装：/app/shared/dist 内的 import 从 shared/node_modules 解析
 RUN pnpm --filter biance-vision-server --filter biance-vision-brooks install --frozen-lockfile --prod

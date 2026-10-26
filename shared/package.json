@@ -10,6 +10,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./polling": {
+      "types": "./dist/polling.d.ts",
+      "default": "./dist/polling.js"
+    },
+    "./membership": {
+      "types": "./dist/contract/membership.d.ts",
+      "default": "./dist/contract/membership.js"
     }
   },
   "files": [

@@ -5,6 +5,7 @@ import {
   cutOffUserChat,
 } from "../../../api";
 import type { AuditRecord } from "../../../types";
+import type { MembershipGrantInput, MembershipStatus } from "biance-vision-brooks";
 export { fetchAdminUsers, updateChatPolicy, cutOffUserChat };
 export interface Contacts {
   version: 1;
@@ -25,7 +26,7 @@ export interface Delivery {
   password: string;
   publicOrigin: string | null;
   loginPath: string;
-  access: Access;
+  membership: MembershipStatus;
 }
 export interface Profile {
   model: string;
@@ -46,15 +47,9 @@ export const saveContacts = (contacts: Contacts) =>
   });
 export const loadProfiles = () =>
   api<{ profiles: Record<string, Profile> }>("/admin/ai/config");
-export const provisionUser = (body: {
-  username?: string;
-  profileName: string;
-  totalLimit: number;
-  dailyLimit: number | null;
-  requestsPerMinute: number;
-}) => api<Delivery>("/admin/users/provision", { method: "POST", body });
+export const provisionUser = (body: MembershipGrantInput & {username?: string}) => api<Delivery>("/admin/users/provision", { method: "POST", body });
 export const loadAccess = (username: string) =>
-  api<{ access: Access | null }>(
+  api<{ access: Access | null; membership?: MembershipStatus }>(
     `/admin/users/${encodeURIComponent(username)}/ai-access`,
   );
 export const saveAccess = (username: string, access: Access) =>

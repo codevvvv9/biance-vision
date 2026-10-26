@@ -8,15 +8,16 @@ import { isLocale, pageAlternates } from '@/lib/site'
 
 type Params = { locale: string; slug?: string[] }
 export const dynamicParams = false
-export function generateStaticParams() { return pagePaths.filter(path => path !== 'contact').map(path => ({ slug: path ? path.split('/') : [] })) }
+export function generateStaticParams() { return pagePaths.filter(path => path !== 'contact' && path !== 'pricing').map(path => ({ slug: path ? path.split('/') : [] })) }
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { locale, slug = [] } = await params
   const path = slug.join('/')
   if (!isLocale(locale) || !pagePaths.includes(path)) notFound()
   const info = pageInfo(locale, path)!
-  return { title: path === '' ? { absolute: info.title } : info.title, description: info.description, alternates: pageAlternates(locale, path ? `/${path}` : ''),
-    openGraph: { siteName: 'Biance Vision', type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title: info.title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: locale === 'zh' ? 'zh_CN' : 'en_US', alternateLocale: locale === 'zh' ? 'en_US' : 'zh_CN' },
+  const title = path === '' ? locale === 'zh' ? 'Biance Vision — AI 加密市场研究终端' : 'Biance Vision — AI crypto market research terminal' : info.title
+  return { title: path === '' ? { absolute: title } : title, description: info.description, alternates: pageAlternates(locale, path ? `/${path}` : ''),
+    openGraph: { siteName: 'Biance Vision', type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: locale === 'zh' ? 'zh_CN' : 'en_US', alternateLocale: locale === 'zh' ? 'en_US' : 'zh_CN' },
   }
 }
 

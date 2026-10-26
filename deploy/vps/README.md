@@ -87,6 +87,29 @@ bash deploy/vps/migrate-remote.sh
 2. 装 Caddy（官方 apt 源），拷贝本目录 `Caddyfile` 到 `/etc/caddy/Caddyfile`，替换域名后 `sudo systemctl reload caddy`。证书自动签发续期；SSE/WebSocket 原生支持。
 3. 不想开入站端口可改用 cloudflared tunnel（服务器上跑 `cloudflared` 即可）。
 
+### 4.1 换主域名切换清单（以 duckdns → `duckstrat.com` 为例，2026-10-26 已购）
+
+顺序不能颠倒：**先 DNS、再 Caddy 并行、最后才切 canonical**——`WEBSITE_ORIGIN` 切早了
+会让 sitemap/canonical 指向尚未生效的域名，搜索引擎收录错乱。
+
+1. **DNS**：注册商把 `duckstrat.com` 与 `www.duckstrat.com` 的 A 记录指本机公网 IP；
+   DNS 若托管 Cloudflare 用「仅 DNS」灰云，不开橙云代理（Caddy 需直连完成 HTTP-01 签证书）。
+2. **Caddy 双域名并行**：用户站点块改为 `旧域名, duckstrat.com, www.duckstrat.com {`（见
+   本目录 Caddyfile 头部注释的写法），管理域名块同理加新域名；`systemctl reload caddy`
+   后浏览器访问 `https://duckstrat.com` 确认识证签发、登录可用。
+3. **写冒烟**：§2.1 的带 Origin 冒烟新旧域名各跑一次。并行期各域名请求各自同源即可；
+   若出现 403，在 `.env` 用 `BV_ALLOWED_ORIGINS` 把新旧两个 origin 显式列入。
+4. **切 canonical（三处同步）**：`WEBSITE_ORIGIN` 是 website 镜像的**构建期参数**——
+   ① GitHub 仓库 Settings → Variables 改 `WEBSITE_ORIGIN=https://duckstrat.com`；
+   ② VPS `.env` 同步改（驱动 app/admin-api 运行时与发布守卫）；③ 打新 tag 让 Actions
+   重建 website 镜像，VPS `pull && up -d`。只改 .env 不发版，sitemap 与静态页 canonical
+   仍是旧域名。
+5. **站长平台**：GSC / Bing 拿到验证码后填仓库变量 `GOOGLE_SITE_VERIFICATION` /
+   `BING_SITE_VERIFICATION`（release.yml 已接线，随下次发版自动进 HTML meta），然后在
+   GSC 添加资源并提交 `https://duckstrat.com/sitemap.xml`。
+6. **收尾**：观察一两周确认新域名收录正常后，Caddy 删旧域名、`BV_ALLOWED_ORIGINS`
+   去掉旧 origin，duckdns 域名弃用。
+
 ## 5. 地域封锁（默认屏蔽中国大陆）
 
 产品面向海外运营：app 内置应用层 GeoIP（`server/src/geoblock.ts`），命中中国大陆 IPv4 名单的请求一律 403（浏览器返回中英双语提示页），**默认开启**。名单文件为 `server/data/cn-ip-list.txt`（17mon 源，约 7400 条 CIDR，不入库）。

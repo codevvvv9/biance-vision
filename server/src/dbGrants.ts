@@ -37,11 +37,21 @@ export const RW_TABLES = [
   'auth_sessions',
   'login_guards',
   'audit_records',
+  'membership_usage',
+  'membership_reservations',
 ] as const
 
 /** user-api 只读（判权/检索命中/系统提示词渲染——写路径全在 admin-api/worker） */
 export const RO_TABLES = [
   'users',
+  'membership_plans',
+  'membership_plan_versions',
+  'membership_campaigns',
+  'membership_accounts',
+  'membership_grants',
+  'membership_receipts',
+  'membership_redemptions',
+  'membership_refresh_settings',
   'knowledge_documents',
   'knowledge_chunks',
   'knowledge_versions',

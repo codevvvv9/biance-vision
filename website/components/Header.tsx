@@ -12,6 +12,7 @@ export function Header({ locale }: { locale: Locale }) {
   const other = locale === 'en' ? 'zh' : 'en'
   const otherPath = pathname.replace(/^\/(en|zh)(?=\/|$)/, `/${other}`)
   const nav = [
+    ['pricing', text(locale, 'Membership', '会员套餐')],
     ['methodology', text(locale, 'Our approach', '研究方法')],
     ['demo', text(locale, 'Research demo', '研究演示')],
     ['guides', text(locale, 'Field notes', '使用指南')],

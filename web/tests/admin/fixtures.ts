@@ -1,3 +1,4 @@
+import { plan as membershipPlan, refresh as membershipRefresh } from './membership-data'
 import { test as base, expect } from "@playwright/test";
 export const documents = [
   {
@@ -101,6 +102,8 @@ export const test = base.extend<{
               },
             ],
           };
+        else if (path === "/api/admin/membership/plans") data = { plans: [membershipPlan], refresh: membershipRefresh };
+        else if (path === "/api/admin/membership/stats") data = { stats: { active: 1, managed: 1, received: '15' }, refresh: membershipRefresh };
         else if (path === "/api/admin/audit-logs")
           data = { records: [], usernames: ["fixture-user"] };
         else if (path === "/api/admin/knowledge/documents")

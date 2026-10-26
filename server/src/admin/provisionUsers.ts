@@ -1,3 +1,5 @@
+import { activeMembership as dbMembership, membershipStatus } from '../membership/service.js'
+import { provisionMember } from '../membership/routes.js'
 import crypto from 'node:crypto'
 import { eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -72,20 +74,24 @@ export function registerProvisionUserRoutes(app: FastifyInstance, deps: { requir
   app.post('/api/admin/users/provision', { bodyLimit: 4096 }, async (req, reply) => {
     const session = deps.requireSuperadmin(req)
     guardAdminMutation(req, session.username, 'provision-user', 5)
-    const result = await provisionUser(req.body, session.username)
-    recordAudit(session, { action: 'settings_update', target: result.username, detail: `开通普通用户；累计额度 ${result.access.totalLimit}，每日 ${result.access.dailyLimit ?? '不限'}，档案 ${result.access.profileName}` })
+    const result = await provisionMember(req.body, session.username)
+    recordAudit(session, { action: 'settings_update', target: result.username, detail: `开通普通用户并绑定会员 ${result.grantId}` })
     reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache')
     return reply.code(201).send(result)
   })
   app.get('/api/admin/users/:username/ai-access', async (req, reply) => {
     deps.requireSuperadmin(req)
     reply.header('Cache-Control', 'no-store')
-    return { access: await readAiAccess((req.params as { username: string }).username) }
+    const username = (req.params as { username: string }).username
+    const membership = await membershipStatus(username)
+    if (membership.managed) return { access: null, membership }
+    return { access: await readAiAccess(username) }
   })
   app.put('/api/admin/users/:username/ai-access', { bodyLimit: 4096 }, async (req, reply) => {
     const session = deps.requireSuperadmin(req)
     guardAdminMutation(req, session.username, 'update-ai-access')
     const username = (req.params as { username: string }).username
+    if ((await dbMembership(username))) throw bad('会员用户请通过会员套餐管理额度', 409)
     const patch = z.object({ totalLimit: z.number().int().min(0).max(100000), dailyLimit: z.number().int().min(1).max(100000).nullable(), requestsPerMinute: z.number().int().min(1).max(60) }).strict().safeParse(req.body)
     if (!patch.success) throw bad('额度参数不正确')
     const db = getDb()

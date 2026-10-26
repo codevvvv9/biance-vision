@@ -440,6 +440,7 @@ export function registerGeoBlock(
   skipIf?: (req: FastifyRequest) => boolean,
 ): void {
   app.addHook('onRequest', async (req, reply) => {
+    if (req.method === 'GET' && req.url.split('?')[0] === '/api/public/membership-plans') return // Public website catalog only.
     if (skipIf?.(req)) return
     const ip = ipOf(req)
     if (isRegionBlocked(ip)) replyBlocked(ip, req, reply)

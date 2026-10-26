@@ -9,7 +9,7 @@
     "build": "tsx scripts/check-content.ts && next build",
     "start": "node --import ./runtime/access-log.mjs ./node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3100",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "pnpm --filter biance-vision-brooks build && tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
     "check:release": "tsx scripts/check-release.ts",
     "check:content": "tsx scripts/check-content.ts"
@@ -23,7 +23,8 @@
     "next": "16.4.2",
     "qrcode": "1.5.4",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "biance-vision-brooks": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",

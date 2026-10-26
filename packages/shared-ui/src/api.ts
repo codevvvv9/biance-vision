@@ -26,7 +26,13 @@ export class ApiError extends Error {
   requestId: string | null
   retryAfterSeconds: number | null
 
-  constructor(init: { status: number; message: string; code?: string; requestId?: string; retryAfterSeconds?: number }) {
+  constructor(init: {
+    status: number
+    message: string
+    code?: string
+    requestId?: string
+    retryAfterSeconds?: number
+  }) {
     super(init.message)
     this.name = 'ApiError'
     this.status = init.status
@@ -43,43 +49,85 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
   unauthorizedHandler = fn
 }
 
-export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
+export async function api<T = unknown>(
+  path: string,
+  options: ApiOptions = {},
+): Promise<T> {
   const headers: Record<string, string> = { ...options.headers }
+  const meteredWrite =
+    options.method === 'POST' &&
+    /^\/(ai\/(chat|command)|translate|research\/(chat|runs)|conversations\/[^/]+\/messages)$/.test(
+      path,
+    )
   // 无 body 时不能带 content-type: json——Fastify 对空 body + json 头直接 400（FST_ERR_CTP_EMPTY_JSON_BODY），
   // 会打死所有无 body 的 POST/PUT（logout/取消 run/chat-cutoff/settings 测试）
   if (options.body !== undefined) headers['content-type'] = 'application/json'
-  if (options.idempotencyKey !== undefined) headers['idempotency-key'] = options.idempotencyKey
-  const res = await fetch(`/api${path}`, {
-    headers,
-    method: options.method,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-    signal: options.signal,
-  })
-  if (!res.ok) {
-    if (res.status === 401) unauthorizedHandler?.()
-    let detail = ''
-    let code: string | undefined
-    let retryAfterSeconds: number | undefined
-    try {
-      const parsed = (await res.json()) as { message?: string; code?: string; retryAfterSeconds?: number }
-      detail = parsed.message ?? ''
-      code = parsed.code
-      retryAfterSeconds = parsed.retryAfterSeconds
-    } catch {
-      /* noop */
-    }
-    const apiErr = new ApiError({
-      status: res.status,
-      message: detail || i18n.t('common:api.requestFailed', { code: res.status }),
-      code,
-      requestId: res.headers.get('x-request-id') ?? undefined,
-      retryAfterSeconds,
+  if (options.idempotencyKey !== undefined)
+    headers['idempotency-key'] = options.idempotencyKey
+  else if (
+    meteredWrite &&
+    !Object.keys(headers).some((key) => key.toLowerCase() === 'idempotency-key')
+  )
+    headers['idempotency-key'] = crypto.randomUUID()
+  try {
+    const res = await fetch(`/api${path}`, {
+      headers,
+      method: options.method,
+      body:
+        options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
     })
-    // P2a-3：已知 UI 操作失败自动上报（telemetry 用原生 fetch，不经本函数——无递归）
-    reportOperationFailed(path.slice(0, 64), apiErr)
-    throw apiErr
+    if (!res.ok) {
+      if (res.status === 401) unauthorizedHandler?.()
+      let detail = ''
+      let code: string | undefined
+      let retryAfterSeconds: number | undefined
+      try {
+        const parsed = (await res.json()) as {
+          message?: string
+          code?: string
+          retryAfterSeconds?: number
+        }
+        detail = parsed.message ?? ''
+        code = parsed.code
+        retryAfterSeconds = parsed.retryAfterSeconds
+      } catch {
+        /* noop */
+      }
+      const retryHeader = res.headers.get('retry-after')
+      if (retryHeader) {
+        const seconds = /^\d+$/.test(retryHeader)
+          ? Number(retryHeader)
+          : Math.max(0, (Date.parse(retryHeader) - Date.now()) / 1000)
+        if (Number.isFinite(seconds))
+          retryAfterSeconds = Math.max(retryAfterSeconds ?? 0, seconds)
+      }
+      const apiErr = new ApiError({
+        status: res.status,
+        message:
+          detail || i18n.t('common:api.requestFailed', { code: res.status }),
+        code,
+        requestId: res.headers.get('x-request-id') ?? undefined,
+        retryAfterSeconds,
+      })
+      // P2a-3：已知 UI 操作失败自动上报（telemetry 用原生 fetch，不经本函数——无递归）
+      reportOperationFailed(path.slice(0, 64), apiErr)
+      throw apiErr
+    }
+    const data = (await res.json()) as T
+    if (
+      options.method &&
+      options.method !== 'GET' &&
+      (/^\/admin\/membership(?:\/|$)/.test(path) ||
+        /^\/admin\/users\/(?:provision|[^/]+\/membership)$/.test(path))
+    ) {
+      globalThis.dispatchEvent?.(new Event('bv:admin-membership-changed'))
+    }
+    return data
+  } finally {
+    if (meteredWrite)
+      globalThis.dispatchEvent?.(new Event('bv:membership-changed'))
   }
-  return (await res.json()) as T
 }
 
 // ---- 管理端：用户聊天管控 / 研究会话追踪（仅超管，对应 /api/admin/*） ----
@@ -94,20 +142,38 @@ export function updateChatPolicy(
   username: string,
   patch: { disabled?: boolean; dailyLimit?: number | null },
 ): Promise<{ username: string; chatPolicy: ChatPolicy }> {
-  return api(`/admin/users/${encodeURIComponent(username)}/chat-policy`, { method: 'PUT', body: patch })
+  return api(`/admin/users/${encodeURIComponent(username)}/chat-policy`, {
+    method: 'PUT',
+    body: patch,
+  })
 }
 
 /** POST /api/admin/users/:username/chat-cutoff：一键禁用聊天并取消其全部进行中研究运行；cancelDeferred=true 表示取消被延迟（数据库暂不可用） */
-export function cutOffUserChat(username: string): Promise<{ disabled: boolean; cancelledRuns: string[]; cancelDeferred?: boolean }> {
-  return api(`/admin/users/${encodeURIComponent(username)}/chat-cutoff`, { method: 'POST' })
+export function cutOffUserChat(
+  username: string,
+): Promise<{
+  disabled: boolean
+  cancelledRuns: string[]
+  cancelDeferred?: boolean
+}> {
+  return api(`/admin/users/${encodeURIComponent(username)}/chat-cutoff`, {
+    method: 'POST',
+  })
 }
 
 /** GET /api/admin/conversations?username=：指定用户的研究会话列表（链路 B） */
-export function fetchAdminConversations(username: string, limit = 50): Promise<{ conversations: AdminConversationSummary[] }> {
-  return api(`/admin/conversations?username=${encodeURIComponent(username)}&limit=${limit}`)
+export function fetchAdminConversations(
+  username: string,
+  limit = 50,
+): Promise<{ conversations: AdminConversationSummary[] }> {
+  return api(
+    `/admin/conversations?username=${encodeURIComponent(username)}&limit=${limit}`,
+  )
 }
 
 /** GET /api/admin/conversations/:id：会话完整消息 + 引用研究运行摘要 */
-export function fetchAdminConversation(id: string): Promise<AdminConversationDetail> {
+export function fetchAdminConversation(
+  id: string,
+): Promise<AdminConversationDetail> {
   return api(`/admin/conversations/${encodeURIComponent(id)}`)
 }
