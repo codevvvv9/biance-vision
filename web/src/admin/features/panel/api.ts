@@ -14,6 +14,18 @@ export interface Contacts {
   email: string;
   updatedAt: number;
 }
+export interface HeroGameRisk {
+  zh: string;
+  en: string;
+  glyph: string;
+}
+export interface HeroGame {
+  version: 1;
+  revision: number;
+  risks: HeroGameRisk[];
+  speedScale: number;
+  updatedAt: number;
+}
 export interface Access {
   totalLimit: number;
   used?: number;
@@ -35,7 +47,7 @@ export interface Profile {
   dailyLimit?: number;
 }
 export const loadContacts = () =>
-  api<{ contacts: Contacts }>("/admin/website-config");
+  api<{ contacts: Contacts; heroGame: HeroGame }>("/admin/website-config");
 export const saveContacts = (contacts: Contacts) =>
   api<{ contacts: Contacts }>("/admin/website-config", {
     method: "PUT",
@@ -43,6 +55,15 @@ export const saveContacts = (contacts: Contacts) =>
       telegram: contacts.telegram,
       email: contacts.email,
       expectedRevision: contacts.revision,
+    },
+  });
+export const saveHeroGame = (heroGame: HeroGame) =>
+  api<{ heroGame: HeroGame }>("/admin/website-config/hero-game", {
+    method: "PUT",
+    body: {
+      risks: heroGame.risks,
+      speedScale: heroGame.speedScale,
+      expectedRevision: heroGame.revision,
     },
   });
 export const loadProfiles = () =>

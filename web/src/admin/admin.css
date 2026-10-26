@@ -1030,3 +1030,9 @@
 .admin-gate-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-2); }
 .admin-gate-field input { width: 100%; }
 .admin-gate-hint { margin: 0; font-size: 12.5px; color: var(--text-3); line-height: 1.6; }
+
+/* ---- 官网首屏小游戏配置（词表行：中文名/英文名/图标/删除） ---- */
+.hero-game-risk-row { display: flex; gap: 8px; align-items: center; }
+.hero-game-risk-row input { flex: 1; min-width: 0; }
+.hero-game-risk-row .hero-game-risk-glyph { flex: 0 0 64px; }
+.hero-game-risk-row button { flex-shrink: 0; }

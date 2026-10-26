@@ -3,19 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { brand, duck } from '@biance/brand/identity'
 import { text, type Locale } from '@/lib/site'
+import { defaultHeroGame, validateHeroGame } from '@/lib/hero-game'
 import styles from './DuckRun.module.css'
 
 const BEST_KEY = 'duckstrat.riskrun.best'
-
-/** Risk pills reuse the visual language of the narrative hero they replace. */
-const RISKS: ReadonlyArray<{ zh: string; en: string; glyph: string }> = [
-  { zh: '杠杆', en: 'LEVERAGE', glyph: '↯' },
-  { zh: '追高', en: 'CHASING', glyph: '▲' },
-  { zh: 'FOMO', en: 'FOMO', glyph: '!' },
-  { zh: '重仓', en: 'OVERSIZE', glyph: '▤' },
-  { zh: '噪声', en: 'NOISE', glyph: '≈' },
-  { zh: '假突破', en: 'FAKEOUT', glyph: '✕' },
-]
 
 type Mode = 'idle' | 'playing' | 'over'
 interface Pill { kind: 'pill'; x: number; y: number; label: string; glyph: string; w: number; wK: number; counted: boolean; seed: number }
@@ -101,13 +92,24 @@ export function DuckRun({ locale }: { locale: Locale }) {
       floats: [] as FloatText[],
       kbd: { up: false, down: false },
     }
+    // Admin-configured risk words and speed; falls back to built-in defaults.
+    const config = { current: defaultHeroGame() }
+    let configCancelled = false
+    fetch('/site-config.json', { cache: 'no-store' })
+      .then(response => (response.ok ? response.json() : null))
+      .then(data => {
+        if (configCancelled || !data || typeof data !== 'object') return
+        const parsed = validateHeroGame((data as Record<string, unknown>).heroGame)
+        if (parsed) config.current = parsed
+      })
+      .catch(() => { /* config is optional; defaults keep the game playable */ })
 
     const metrics = () => {
       k = Math.max(.45, W / 560)
       playTop = Math.max(24, H * .1)
       playH = H - playTop - Math.max(9, H * .05)
       duckX = Math.max(10, W * .02) + (W - Math.max(20, W * .04)) * .2
-      duckH = Math.min(56, Math.max(34, H * .155))
+      duckH = Math.min(66, Math.max(40, H * .19))
       duckR = duckH * .3
       playTopRef.current = playTop
       playHRef.current = playH
@@ -197,7 +199,7 @@ export function DuckRun({ locale }: { locale: Locale }) {
         G.obstacles.push({ kind: 'wall', x: W + 12, gapY: .18 + rand() * .64, gapH, counted: false, seed: Math.floor(rand() * 1e9) })
         return
       }
-      const risk = RISKS[Math.floor(rand() * RISKS.length)]!
+      const risk = config.current.risks[Math.floor(rand() * config.current.risks.length)]!
       const label = locale === 'zh' ? risk.zh : risk.en
       let yFrac = .14 + rand() * .72
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -259,7 +261,7 @@ export function DuckRun({ locale }: { locale: Locale }) {
       G.worldX += G.speed * dt
       if (playing) {
         G.t += dt
-        G.speed = 128 + Math.min(G.t * 3.1, 215)
+        G.speed = (128 + Math.min(G.t * 3.1, 215)) * config.current.speedScale
         if (G.kbd.up) pointerY.current -= 340 * k * dt / playH
         if (G.kbd.down) pointerY.current += 340 * k * dt / playH
       } else {
@@ -502,9 +504,12 @@ export function DuckRun({ locale }: { locale: Locale }) {
       ctx.globalAlpha = 1
 
       if (playing || modeRef.current === 'over') {
+        // HUD stays readable in fullscreen by scaling with the field width.
+        const ui = Math.min(1.7, Math.max(1, k))
         for (let i = 0; i < 3; i++) {
           ctx.save()
-          ctx.translate(13 + i * 17, 14)
+          ctx.translate((13 + i * 17) * ui, 14 * ui)
+          ctx.scale(ui, ui)
           ctx.beginPath()
           ctx.moveTo(0, -6)
           ctx.lineTo(5, -3)
@@ -520,16 +525,17 @@ export function DuckRun({ locale }: { locale: Locale }) {
           ctx.restore()
         }
         ctx.fillStyle = '#72858d'
-        ctx.font = monoFont(7)
+        ctx.font = monoFont(7 * ui)
         ctx.textAlign = 'left'
-        ctx.fillText(text(locale, 'DISCIPLINE', '纪律'), 13 + 3 * 17 + 4, 17)
+        ctx.textBaseline = 'alphabetic'
+        ctx.fillText(text(locale, 'DISCIPLINE', '纪律'), (13 + 3 * 17 + 4) * ui, 17 * ui)
         ctx.textAlign = 'right'
         ctx.fillStyle = '#dfe8ec'
-        ctx.font = monoFont(14, '600')
-        ctx.fillText(`${Math.floor(G.t)}s`, W - 13, 23)
+        ctx.font = monoFont(14 * ui, '600')
+        ctx.fillText(`${Math.floor(G.t)}s`, W - 13 * ui, 23 * ui)
         ctx.fillStyle = '#7f95a0'
-        ctx.font = monoFont(9)
-        ctx.fillText(`↷ ${G.dodged}   ✦ ${G.evidence}`, W - 13, 37)
+        ctx.font = monoFont(9 * ui)
+        ctx.fillText(`↷ ${G.dodged}   ✦ ${G.evidence}`, W - 13 * ui, 37 * ui)
         ctx.textAlign = 'left'
       }
 
@@ -618,6 +624,7 @@ export function DuckRun({ locale }: { locale: Locale }) {
     }
 
     return () => {
+      configCancelled = true
       if (raf) cancelAnimationFrame(raf)
       ro.disconnect()
       io.disconnect()
@@ -629,6 +636,47 @@ export function DuckRun({ locale }: { locale: Locale }) {
       }
     }
   }, [locale])
+
+  // Fullscreen: native element fullscreen when available; a fixed-viewport
+  // overlay fallback keeps iPhone Safari (no element Fullscreen API) covered.
+  const [fsNative, setFsNative] = useState(false)
+  const [fsFallback, setFsFallback] = useState(false)
+  const expanded = fsNative || fsFallback
+
+  useEffect(() => {
+    const onFsChange = () => setFsNative(document.fullscreenElement === stageRef.current)
+    const onEscFallback = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFsFallback(false)
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
+    window.addEventListener('keydown', onEscFallback)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange)
+      window.removeEventListener('keydown', onEscFallback)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.body.style.overflow = fsFallback ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [fsFallback])
+
+  const toggleExpand = useCallback(async () => {
+    const stage = stageRef.current
+    if (!stage) return
+    if (document.fullscreenElement === stage) {
+      await document.exitFullscreen().catch(() => {})
+      return
+    }
+    if (fsFallback) { setFsFallback(false); return }
+    if (typeof stage.requestFullscreen === 'function') {
+      try {
+        await stage.requestFullscreen()
+        return
+      } catch { /* fall through to the overlay fallback */ }
+    }
+    setFsFallback(true)
+  }, [fsFallback])
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (modeRef.current === 'idle') startRef.current()
@@ -649,8 +697,9 @@ export function DuckRun({ locale }: { locale: Locale }) {
 
   return <section className={styles.scene} aria-label={text(locale, 'DuckStrat risk-run mini game', 'DuckStrat 风险漂流小游戏')} data-mode={mode}>
     <div className={styles.heading}><span className={styles.eyebrow}>{text(locale, 'RISK RUN', '风险漂流')}</span><span className={styles.sceneIndex}>{best === null ? text(locale, 'BEST —', '最佳 —') : `BEST ${best}s`}</span></div>
-    <div ref={stageRef} className={styles.stage} data-mode={mode} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onContextMenu={event => { if (mode === 'playing') event.preventDefault() }}>
+    <div ref={stageRef} className={`${styles.stage}${fsFallback ? ` ${styles.fsFallback}` : ''}`} data-mode={mode} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onContextMenu={event => { if (mode === 'playing') event.preventDefault() }}>
       <canvas ref={canvasRef} className={styles.canvas} role="img" aria-label={text(locale, 'Steerable duck dodging risk labels on a flowing market river', '小黄鸭在市场水流中躲避风险标签')} />
+      <button type="button" className={styles.fsBtn} onClick={() => void toggleExpand()} aria-label={expanded ? text(locale, 'Exit fullscreen', '退出全屏') : text(locale, 'Play fullscreen', '全屏游玩')} aria-pressed={expanded}>{expanded ? '✕' : '⤢'}</button>
       <div className={styles.overlay} data-mode={mode}>
         {mode === 'over' && result ? <div className={styles.overCard}>
           <span className={styles.overKicker}>{text(locale, 'RUN COMPLETE', '本次航行')}</span>
