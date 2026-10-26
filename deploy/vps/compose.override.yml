@@ -18,6 +18,8 @@ services:
       # P0-2：仅信任宿主 Caddy 经 Docker 网桥转发（对端是网关非回环）；XFF 由
       # Caddy 覆盖为 {remote_host}，应用按信任链取真实客户端 IP（伪造头无效）
       BV_TRUSTED_PROXIES: "172.16.0.0/12"
+      BV_CSRF_KEY: ${BV_CSRF_KEY:?set in .env}
+      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:?set in .env}
   website:
     build: !reset null
     image: ghcr.io/codevvvv9/biance-vision-website:${BV_VERSION:-latest}
@@ -28,10 +30,14 @@ services:
     environment:
       WEBSITE_ORIGIN: ${WEBSITE_ORIGIN:?请设置既有用户域名的HTTPS origin}
       BV_TRUSTED_PROXIES: "172.16.0.0/12"
+      BV_CSRF_KEY: ${BV_CSRF_KEY:?set in .env}
+      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:?set in .env}
   migrate:
     image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
   worker:
     image: ghcr.io/codevvvv9/biance-vision:${BV_VERSION:-latest}
+    environment:
+      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:?set in .env}
   research-py:
     build: !reset null
     image: ghcr.io/codevvvv9/biance-vision-research-py:${BV_VERSION:-latest}
