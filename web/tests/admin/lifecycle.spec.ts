@@ -113,7 +113,7 @@ test("failed logout displays revocation warning; successful login clears stale w
   await page.getByLabel("密码", { exact: true }).fill("correct");
   await page.getByRole("button", { name: "登录管理后台", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "管理面板", exact: true }),
+    page.getByRole("heading", { name: "大盘", exact: true }),
   ).toBeVisible();
 });
 

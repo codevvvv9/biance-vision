@@ -6,12 +6,16 @@
  * 视觉走 admin 统一体系：antd 深色主题（app/Theme）+ ui/admin.module.css 原语，
  * 词条在 admin 词典 observability 组（zh/en 双语）。
  */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "@biance/shared-ui"
 import { useTranslation } from "react-i18next"
 import { Button, Card, Empty, Input, Statistic, Table, Tag, Typography } from "antd"
 import { useAdminText } from "./ui/text"
 import { Feedback } from "./ui/feedback"
+import { EChart } from "./charts/EChart"
+import { httpTrafficOption } from "./charts/options"
+import { loadTimeseries } from "./features/dashboard/api"
+import { useResource } from "./ui/resource"
 import styles from "./ui/admin.module.css"
 
 interface Overview {
@@ -75,6 +79,14 @@ export default function AdminObservabilityPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState<{ requestId: string; username: string }>({ requestId: "", username: "" })
   const [alerts, setAlerts] = useState<AlertRow[] | null>(null)
+  const http = useResource(loadTimeseries, 300_000)
+  const httpChart = useMemo(
+    () =>
+      http.data && http.data.dbAvailable && http.data.http.buckets.length > 0
+        ? httpTrafficOption(http.data.http.buckets, { requests: text("legendRequests"), p95: text("legendP95") })
+        : null,
+    [http.data, text],
+  )
 
   const refresh = useCallback(async () => {
     setLoadError(null)
@@ -163,6 +175,15 @@ export default function AdminObservabilityPage() {
         )}
         {overview !== null && !overview.dbAvailable && (
           <Feedback error={t("observability.dbDown")} />
+        )}
+      </Card>
+
+      {/* P2b 预留的趋势位（v0.18.4 兑现）：HTTP 流量与延迟 24h；5 分钟自轮询 */}
+      <Card title={t("ui.chartHttpTraffic")}>
+        {httpChart === null ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("ui.noTimeseries")} />
+        ) : (
+          <EChart option={httpChart} height={300} />
         )}
       </Card>
 

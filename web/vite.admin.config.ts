@@ -77,6 +77,8 @@ export default defineConfig({
           if (!id.includes('node_modules')) return undefined
           if (/[\\/]react[\\/]|[\\/]react-dom[\\/]|[\\/]scheduler[\\/]|[\\/]react-router/.test(id)) return 'vendor'
           if (id.includes('klinecharts')) return 'kline'
+          // admin 图表（大盘/各 tab 顶部）：echarts 按需 + wordcloud 扩展独立 chunk
+          if (/[\\/]echarts|[\\/]zrender|[\\/]wordcloud2/.test(id)) return 'echarts'
           if (
             /[\\/]katex|[\\/]react-markdown|[\\/]remark|[\\/]rehype|[\\/]micromark|[\\/]mdast|[\\/]hast|[\\/]unist|[\\/]unified|[\\/]vfile|[\\/]devlop|[\\/]bail|[\\/]trough|[\\/]is-plain-obj|[\\/]decode-named-character-reference|[\\/]character-entities|[\\/]property-information|[\\/]space-separated-tokens|[\\/]comma-separated-tokens|[\\/]trim-lines|[\\/]longest-streak/.test(id)
           ) {

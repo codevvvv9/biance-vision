@@ -1,7 +1,9 @@
 import { Drawer, overlayContainer } from "./ui/overlays";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { App, Alert, Button, Card, Space, Table, Tag, Typography } from "antd";
 import type { EvalDataset, EvalRun } from "biance-vision-brooks";
+import { EChart } from "./charts/EChart";
+import { evalSuccessOption } from "./charts/options";
 import {
   loadDatasets,
   loadModels,
@@ -61,9 +63,37 @@ function Runs(): JSX.Element {
   const text = useAdminText();
   const resource = useResource(loadRuns, 8000);
   const [report, setReport] = useState<string | null>(null);
+  const runs = resource.data?.runs ?? [];
+  const successChart = useMemo(() => {
+    // 近 50 条 runs 按上海天聚合（startedAt 缺省回退 endedAt）
+    const byDay = new Map<string, { runs: number; passed: number }>();
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" });
+    for (const run of runs) {
+      const at = run.startedAt ?? run.endedAt;
+      if (!at) continue;
+      const day = fmt.format(new Date(at));
+      const agg = byDay.get(day) ?? { runs: 0, passed: 0 };
+      agg.runs += 1;
+      if (run.status === "completed") agg.passed += 1;
+      byDay.set(day, agg);
+    }
+    const days = [...byDay.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([day, v]) => ({ day, ...v }));
+    return days.length > 0
+      ? evalSuccessOption(days, { runs: text("legendRunsTotal"), successRate: text("legendSuccessRate") })
+      : null;
+  }, [runs, text]);
   return (
     <Card>
       <Feedback error={resource.error} />
+      {successChart !== null && (
+        <>
+          <Typography.Title level={5} style={{ marginTop: 0 }}>
+            {text("chartEvalSuccess")}
+          </Typography.Title>
+          <EChart option={successChart} height={220} />
+          <div style={{ height: 16 }} />
+        </>
+      )}
       <Table<EvalRun>
         rowKey="id"
         loading={resource.loading && !resource.data}

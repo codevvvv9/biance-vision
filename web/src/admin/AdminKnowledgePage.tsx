@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Card, Space, Tag } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Card, Space, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { Documents } from "./features/knowledge/Documents";
 import {
@@ -9,6 +9,8 @@ import {
   loadDocuments,
   type BatchResult,
 } from "./features/knowledge/api";
+import { EChart } from "./charts/EChart";
+import { docStatusOption } from "./charts/options";
 import { useResource } from "./ui/resource";
 import { useAdminText } from "./ui/text";
 import { AdminViews } from "./ui/views";
@@ -46,6 +48,22 @@ export default function AdminKnowledgePage(): JSX.Element {
     refreshSoon();
   };
   const { workerDead } = useDocPolling(docs, () => void resource.reload());
+  const statusChart = useMemo(() => {
+    if (docs.length === 0) return null;
+    const order = ["published", "indexed", "chunked", "parsed", "parsing", "uploaded", "failed"];
+    const counts = new Map<string, number>();
+    for (const doc of docs) counts.set(doc.status, (counts.get(doc.status) ?? 0) + 1);
+    const statusCounts = [...counts.entries()]
+      .sort((a, b) => {
+        const ia = order.indexOf(a[0]);
+        const ib = order.indexOf(b[0]);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      })
+      .map(([status, count]) => ({ status, count }));
+    return docStatusOption(statusCounts, {
+      status: Object.fromEntries(order.map((s) => [s, text(`doc_${s}`)])),
+    });
+  }, [docs, text]);
   const run = async (operation: () => Promise<unknown>) => {
     setError("");
     setSuccess("");
@@ -120,6 +138,14 @@ export default function AdminKnowledgePage(): JSX.Element {
                     </Button>
                   </Space>
                 </div>
+                {statusChart !== null && (
+                  <>
+                    <Typography.Title level={5} style={{ marginTop: 12, marginBottom: 4 }}>
+                      {text("chartDocStatus")}
+                    </Typography.Title>
+                    <EChart option={statusChart} height={240} />
+                  </>
+                )}
                 <Documents
                   docs={docs}
                   loading={resource.loading}
