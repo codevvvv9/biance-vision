@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const path = slug.join('/')
   if (!isLocale(locale) || !pagePaths.includes(path)) notFound()
   const info = pageInfo(locale, path)!
-  return { title: info.title, description: info.description, alternates: pageAlternates(locale, path ? `/${path}` : ''),
+  return { title: path === '' ? { absolute: info.title } : info.title, description: info.description, alternates: pageAlternates(locale, path ? `/${path}` : ''),
     openGraph: { siteName: 'Biance Vision', type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title: info.title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: locale === 'zh' ? 'zh_CN' : 'en_US', alternateLocale: locale === 'zh' ? 'en_US' : 'zh_CN' },
   }
 }
