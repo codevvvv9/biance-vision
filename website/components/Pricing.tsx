@@ -55,7 +55,7 @@ export function Pricing({
   return (
     <>
       <section className="container section">
-        <div className="eyebrow">BIANCE VISION MEMBERSHIP</div>
+        <div className="eyebrow">DuckStrat MEMBERSHIP</div>
         <h1>{zh ? '选择你的会员套餐' : 'Choose your membership'}</h1>
         <p>
           {zh

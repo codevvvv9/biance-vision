@@ -6,12 +6,12 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 3100",
-    "build": "tsx scripts/check-content.ts && next build",
-    "start": "node --import ./runtime/access-log.mjs ./node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3100",
+    "build": "tsx scripts/check-content.ts && tsx scripts/check-brand.ts && next build && tsx scripts/stamp-build.ts",
+    "start": "node --import ./runtime/origin-guard.mjs --import ./runtime/access-log.mjs ./node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3100",
     "typecheck": "tsc --noEmit",
     "test": "pnpm --filter biance-vision-brooks build && tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
-    "check:release": "tsx scripts/check-release.ts",
+    "check:release": "tsx scripts/check-brand.ts && tsx scripts/check-release.ts",
     "check:content": "tsx scripts/check-content.ts"
   },
   "dependencies": {
@@ -20,11 +20,12 @@
     "@mdx-js/react": "^3",
     "@next/mdx": "16.4.2",
     "@types/mdx": "^2",
+    "biance-vision-brooks": "workspace:*",
+    "motion": "12.23.24",
     "next": "16.4.2",
     "qrcode": "1.5.4",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "biance-vision-brooks": "workspace:*"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",

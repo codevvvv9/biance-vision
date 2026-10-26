@@ -1,5 +1,7 @@
 'use client'
 
+import { brand } from '@biance/brand/identity'
+
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Brand } from './Brand'
@@ -19,7 +21,7 @@ export function Header({ locale }: { locale: Locale }) {
   ]
   return <header className="site-header">
     <div className="header-inner">
-      <a className="brand-link" href={`/${locale}`} aria-label="Biance Vision"><Brand /></a>
+      <a className="brand-link" href={`/${locale}`} aria-label={brand.name}><Brand /></a>
       <button className="menu-toggle" aria-expanded={open} aria-controls="main-navigation" onClick={() => setOpen(!open)} aria-label={text(locale, 'Toggle navigation', '展开或收起导航')}><span /><span /></button>
       <nav id="main-navigation" className={`navigation ${open ? 'is-open' : ''}`} aria-label={text(locale, 'Main navigation', '主导航')}>
         <div className="nav-links">{nav.map(([path, label]) => <a key={path} href={`/${locale}/${path}`} aria-current={pathname.startsWith(`/${locale}/${path}`) ? 'page' : undefined} onClick={() => setOpen(false)}>{label}</a>)}</div>

@@ -373,7 +373,7 @@
     "short": "做空 short"
   },
   "wb": {
-    "brandSub": "比特币研究 Agent",
+    "brandSub": "价格行为与策略研究",
     "homeAria": "研究工作台首页",
     "expandNav": "展开导航",
     "collapseNav": "折叠导航",
@@ -404,7 +404,7 @@
     "viewThisRun": "查看这次研究 {{id}} ↗",
     "understanding": "正在理解问题…",
     "readingRun": "正在读取研究…",
-    "visionResearch": "VISION · 研究",
+    "visionResearch": "DuckStrat · 研究",
     "toBottom": "回到底部 ↓",
     "restoreFailed": "无法恢复会话：{{msg}}",
     "scenesAria": "研究场景",

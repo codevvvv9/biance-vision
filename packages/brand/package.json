@@ -2,9 +2,11 @@
   "name": "@biance/brand",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "exports": {
+    "./identity": { "types": "./identity.d.ts", "default": "./identity.js" },
     "./tokens.css": "./tokens.css",
     "./mark.svg": "./mark.svg"
   },
-  "files": ["tokens.css", "mark.svg"]
+  "files": ["identity.js", "identity.d.ts", "tokens.css", "mark.svg"]
 }

@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import {
   createContext,
   useContext,
@@ -97,10 +98,10 @@ function MembershipContent({
       ? s.current.name
       : s.current.nameEn
     : labels[s.status]
-  const info = `Biance Vision\n${t('membership.account')}: ${user?.username ?? ''}\n${t('membership.plan')}: ${name}\n${t('membership.expires')}: ${s.current ? (s.current.endsAt ? new Date(s.current.endsAt).toLocaleString() : t('membership.lifetime')) : '—'}`
+  const info = `${brand.name}\n${t('membership.account')}: ${user?.username ?? ''}\n${t('membership.plan')}: ${name}\n${t('membership.expires')}: ${s.current ? (s.current.endsAt ? new Date(s.current.endsAt).toLocaleString() : t('membership.lifetime')) : '—'}`
   const contact = s.contacts.telegram
     ? `https://t.me/${s.contacts.telegram}`
-    : `mailto:${s.contacts.email}?subject=${encodeURIComponent('Biance Vision membership renewal')}&body=${encodeURIComponent(info)}`
+    : `mailto:${s.contacts.email}?subject=${encodeURIComponent('DuckStrat membership renewal')}&body=${encodeURIComponent(info)}`
   const progress = s.current?.endsAt
     ? Math.max(
         0,

@@ -1,3 +1,4 @@
+import { brand, brandMarkSvg } from '@biance/brand/identity'
 /**
  * 地域封锁（应用层 GeoIP）：站点面向海外运营，默认屏蔽中国大陆来源 IPv4。
  *
@@ -201,7 +202,7 @@ function blockPageHtml(ip: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="dark">
-<title>403 · 该地区暂不支持访问 — Biance Vision</title>
+<title>403 · 该地区暂不支持访问 — ${brand.name}</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -371,7 +372,7 @@ function blockPageHtml(ip: string): string {
     正在旅行、或认为此拦截有误？请更换网络后重试，或截图本页并联系站点运营者。<br>
     Traveling or believe this is a mistake? Switch networks, or contact the site operator with a screenshot.
   </p>
-  <div class="brand">BIANCE&nbsp;VISION</div>
+  <div class="brand"><span style="display:inline-block;width:28px;height:28px;vertical-align:middle;margin-right:8px">${brandMarkSvg}</span>${brand.name}</div>
 </main>
 <script>
 (function () {
@@ -386,7 +387,7 @@ function blockPageHtml(ip: string): string {
         return row.querySelector('.k').textContent + ' ' + row.querySelector('.v').textContent;
       },
     );
-    var text = 'BIANCE VISION · 403 region_blocked\\n' + lines.join('\\n');
+    var text = '${brand.name} · 403 region_blocked\\n' + lines.join('\\n');
     function done(ok) {
       btn.textContent = ok ? '已复制 · Copied' : '复制失败 · Failed';
       setTimeout(function () { btn.textContent = '复制诊断信息 · Copy'; }, 2000);

@@ -29,7 +29,7 @@ test('responsive home remains readable and navigation preserves the same page', 
   const errors: string[] = []
   page.on('pageerror', e => errors.push(e.message))
   await page.goto('/en')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Evidence before')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Navigate risk.')
   await expect(page.getByRole('link', { name: 'View research demo', exact: true }).first()).toHaveAttribute('href', '/en/demo')
   for (const width of [390, 768, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1000 })

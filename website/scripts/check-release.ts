@@ -1,9 +1,11 @@
 import { contactConfig, publicOrigin } from '../lib/site'
+import { brand } from '@biance/brand/identity'
 
 const config = contactConfig()
 const origin = new URL(publicOrigin())
 const errors: string[] = []
 if (origin.protocol !== 'https:' || ['localhost', '127.0.0.1', 'example.com'].includes(origin.hostname) || origin.hostname.endsWith('.example.com')) errors.push('Set WEBSITE_ORIGIN to the real HTTPS public domain.')
+if (origin.origin !== `https://${brand.domain}`) errors.push(`Production WEBSITE_ORIGIN must be https://${brand.domain}.`)
 if (!config.email && !config.telegram) errors.push('Configure a real Telegram username or contact email.')
 if (errors.length) {
   console.error(errors.join('\n'))

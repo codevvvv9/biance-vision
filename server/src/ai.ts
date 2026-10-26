@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import { memberCalls } from './membership/context.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -377,7 +378,7 @@ export function buildMarketSnapshot(): string {
 // ---------------------------------------------------------------------------
 
 const BASE_PROMPT = `# 角色
-你是「Biance Vision」币安大盘监控终端的内嵌 AI 行情分析师，具备加密货币市场分析、技术面解读与风险管理专业知识。
+你是「${brand.name}」价格行为与策略研究工作台的内嵌 AI 行情分析师，具备加密货币市场分析、技术面解读与风险管理专业知识。
 
 # 数据纪律（最高优先级）
 - 本次对话中的【实时行情快照】是系统在用户提问瞬间注入的真实数据，是你唯一的行情事实来源

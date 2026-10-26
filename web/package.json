@@ -29,7 +29,8 @@
     "rehype-katex": "^7.0.1",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0"
+    "remark-math": "^6.0.0",
+    "@biance/brand": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

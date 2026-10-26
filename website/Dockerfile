@@ -18,7 +18,7 @@ ARG WEBSITE_ORIGIN=http://localhost:3100
 ARG GOOGLE_SITE_VERIFICATION=
 ARG BING_SITE_VERIFICATION=
 ENV WEBSITE_ORIGIN=$WEBSITE_ORIGIN GOOGLE_SITE_VERIFICATION=$GOOGLE_SITE_VERIFICATION BING_SITE_VERIFICATION=$BING_SITE_VERIFICATION NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter biance-vision-brooks build && pnpm --filter @biance/website build
+RUN pnpm --filter biance-vision-brooks build && BRAND_CHECK_WEBSITE_ONLY=1 pnpm --filter @biance/website build
 
 FROM node:22-alpine
 WORKDIR /app
@@ -28,7 +28,9 @@ COPY --from=build --chown=node:node /app/website/.next/static ./website/.next/st
 COPY --from=build --chown=node:node /app/website/public ./website/public
 COPY --from=build --chown=node:node /app/website/data ./website/data
 COPY --from=build --chown=node:node /app/website/runtime ./website/runtime
+COPY --from=build --chown=node:node /app/website/.next/build-identity.json ./website/runtime/build-identity.json
+COPY --from=build --chown=node:node /app/packages/brand ./packages/brand
 RUN mkdir /app/website-logs && chown node:node /app/website-logs && chmod 700 /app/website-logs
 USER node
 EXPOSE 3100
-CMD ["node", "--import", "./website/runtime/access-log.mjs", "website/server.js"]
+CMD ["node", "--import", "./website/runtime/origin-guard.mjs", "--import", "./website/runtime/access-log.mjs", "website/server.js"]

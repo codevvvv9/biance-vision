@@ -332,14 +332,14 @@
     "translations": {
       "en": {
         "locale": "en",
-        "title": "What is Biance Vision?",
+        "title": "What is DuckStrat?",
         "summary": "An independent crypto market research workspace. Understand who maintains it, what it does and its limits.",
         "body": "content/en/about.mdx",
         "url": "/en/about",
         "translation": "/zh/about",
         "author": "project-maintainers",
-        "reviewedAt": "2026-10-24",
-        "modifiedAt": "2026-10-24",
+        "reviewedAt": "2026-10-26",
+        "modifiedAt": "2026-10-26",
         "reviewScope": "source-and-implementation-check",
         "sources": [
           "binance-candles",
@@ -371,14 +371,14 @@
       },
       "zh": {
         "locale": "zh",
-        "title": "Biance Vision 是什么？",
+        "title": "DuckStrat 是什么？",
         "summary": "一个独立的加密市场研究工作台。了解维护者、产品范围与使用边界。",
         "body": "content/zh/about.mdx",
         "url": "/zh/about",
         "translation": "/en/about",
         "author": "project-maintainers",
-        "reviewedAt": "2026-10-24",
-        "modifiedAt": "2026-10-24",
+        "reviewedAt": "2026-10-26",
+        "modifiedAt": "2026-10-26",
         "reviewScope": "source-and-implementation-check",
         "sources": [
           "binance-candles",
@@ -423,7 +423,7 @@
     "translations": {
       "en": {
         "locale": "en",
-        "title": "How Biance Vision approaches research",
+        "title": "How DuckStrat approaches research",
         "summary": "Start with an information boundary, examine structure, challenge the view, and state what would invalidate it.",
         "body": "content/en/methodology.mdx",
         "url": "/en/methodology",
@@ -461,7 +461,7 @@
       },
       "zh": {
         "locale": "zh",
-        "title": "Biance Vision 如何开展研究",
+        "title": "DuckStrat 如何开展研究",
         "summary": "从信息边界出发，观察结构，检验观点，并说明什么会使解释失效。",
         "body": "content/zh/methodology.mdx",
         "url": "/zh/methodology",
@@ -777,8 +777,8 @@
         "url": "/en/guides/research-tool-checklist",
         "translation": "/zh/guides/research-tool-checklist",
         "author": "project-maintainers",
-        "reviewedAt": "2026-10-24",
-        "modifiedAt": "2026-10-24",
+        "reviewedAt": "2026-10-26",
+        "modifiedAt": "2026-10-26",
         "reviewScope": "source-and-implementation-check",
         "sources": [
           "product-method",
@@ -815,8 +815,8 @@
         "url": "/zh/guides/research-tool-checklist",
         "translation": "/en/guides/research-tool-checklist",
         "author": "project-maintainers",
-        "reviewedAt": "2026-10-24",
-        "modifiedAt": "2026-10-24",
+        "reviewedAt": "2026-10-26",
+        "modifiedAt": "2026-10-26",
         "reviewScope": "source-and-implementation-check",
         "sources": [
           "product-method",

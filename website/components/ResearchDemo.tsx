@@ -1,5 +1,7 @@
 'use client'
 
+import { brand } from '@biance/brand/identity'
+
 import { useState } from 'react'
 import { demos, demoPaths } from '@/lib/demo-content'
 import { text, type Locale } from '@/lib/site'
@@ -13,7 +15,7 @@ export function ResearchDemo({ locale, compact = false }: { locale: Locale; comp
   const [mobileTab, setMobileTab] = useState('chart')
   const d = cases[selected]
   return <div className={`demo-shell ${compact ? 'compact-demo' : ''}`}>
-    <div className="demo-topbar"><span className="demo-brand"><span className="tiny-mark">◈</span> BIANCE VISION <span className="muted">/ {text(locale, 'RESEARCH', '研究')}</span></span><span className="demo-label"><span />{text(locale, 'ILLUSTRATIVE DEMO · NOT LIVE', '教学演示 · 非实时研究')}</span></div>
+    <div className="demo-topbar"><span className="demo-brand"><img src="/site-assets/mark.svg" width="18" height="18" alt="" /> {brand.name} <span className="muted">/ {text(locale, 'RESEARCH', '研究')}</span></span><span className="demo-label"><span />{text(locale, 'ILLUSTRATIVE DEMO · NOT LIVE', '教学演示 · 非实时研究')}</span></div>
     <div className="demo-case-tabs" role="tablist" onKeyDown={event => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? cases.length - 1 : (selected + (event.key === 'ArrowRight' ? 1 : cases.length - 1)) % cases.length; setSelected(next); setActive(0); document.getElementById(`case-tab-${cases[next].id}`)?.focus() }} aria-label={text(locale, 'Teaching cases', '教学案例')}>{cases.map((c, i) => <button key={c.id} role="tab" tabIndex={i === selected ? 0 : -1} aria-selected={i === selected} aria-controls="case-panel" id={`case-tab-${c.id}`} onClick={() => { setSelected(i); setActive(0) }}><span>{c.number}</span>{c.label}</button>)}</div>
     <div className="demo-case-content" id="case-panel" role="tabpanel" aria-labelledby={`case-tab-${d.id}`}>
       <div className="mobile-demo-tabs" role="group" aria-label={text(locale, 'Demo view', '演示视图')}>{[['chart', text(locale, 'Chart', '图表')], ['conclusion', text(locale, 'Conclusion', '结论')], ['evidence', text(locale, 'Evidence', '证据')]].map(([id, label]) => <button key={id} aria-pressed={mobileTab === id} onClick={() => setMobileTab(id)}>{label}</button>)}</div>

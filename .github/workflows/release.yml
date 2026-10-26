@@ -48,7 +48,7 @@ jobs:
             shared/package.json shared/dist \
             package.json pnpm-lock.yaml pnpm-workspace.yaml \
             server/package.json web/package.json \
-            Dockerfile website/Dockerfile website/.next/standalone website/.next/static website/public website/data website/runtime \
+            Dockerfile website/Dockerfile website/.next/standalone website/.next/static website/.next/build-identity.json website/public website/data website/runtime \
             website/package.json packages/shared-ui/package.json packages/brand packages/platform-contracts website/next.config.ts \
             docker-compose.yml docker deploy/vps deploy/oracle README.md
 

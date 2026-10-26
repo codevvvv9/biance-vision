@@ -87,28 +87,24 @@ bash deploy/vps/migrate-remote.sh
 2. 装 Caddy（官方 apt 源），拷贝本目录 `Caddyfile` 到 `/etc/caddy/Caddyfile`，替换域名后 `sudo systemctl reload caddy`。证书自动签发续期；SSE/WebSocket 原生支持。
 3. 不想开入站端口可改用 cloudflared tunnel（服务器上跑 `cloudflared` 即可）。
 
-### 4.1 换主域名切换清单（以 duckdns → `duckstrat.com` 为例，2026-10-26 已购）
+### 4.1 DuckStrat 域名与品牌发版
 
-顺序不能颠倒：**先 DNS、再 Caddy 并行、最后才切 canonical**——`WEBSITE_ORIGIN` 切早了
-会让 sitemap/canonical 指向尚未生效的域名，搜索引擎收录错乱。
+当前主域名为 `https://duckstrat.com`，`www` 及旧用户域名长期 301 到主域名；
+旧管理域名长期 301 到 `https://admin.duckstrat.com`，均保留路径与查询参数。
+旧域名应继续维护 DNS 与证书，不因品牌改名移除重定向。
 
-1. **DNS**：注册商把 `duckstrat.com` 与 `www.duckstrat.com` 的 A 记录指本机公网 IP；
-   DNS 若托管 Cloudflare 用「仅 DNS」灰云，不开橙云代理（Caddy 需直连完成 HTTP-01 签证书）。
-2. **Caddy 双域名并行**：用户站点块改为 `旧域名, duckstrat.com, www.duckstrat.com {`（见
-   本目录 Caddyfile 头部注释的写法），管理域名块同理加新域名；`systemctl reload caddy`
-   后浏览器访问 `https://duckstrat.com` 确认识证签发、登录可用。
-3. **写冒烟**：§2.1 的带 Origin 冒烟新旧域名各跑一次。并行期各域名请求各自同源即可；
-   若出现 403，在 `.env` 用 `BV_ALLOWED_ORIGINS` 把新旧两个 origin 显式列入。
-4. **切 canonical（三处同步）**：`WEBSITE_ORIGIN` 是 website 镜像的**构建期参数**——
-   ① GitHub 仓库 Settings → Variables 改 `WEBSITE_ORIGIN=https://duckstrat.com`；
-   ② VPS `.env` 同步改（驱动 app/admin-api 运行时与发布守卫）；③ 打新 tag 让 Actions
-   重建 website 镜像，VPS `pull && up -d`。只改 .env 不发版，sitemap 与静态页 canonical
-   仍是旧域名。
-5. **站长平台**：GSC / Bing 拿到验证码后填仓库变量 `GOOGLE_SITE_VERIFICATION` /
-   `BING_SITE_VERIFICATION`（release.yml 已接线，随下次发版自动进 HTML meta），然后在
-   GSC 添加资源并提交 `https://duckstrat.com/sitemap.xml`。
-6. **收尾**：观察一两周确认新域名收录正常后，Caddy 删旧域名、`BV_ALLOWED_ORIGINS`
-   去掉旧 origin，duckdns 域名弃用。
+1. **DNS 与路由**：Cloudflare 维持当前 DNS only 接入方式；新环境使用本目录 Caddyfile，
+   管理入口保留 Basic Auth，官网/终端与管理 API 仍分别反代到独立进程。
+2. **同源校验**：写请求与 WS 根据请求自身 origin 判断，不需为了迁移增加跨域白名单；
+   来源被拒时先核对可信代理及转发协议，不能用放宽来源校验绕过配置错误。
+3. **构建与运行一致**：GitHub `WEBSITE_ORIGIN` 与 VPS `.env` 均为 `https://duckstrat.com`。
+   canonical/hreflang/JSON-LD/分享图在构建期生成，改域名或品牌必须重建官网镜像。
+   镜像启动会比对构建身份与运行时 origin，不一致直接退出，避免静态 SEO 与运行时链接分裂。
+4. **品牌验收**：`pnpm --filter @biance/website check:release` 检查公开名称、共享标识和正式 origin。
+   内部镜像、数据库、Cookie、存储键保留既有标识；历史记录不改写。
+5. **上线验收**：检查 HTTPS、双语页面、canonical/hreflang/sitemap、分享图、旧域名与 `www` 跳转、
+   主站管理入口 404、独立管理入口认证、真实登录、SSE 与 WebSocket。更新站长平台的新域名资源。
+   保留上一版本镜像用于回滚；详见 `docs/duckstrat-brand.md`。
 
 ## 5. 地域封锁（默认屏蔽中国大陆）
 

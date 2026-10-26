@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import { PublicationPage } from '@/components/PublicationPage'
 import { publication } from '@/lib/publications'
 import { structuredData } from '@/lib/structured-data'
@@ -15,9 +16,9 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const path = slug.join('/')
   if (!isLocale(locale) || !pagePaths.includes(path)) notFound()
   const info = pageInfo(locale, path)!
-  const title = path === '' ? locale === 'zh' ? 'Biance Vision — AI 加密市场研究终端' : 'Biance Vision — AI crypto market research terminal' : info.title
+  const title = path === '' ? `${brand.name} — ${brand.positioning[locale]}` : info.title
   return { title: path === '' ? { absolute: title } : title, description: info.description, alternates: pageAlternates(locale, path ? `/${path}` : ''),
-    openGraph: { siteName: 'Biance Vision', type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: locale === 'zh' ? 'zh_CN' : 'en_US', alternateLocale: locale === 'zh' ? 'en_US' : 'zh_CN' },
+    openGraph: { siteName: brand.name, type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: locale === 'zh' ? 'zh_CN' : 'en_US', alternateLocale: locale === 'zh' ? 'en_US' : 'zh_CN' },
   }
 }
 

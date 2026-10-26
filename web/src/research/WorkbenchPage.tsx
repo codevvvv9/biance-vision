@@ -1,3 +1,4 @@
+import { brand } from '@biance/brand/identity'
 import { MembershipCard, useMembershipState } from '../membership/Membership'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, RefObject } from 'react'
@@ -312,7 +313,7 @@ export default function WorkbenchPage(): JSX.Element {
   return <div className={`workbench ${collapsed ? 'wb-collapsed' : ''}`} style={{ '--wb-panel-width': `${panelWidth}px` } as CSSProperties}>
     {compact && navOpen && <button className="wb-shade" aria-label={t('research:wb.closeNavAria')} onClick={() => setNavOpen(false)} />}
     <aside ref={navRef} tabIndex={-1} className={`wb-sidebar ${navOpen ? 'is-open' : ''}`} role={compact ? 'dialog' : undefined} aria-modal={compact && navOpen || undefined} aria-label={t('research:wb.navAria')}>
-      <div className="wb-brand"><Link to="/research?ui=dev" aria-label={t('research:wb.homeAria')}><Logo /><span>VISION<span className="wb-brand-sub">{t('research:wb.brandSub')}</span></span></Link><button className="wb-icon" aria-label={collapsed ? t('research:wb.expandNav') : t('research:wb.collapseNav')} onClick={() => compact ? setNavOpen(false) : setCollapsed(!collapsed)}>☷</button></div>
+      <div className="wb-brand"><Link to="/research?ui=dev" aria-label={t('research:wb.homeAria')}><Logo /><span>{brand.name}<span className="wb-brand-sub">{t('research:wb.brandSub')}</span></span></Link><button className="wb-icon" aria-label={collapsed ? t('research:wb.expandNav') : t('research:wb.collapseNav')} onClick={() => compact ? setNavOpen(false) : setCollapsed(!collapsed)}>☷</button></div>
       <button className="wb-new" disabled={conv.busy || conv.cardBusy !== null || retryBusy} onClick={newChat}><span aria-hidden>＋</span><span className="wb-nav-text">{t('research:wb.newChat')}</span></button>
       <div className="wb-history"><div className="wb-section-title">{t('research:wb.historyTitle')}</div>
         {!user ? <div className="wb-history-empty"><span aria-hidden>◌</span><p>{t('research:wb.loginToSave').split('\n').map((line, i, arr) => <span key={i}>{line}{i < arr.length - 1 && <br />}</span>)}</p></div> : <>
@@ -346,7 +347,7 @@ export default function WorkbenchPage(): JSX.Element {
             {welcome && <section className="wb-welcome"><div className="wb-welcome-icon"><Logo /></div><div className="wb-eyebrow">{t('research:wb.eyebrow')}</div><h1>{t('research:wb.heroTitle1')}<br /><span>{t('research:wb.heroTitle2')}</span></h1><p>{t('research:wb.heroDesc')}</p><div className="wb-suggestions">{(t(`research:scene.${scene}.examples`, { returnObjects: true }) as string[]).slice(0, inputCfg.suggestionLimit).map(q => <button key={q} onClick={() => { setDrafts(d => ({ ...d, [scene]: q })); inputRef.current?.focus() }}>{q}<span aria-hidden>↗</span></button>)}</div></section>}
             {conv.loadingConversation && <p role="status" className="wb-caption">{t('research:wb.restoring')}</p>}
             {!conv.loadingConversation && conv.messages.map((m, i) => (!m.text && !m.card && !m.runId) ? null : <article key={i} className={`wb-message ${m.role}`}>
-              <div className="wb-message-label">{m.role === 'user' ? t('research:wb.you') : 'VISION'}</div><div className="wb-message-body">{m.text && (m.role === 'user' ? <p className="wb-user-text">{m.text}</p> : <MiniMarkdown text={m.text} />)}
+              <div className="wb-message-label">{m.role === 'user' ? t('research:wb.you') : brand.name}</div><div className="wb-message-body">{m.text && (m.role === 'user' ? <p className="wb-user-text">{m.text}</p> : <MiniMarkdown text={m.text} />)}
                 {m.text !== '' && <MessageTranslate text={m.text} />}
                 {m.citations !== undefined && <CitationBadges citations={m.citations} />}
                 {m.card && <PositionConfirmCard card={m.card} busy={conv.cardBusy !== null} onResolve={confirm => void conv.resolveCard(i, confirm)} />}
