@@ -107,6 +107,87 @@ export function registerObservabilityAdminRoutes(
     return { ok: true }
   })
 
+  /**
+   * 大盘趋势（v0.18.4）：metrics_minute 按小时 rollup 请求量（statusClass 分组）
+   * + 延迟直方图合并算 p95 + inbox 事件流分桶。时间桶统一 Asia/Shanghai 墙上钟，
+   * label 输出 ISO+08:00（前端 new Date 直解）。hours 1..168 clamp。
+   */
+  app.get('/api/admin/observability/timeseries', async (req) => {
+    const db = getDb()
+    if (db === null) {
+      return { dbAvailable: false, http: { buckets: [] }, events: { buckets: [] }, observedAt: new Date().toISOString() }
+    }
+    const q = req.query as { hours?: string }
+    const hours = parseIntQuery(q.hours, 24, 1, 168)
+    // 维度格式 `${method} ${route} ${statusClass}`——statusClass 取末段（route 模板无空格）
+    const httpRows = await db.execute(sql`
+      WITH tz AS (SELECT now() AT TIME ZONE 'Asia/Shanghai' AS now_local),
+      bounds AS (SELECT date_trunc('hour', (SELECT now_local FROM tz) - make_interval(hours => ${hours})) AS start_local,
+                        date_trunc('hour', (SELECT now_local FROM tz)) AS end_local),
+      hours AS (SELECT generate_series((SELECT start_local FROM bounds), (SELECT end_local FROM bounds), interval '1 hour') AS hour_local),
+      agg AS (
+        SELECT date_trunc('hour', minute AT TIME ZONE 'Asia/Shanghai') AS hour_local,
+          split_part(dimension, ' ', 3) AS sc,
+          (counts->>'count')::bigint AS total,
+          (counts->'latency'->>'le100')::bigint AS le100,
+          (counts->'latency'->>'le500')::bigint AS le500,
+          (counts->'latency'->>'le1000')::bigint AS le1000,
+          (counts->'latency'->>'le2500')::bigint AS le2500,
+          (counts->'latency'->>'le10000')::bigint AS le10000,
+          (counts->'latency'->>'inf')::bigint AS inf
+        FROM observability_metrics_minute
+        WHERE minute AT TIME ZONE 'Asia/Shanghai' >= (SELECT start_local FROM bounds)
+      )
+      SELECT to_char(h.hour_local, 'YYYY-MM-DD"T"HH24:MI:SS') || '+08:00' AS hour,
+        coalesce(sum(a.total), 0)::int AS total,
+        coalesce(sum(a.total) FILTER (WHERE a.sc = '2xx'), 0)::int AS c2,
+        coalesce(sum(a.total) FILTER (WHERE a.sc = '4xx'), 0)::int AS c4,
+        coalesce(sum(a.total) FILTER (WHERE a.sc = '5xx'), 0)::int AS c5,
+        coalesce(sum(a.le100), 0)::int AS le100,
+        coalesce(sum(a.le500), 0)::int AS le500,
+        coalesce(sum(a.le1000), 0)::int AS le1000,
+        coalesce(sum(a.le2500), 0)::int AS le2500,
+        coalesce(sum(a.le10000), 0)::int AS le10000,
+        coalesce(sum(a.inf), 0)::int AS inf
+      FROM hours h LEFT JOIN agg a ON a.hour_local = h.hour_local
+      GROUP BY h.hour_local ORDER BY h.hour_local`)
+    const eventRows = await db.execute(sql`
+      WITH tz AS (SELECT now() AT TIME ZONE 'Asia/Shanghai' AS now_local),
+      bounds AS (SELECT date_trunc('hour', (SELECT now_local FROM tz) - make_interval(hours => ${hours})) AS start_local,
+                        date_trunc('hour', (SELECT now_local FROM tz)) AS end_local),
+      hours AS (SELECT generate_series((SELECT start_local FROM bounds), (SELECT end_local FROM bounds), interval '1 hour') AS hour_local)
+      SELECT to_char(h.hour_local, 'YYYY-MM-DD"T"HH24:MI:SS') || '+08:00' AS hour,
+        count(i.received_at)::int AS count
+      FROM hours h LEFT JOIN observability_inbox i
+        ON (i.received_at AT TIME ZONE 'Asia/Shanghai') >= h.hour_local
+       AND (i.received_at AT TIME ZONE 'Asia/Shanghai') < h.hour_local + interval '1 hour'
+      GROUP BY h.hour_local ORDER BY h.hour_local`)
+    const buckets = (httpRows as unknown as Array<Record<string, unknown>>).map((r) => {
+      const le = { 100: Number(r.le100), 500: Number(r.le500), 1000: Number(r.le1000), 2500: Number(r.le2500), 10000: Number(r.le10000) }
+      const total = Object.values(le).reduce((a, b) => a + b, 0) + Number(r.inf)
+      let acc = 0
+      let p95Ms: number | null = null
+      const threshold = total * 0.95
+      for (const [bound, n] of Object.entries(le)) {
+        acc += n
+        if (acc >= threshold) { p95Ms = Number(bound); break }
+      }
+      return {
+        hour: String(r.hour),
+        total: Number(r.total),
+        byClass: { c2xx: Number(r.c2), c4xx: Number(r.c4), c5xx: Number(r.c5) },
+        // p95=null：无样本或落在 >10s 开区间的桶（诚实缺失，不用 0 假装）
+        p95Ms,
+      }
+    })
+    return {
+      dbAvailable: true,
+      http: { buckets },
+      events: { buckets: (eventRows as unknown as Array<Record<string, unknown>>).map((r) => ({ hour: String(r.hour), count: Number(r.count) })) },
+      observedAt: new Date().toISOString(),
+    }
+  })
+
   /** requestId 精确查（含 origin_request_id 关联）+ 用户最近已记录请求 */
   app.get('/api/admin/observability/logs', async (req) => {
     const db = getDb()

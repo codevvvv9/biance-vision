@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { App, Button, Card, Table, Tag, Tooltip, Typography } from "antd";
 import {
   loadQueueHealth,
   purgeQueue,
   type QueueHealthRow,
 } from "./features/queues/api";
+import { EChart } from "./charts/EChart";
+import { queueBacklogOption } from "./charts/options";
 import { useResource } from "./ui/resource";
 import { useAdminText } from "./ui/text";
 import { Feedback } from "./ui/feedback";
@@ -57,6 +59,19 @@ export default function AdminQueuesPage(): JSX.Element {
     }
   };
 
+  const rows = resource.data?.queues ?? [];
+  const chart = useMemo(
+    () =>
+      rows.length > 0
+        ? queueBacklogOption(rows, {
+            created: text("colCreated"),
+            active: text("colActive"),
+            retry: text("colRetry"),
+          })
+        : null,
+    [rows, text],
+  );
+
   const columns = [
     { title: text("colQueue"), dataIndex: "name", key: "name", render: (v: string) => <span className={styles.mono}>{v}</span> },
     { title: text("colCreated"), dataIndex: "created", key: "created", render: (v: number, r: QueueHealthRow) => (v > 1000 ? <Tag color="error">{v}</Tag> : v > 200 ? <Tag color="warning">{v}</Tag> : <span>{v}</span>) },
@@ -95,6 +110,18 @@ export default function AdminQueuesPage(): JSX.Element {
         <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
           {text("queueHint")}
         </Typography.Paragraph>
+        {rows.length > 0 ? (
+          <>
+            <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 4 }}>
+              {text("chartQueueStates")}
+            </Typography.Title>
+            <EChart
+              option={chart}
+              height={Math.max(180, Math.min(460, rows.length * 28 + 60))}
+            />
+            <div style={{ height: 20 }} />
+          </>
+        ) : null}
         <Table<QueueHealthRow>
           rowKey="name"
           size="small"

@@ -7,7 +7,7 @@
  * debug-run：用版本配置跑一次轻量校验（能力/知识绑定解析 + 检索冒烟），不产生正式研究结论。
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   AgentCapabilitiesSchema,
@@ -642,6 +642,44 @@ function registerAdminCoreRoutes(app: FastifyInstance, deps: AdminRouteDeps): vo
     if (!ensureStorage(reply)) return reply
     const queues = await queueHealthSnapshot()
     return { queues }
+  })
+
+  // ---- 研究产出统计（v0.18.4 大盘；日桶 Asia/Shanghai 口径同 insights） ----
+
+  /** 按天研究产出：total/completed(published)/failed + 失败率由前端派生；days 1..90 */
+  app.get('/api/admin/research/stats', async (req, reply) => {
+    deps.requireSuperadmin(req)
+    if (!ensureStorage(reply)) return reply
+    const db = getDb()
+    if (db === null) return reply
+    const q = req.query as { days?: string }
+    const n = Number.parseInt(q.days ?? '', 10)
+    const days = Number.isFinite(n) ? Math.min(Math.max(n, 1), 90) : 14
+    const rows = await db.execute(sql`
+      WITH tz AS (SELECT date_trunc('day', now() AT TIME ZONE 'Asia/Shanghai') AS today_local),
+      days AS (
+        SELECT generate_series(
+          (SELECT today_local FROM tz) - make_interval(days => ${days}),
+          (SELECT today_local FROM tz),
+          interval '1 day') AS day_local
+      )
+      SELECT to_char(d.day_local, 'YYYY-MM-DD') AS day,
+        count(r.id)::int AS total,
+        count(r.id) FILTER (WHERE r.status = 'published')::int AS completed,
+        count(r.id) FILTER (WHERE r.status = 'failed')::int AS failed
+      FROM days d LEFT JOIN research_runs r
+        ON (r.created_at AT TIME ZONE 'Asia/Shanghai') >= d.day_local
+       AND (r.created_at AT TIME ZONE 'Asia/Shanghai') < d.day_local + interval '1 day'
+      GROUP BY d.day_local ORDER BY d.day_local`)
+    return {
+      days: (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+        day: String(r.day),
+        total: Number(r.total),
+        completed: Number(r.completed),
+        failed: Number(r.failed),
+      })),
+      observedAt: new Date().toISOString(),
+    }
   })
 
   /** 清理冗余型队列的陈旧 created 积压（白名单=QUEUE_OPTIONS 集合，珍贵队列一律 400） */

@@ -1,5 +1,5 @@
 import { Drawer } from "../../ui/overlays";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Card, Collapse, Descriptions, Table, Typography, Button } from "antd";
 import type { AiConversationSummary, AiUserStat } from "../../../types";
 import {
@@ -8,6 +8,8 @@ import {
   loadUserPanorama,
 } from "./api";
 import { LegacyMessages } from "./Messages";
+import { EChart } from "../../charts/EChart";
+import { aiActivityOption } from "../../charts/options";
 import { useResource } from "../../ui/resource";
 import { Feedback } from "../../ui/feedback";
 import { useAdminText } from "../../ui/text";
@@ -177,6 +179,11 @@ export function LegacyConversations({
   const load = useCallback(() => loadAiOverview(), [configRevision]);
   const resource = useResource(load);
   const [username, setUsername] = useState<string | null>(null);
+  const stats = resource.data?.stats ?? [];
+  const activityChart = useMemo(
+    () => (stats.some((s) => s.messages > 0) ? aiActivityOption(stats) : null),
+    [stats],
+  );
   return (
     <Card>
       <div className={styles.stack}>
@@ -184,6 +191,14 @@ export function LegacyConversations({
           {text("legacyHint")}
         </Typography.Paragraph>
         <Feedback error={resource.error} />
+        {activityChart !== null && (
+          <>
+            <Typography.Title level={5} style={{ margin: 0 }}>
+              {text("chartAiActivity")}
+            </Typography.Title>
+            <EChart option={activityChart} height={Math.max(160, stats.length * 34 + 60)} />
+          </>
+        )}
         <Table<AiUserStat>
           rowKey="username"
           loading={resource.loading}

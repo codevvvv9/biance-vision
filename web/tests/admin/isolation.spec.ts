@@ -32,6 +32,22 @@ test("user build rejects Ant Design and admin feature imports across package-man
     ]),
   ).not.toThrow();
 });
+test("user build rejects echarts family (admin-only charts) but keeps klinecharts", () => {
+  for (const module of [
+    "/repo/node_modules/echarts/core.js",
+    "/repo/node_modules/.pnpm/echarts@5.6.0/node_modules/echarts/charts/bar.js",
+    "/repo/node_modules/echarts-wordcloud/index.js",
+    "/repo/node_modules/.pnpm/zrender@5.6.1/node_modules/zrender/lib/core/util.js",
+  ])
+    expect(() => check("user", [module])).toThrow("isolation violated");
+  // 用户端 K 线库不受影响（名称含 "echarts" 子串但路径段不同）
+  expect(() =>
+    check("user", [
+      "/repo/node_modules/klinecharts/index.js",
+      "/repo/node_modules/.pnpm/klinecharts@9.8.12/node_modules/klinecharts/dist/index.js",
+    ]),
+  ).not.toThrow();
+});
 test("admin build rejects user providers and full user style aggregates", () => {
   for (const module of [
     "/repo/web/src/market/MarketContext.tsx",

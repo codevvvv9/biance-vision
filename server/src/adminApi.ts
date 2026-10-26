@@ -33,6 +33,7 @@ import { kv, log, fmtMs, briefUa } from './logger.js'
 import { startQueue } from './queue.js'
 import { registerKnowledgeRoutes } from './knowledge/routes.js'
 import { registerAdminRoutes } from './admin/routes.js'
+import { registerInsightsAdminRoutes } from './admin/insightsRoutes.js'
 import { registerWebsiteSettingsRoutes } from './admin/websiteSettings.js'
 import { registerProvisionUserRoutes } from './admin/provisionUsers.js'
 import { refreshCapabilities } from './admin/capabilities.js'
@@ -140,6 +141,8 @@ app.get('/api/ai/status', async () => ({ configured: isAiConfigured(), model: ai
 // 管理端路由（原 user-api 上的物理收口：admin 核心 + agents/evals/models/users/audit/ai overview）
 // ---------------------------------------------------------------------------
 registerAdminRoutes(app, { requireSuperadmin })
+// v0.18.4 大盘：业务洞察聚合（用户/DAU/消息/热点/词云；superadmin）
+registerInsightsAdminRoutes(app, { requireSuperadmin })
 registerWebsiteSettingsRoutes(app, { requireSuperadmin })
 registerProvisionUserRoutes(app, { requireSuperadmin })
 
