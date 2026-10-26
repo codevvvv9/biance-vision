@@ -30,6 +30,9 @@
   width: 100%;
   min-height: 44px;
 }
+.sideInner :global(.ant-menu-item .ant-menu-item-icon) {
+  font-size: 16px;
+}
 .sideInner :global(.ant-menu-item-selected) {
   box-shadow: inset 3px 0 var(--cyan);
 }
