@@ -206,8 +206,8 @@ try {
     product: 'teaching',
     symbol: 'BTCUSDT',
     marketType: 'spot',
-    horizon: '1h' as const,
-  }
+    horizon: '1h',
+  } as const
   const before = await runCount()
   await assert.rejects(
     () => createRun({ userId: 'ra_nobody', create: minimal }),
