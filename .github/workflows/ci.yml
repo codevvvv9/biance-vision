@@ -28,6 +28,9 @@ jobs:
       - run: pnpm check:i18n
         # 改名级联清单门禁：新表带用户列未登记 RENAME_COLUMN_MAP 直接红（防静默丢关联）
       - run: pnpm user:rename-map-check
+      - run: pnpm errors:selftest
+        # 错误码 i18n 契约自测：apiErrorMessage 四级兜底链 + 英文词典无 CJK
+        # （英文界面回显中文 message 的线上事故锚点，2026-10-27）
         # i18n 门禁：词典 zh/en 一致 + admin 页面 t()/text() 用到的 key 必须在词典
         # （v0.18.2 前队列页 18 个 key 漏录线上满屏回显 ui.colQueue 的事故锚点）
       - run: pnpm typecheck

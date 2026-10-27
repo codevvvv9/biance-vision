@@ -338,6 +338,9 @@ try {
 
     const r3 = await login(MAIN_HOST, adminUser, 'wrong-password')
     check('R3 主站 + 超管错误密码 → 401', r3.status, 401)
+    // 错误码 i18n 契约（2026-10-27）：401 必须携带 invalid_credentials——前端
+    // errors 词典按码出双语文案，无码则英文界面回显中文 message（线上已发生过）
+    check('R3b 401 错误体携带 code=invalid_credentials', JSON.parse(r3.body).code, 'invalid_credentials')
 
     const r4 = await login(MAIN_HOST, adminUser, adminPass)
     check('R4 主站 + 超管正确密码 → 401（修复前为 403，可探测密码命中）', r4.status, 401)
@@ -354,6 +357,7 @@ try {
     const r7 = await login(MAIN_HOST, adminUser, 'wrong-again')
     check('R7 达到失败阈值后再试 → 429 锁定拦截', r7.status, 429)
     check('R7 锁定文案含「锁定」', r7.body.includes('锁定'), true)
+    check('R7b 429 锁定携带 code=login_throttled', JSON.parse(r7.body).code, 'login_throttled')
 
     const r8 = await login(ADMIN_HOST, adminUser, adminPass)
     check('R8 锁定期内管理域名正确密码同样 429（按 IP 锁定，不分入口/密码）', r8.status, 429)

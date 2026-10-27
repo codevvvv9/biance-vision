@@ -6,12 +6,20 @@
  *    输出剩余未迁移文案清单；--strict 时非零退出（CI 用）。
  * 2. 词典一致性：zh-CN 与 en-US 同命名空间的 key 集合必须一致（缺 key 会
  *    fallback 中文不出空白，但会漏翻译——提前暴露）。
+ * 3. admin 字面量 key 存在性（2026-10-26 队列页 ui.colQueue 漏录教训）。
+ * 4. 错误码 i18n 契约（2026-10-27）：server 错误响应行发出的每个 code（字面量
+ *    或文件内 const 常量）必须在 zh-CN/en-US errors.json 双语存在——服务端只发
+ *    码，人类语言只在词典说一次；未补码的中文 message 只雷达报告不阻断（P2
+ *    铺完 78 处后升硬门）。
+ * 5. 注册表一致性：platform-contracts PUBLIC_ERROR_REGISTRY 每个码必须双语在册
+ *    （注册表是契约，词典是它的唯一展示层，两边漂移即红）。
  *
  * 用法：pnpm check:i18n [-- --strict]
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PUBLIC_ERROR_REGISTRY } from '../packages/platform-contracts/src/index.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -158,9 +166,74 @@ let missingKeys = 0
   }
 }
 
+// ---- 错误码 i18n 契约（2026-10-27：服务端只发码，文案只在 errors 词典说一次） ----
+let errorCodesMissing = 0
+let cjkWithoutCode = 0
+{
+  const zhErrors = JSON.parse(readFileSync(path.join(LOCALES, 'zh-CN', 'errors.json'), 'utf8')) as Record<string, unknown>
+  const enErrors = JSON.parse(readFileSync(path.join(LOCALES, 'en-US', 'errors.json'), 'utf8')) as Record<string, unknown>
+  const zhErrKeys = new Set(flatKeys(zhErrors))
+  const enErrKeys = new Set(flatKeys(enErrors))
+  const dictHas = (code: string): boolean => zhErrKeys.has(code) && enErrKeys.has(code)
+
+  const SERVER_SRC = path.join(ROOT, 'server/src')
+  // 错误响应位点：Object.assign(new Error(...)) 抛出 / reply.code(4xx/5xx/动态).send(...) 直发。
+  // 位点后 600 字符窗口内取第一个 code: 字段（字面量或本文件内 const 常量声明）。
+  const sentCodes = new Set<string>()
+  const reported = new Set<string>()
+  for (const file of walk(SERVER_SRC)) {
+    const display = path.relative(ROOT, file)
+    const src = readFileSync(file, 'utf8')
+    const consts = new Map<string, string>()
+    for (const m of src.matchAll(/const\s+([A-Z][A-Z0-9_]*)\s*=\s*'([a-z0-9_]+)'/g)) consts.set(m[1], m[2])
+    const sites: number[] = []
+    for (const m of src.matchAll(/Object\.assign\(\s*new Error|reply\.code\(/g)) {
+      // 成功响应（字面量 1xx-3xx）不是错误位点；动态状态码（e.statusCode 等）保守计入
+      const sm = src.slice(m.index ?? 0).match(/^.{0,24}?reply\.code\(\s*(\d{3})/)
+      if (sm && Number(sm[1]) < 400) continue
+      sites.push(m.index ?? 0)
+    }
+    for (const pos of sites) {
+      const window = src.slice(pos, pos + 600)
+      const cm = window.match(/code:\s*(?:'([a-z0-9_]+)'|([A-Z][A-Z0-9_]*))\s*[,})\n]/)
+      if (!cm) {
+        // 未捕到 code：中文 message 只雷达报告（P2 补码收口后此处升硬门）
+        const cjk = window.match(/message:\s*(?:'([^']*[\u4e00-\u9fff][^']*)'|`([^`]*[\u4e00-\u9fff][^`]*)`)/)
+        if (cjk) {
+          cjkWithoutCode++
+          console.log(`[error-code 雷达] ${display}: 中文 message 未带 code（P2 待补）→ ${(cjk[1] ?? cjk[2] ?? '').slice(0, 40)}`)
+        }
+        continue
+      }
+      const code = cm[1] ?? consts.get(cm[2] ?? '') ?? ''
+      if (code === '') {
+        console.log(`[error-code] ${display}: code 引用了未知常量 → ${cm[0].trim()}`)
+        errorCodesMissing++
+        continue
+      }
+      sentCodes.add(code)
+      if (!dictHas(code) && !reported.has(code)) {
+        reported.add(code)
+        console.log(`[error-code] ${display}: 服务端发出的码不在 errors 词典（需双语）→ ${code}`)
+        errorCodesMissing++
+      }
+    }
+  }
+
+  // 注册表 ↔ 词典一致性（注册表码必须双语在册）
+  for (const code of Object.keys(PUBLIC_ERROR_REGISTRY)) {
+    if (!dictHas(code)) {
+      console.log(`[error-code] PUBLIC_ERROR_REGISTRY 码不在 errors 词典（需双语）→ ${code}`)
+      errorCodesMissing++
+    }
+  }
+  console.log(`错误码契约: 服务端发出 ${sentCodes.size} 个码 / 未补码中文 message ${cjkWithoutCode} 处（雷达）`)
+}
+
 console.log('---')
 console.log(`未迁移文案行: ${total}（波次4 admin/AiSettingsModal 管理面按方案允许最后迁移）`)
 console.log(`词典 key 不一致: ${keyMismatch}`)
 console.log(`admin 词典缺 key: ${missingKeys}`)
-if (keyMismatch > 0 || missingKeys > 0) process.exit(1)
+console.log(`错误码词典缺失: ${errorCodesMissing}`)
+if (keyMismatch > 0 || missingKeys > 0 || errorCodesMissing > 0) process.exit(1)
 if (strict && total > 0) process.exit(1)

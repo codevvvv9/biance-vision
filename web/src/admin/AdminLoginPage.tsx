@@ -1,7 +1,7 @@
 import { Alert, Button, Card, Form, Input, Typography } from "antd";
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { useState } from "react";
-import { useAuth } from "@biance/shared-ui";
+import { apiErrorMessage, useAuth } from "@biance/shared-ui";
 import { useTranslation } from "react-i18next";
 import { Brand } from "./ui/Brand";
 import { Language } from "./ui/Language";
@@ -33,7 +33,7 @@ export default function AdminLoginPage({
       await login(username.trim(), password);
       onAuthenticated?.();
     } catch (e) {
-      setError((e as Error).message);
+      setError(apiErrorMessage(e));
     } finally {
       setBusy(false);
     }

@@ -171,7 +171,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
     const now = Date.now()
     if (admission.locked) {
       log.warn('auth', '登录被锁定拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 剩余秒: Math.ceil((admission.lockedUntilMs - now) / 1000) }))
-      throw Object.assign(new Error('尝试过于频繁，账号已临时锁定，请稍后再试'), { statusCode: 429 })
+      throw Object.assign(new Error('尝试过于频繁，账号已临时锁定，请稍后再试'), { statusCode: 429, code: 'login_throttled' })
     }
     if (!admission.allowed) {
       log.warn('auth', '登录限速拦截', kv({ 用户: name.slice(0, 64) || '(未提供)', ip, 本分钟次数: admission.windowCount }))
@@ -193,7 +193,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthRouteContext):
       await recordLoginFailure(ip, LOGIN_LOCK_FAILS)
       recordFailedLogin({ username: name.slice(0, 64), ip, userAgent: ua })
       log.warn('auth', logMsg, kv({ ...detail, 尝试序号: admission.attemptSeq }))
-      throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401 })
+      throw Object.assign(new Error('用户名或密码错误'), { statusCode: 401, code: 'invalid_credentials' })
     }
 
     // 验证前预检（进程级入口，2026-10-21 三轮审查 P1 语义延续）：错误入口的账号在

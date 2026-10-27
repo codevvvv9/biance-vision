@@ -25,6 +25,8 @@ export class ApiError extends Error {
   code: string | null
   requestId: string | null
   retryAfterSeconds: number | null
+  /** 服务端错误体携带的文案插值参数（如限额数字）；进入 errors 词典的 {{var}} 插值 */
+  params: Record<string, string | number> | null
 
   constructor(init: {
     status: number
@@ -32,6 +34,7 @@ export class ApiError extends Error {
     code?: string
     requestId?: string
     retryAfterSeconds?: number
+    params?: Record<string, string | number>
   }) {
     super(init.message)
     this.name = 'ApiError'
@@ -39,6 +42,7 @@ export class ApiError extends Error {
     this.code = init.code ?? null
     this.requestId = init.requestId ?? null
     this.retryAfterSeconds = init.retryAfterSeconds ?? null
+    this.params = init.params ?? null
   }
 }
 
@@ -82,15 +86,18 @@ export async function api<T = unknown>(
       let detail = ''
       let code: string | undefined
       let retryAfterSeconds: number | undefined
+      let params: Record<string, string | number> | undefined
       try {
         const parsed = (await res.json()) as {
           message?: string
           code?: string
           retryAfterSeconds?: number
+          params?: Record<string, string | number>
         }
         detail = parsed.message ?? ''
         code = parsed.code
         retryAfterSeconds = parsed.retryAfterSeconds
+        params = parsed.params
       } catch {
         /* noop */
       }
@@ -109,6 +116,7 @@ export async function api<T = unknown>(
         code,
         requestId: res.headers.get('x-request-id') ?? undefined,
         retryAfterSeconds,
+        params,
       })
       // P2a-3：已知 UI 操作失败自动上报（telemetry 用原生 fetch，不经本函数——无递归）
       reportOperationFailed(path.slice(0, 64), apiErr)

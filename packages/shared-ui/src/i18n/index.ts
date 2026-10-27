@@ -16,6 +16,7 @@ import brooksZh from '../locales/zh-CN/brooks.json'
 import researchZh from '../locales/zh-CN/research.json'
 import aiZh from '../locales/zh-CN/ai.json'
 import adminZh from '../locales/zh-CN/admin.json'
+import errorsZh from '../locales/zh-CN/errors.json'
 import commonEn from '../locales/en-US/common.json'
 import authEn from '../locales/en-US/auth.json'
 import dashboardEn from '../locales/en-US/dashboard.json'
@@ -25,6 +26,7 @@ import brooksEn from '../locales/en-US/brooks.json'
 import researchEn from '../locales/en-US/research.json'
 import aiEn from '../locales/en-US/ai.json'
 import adminEn from '../locales/en-US/admin.json'
+import errorsEn from '../locales/en-US/errors.json'
 
 export type AppLocale = 'zh-CN' | 'en-US'
 
@@ -33,8 +35,8 @@ void i18n
   .use(initReactI18next)
   .init({
     resources: {
-      'zh-CN': { common: commonZh, auth: authZh, dashboard: dashboardZh, movers: moversZh, alerts: alertsZh, brooks: brooksZh, research: researchZh, ai: aiZh, admin: adminZh },
-      'en-US': { common: commonEn, auth: authEn, dashboard: dashboardEn, movers: moversEn, alerts: alertsEn, brooks: brooksEn, research: researchEn, ai: aiEn, admin: adminEn },
+      'zh-CN': { common: commonZh, auth: authZh, dashboard: dashboardZh, movers: moversZh, alerts: alertsZh, brooks: brooksZh, research: researchZh, ai: aiZh, admin: adminZh, errors: errorsZh },
+      'en-US': { common: commonEn, auth: authEn, dashboard: dashboardEn, movers: moversEn, alerts: alertsEn, brooks: brooksEn, research: researchEn, ai: aiEn, admin: adminEn, errors: errorsEn },
     },
     // 不显式传 lng：显式值会顶掉 LanguageDetector，localStorage 的偏好（app-lang）
     // 刷新后不生效；无存储值时由 fallbackLng 兜底为中文首访默认
@@ -44,7 +46,7 @@ void i18n
     // 短码 'zh' 再查 supportedLngs，只注册全称会被判不支持 → 解析层级为空 → 全部 key 回显
     supportedLngs: ['zh-CN', 'en-US'],
     defaultNS: 'common',
-    ns: ['common', 'auth', 'dashboard', 'movers', 'alerts', 'brooks', 'research', 'ai', 'admin'],
+    ns: ['common', 'auth', 'dashboard', 'movers', 'alerts', 'brooks', 'research', 'ai', 'admin', 'errors'],
     detection: {
       order: ['localStorage'],
       lookupLocalStorage: 'app-lang',
