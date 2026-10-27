@@ -21,7 +21,13 @@ export function contactConfig() {
 }
 
 export function loginUrl(locale: Locale): string {
-  return `/login?${new URLSearchParams({ ui: 'dev', returnTo: '/research?ui=dev', lang: locale === 'zh' ? 'zh-CN' : 'en-US' }).toString()}`
+  const query = new URLSearchParams({ ui: 'dev', returnTo: '/research?ui=dev', lang: locale === 'zh' ? 'zh-CN' : 'en-US' }).toString()
+  // Production serves /login from the app behind Caddy path routing. A local website preview has no such routing (404), so dev points straight at the local app container — override with NEXT_PUBLIC_WEBSITE_LOGIN_ORIGIN, or set it to 'relative' to keep the same-origin path.
+  const override = process.env.NEXT_PUBLIC_WEBSITE_LOGIN_ORIGIN
+  const origin = override !== undefined
+    ? override === 'relative' ? '' : override
+    : process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:3200' : ''
+  return `${origin}/login?${query}`
 }
 
 export function pageAlternates(locale: Locale, path = '') {
