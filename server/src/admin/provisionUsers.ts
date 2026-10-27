@@ -1,5 +1,5 @@
 import { activeMembership as dbMembership, membershipStatus } from '../membership/service.js'
-import { provisionMember } from '../membership/routes.js'
+import { provisionMember, provisionLoginPath } from '../membership/routes.js'
 import crypto from 'node:crypto'
 import { eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -67,7 +67,7 @@ export async function provisionUser(input: unknown, operator: string) {
     throw error
   }
   await initUsers({ seed: false })
-  return { username, password, role: 'user' as const, access: { totalLimit, dailyLimit, requestsPerMinute, profileName }, loginPath: '/login?ui=dev&returnTo=%2Fresearch%3Fui%3Ddev', publicOrigin: configuredPublicOrigin() }
+  return { username, password, role: 'user' as const, access: { totalLimit, dailyLimit, requestsPerMinute, profileName }, loginPath: provisionLoginPath(), publicOrigin: configuredPublicOrigin() }
 }
 
 export function registerProvisionUserRoutes(app: FastifyInstance, deps: { requireSuperadmin: (req: FastifyRequest) => SessionRecord }): void {

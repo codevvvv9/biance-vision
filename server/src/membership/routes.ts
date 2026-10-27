@@ -27,6 +27,23 @@ import { recordHttpMetric } from '../observability/metrics.js'
 function audit(session: SessionRecord, target: string, detail: string) {
   recordAudit(session, { action: 'settings_update', target, detail })
 }
+/** 开通交付文本里的登录链接。默认落在价格行为页 /brooks——研究终端有会员
+ * 门禁（v0.23 三层门禁），trial 等未含研究权限的新账号直接跳 /research 会被
+ * 挡；/brooks 是所有登录用户可用的基线页。运营要换落地页时在 VPS .env 配
+ * PROVISION_LOGIN_PATH（免发版，up -d 重启生效）；仅接受站内相对路径，
+ * 非法值一律回退默认（fail-safe，防止配置错误把交付链接指到外站）。 */
+export function provisionLoginPath(): string {
+  const v = process.env.PROVISION_LOGIN_PATH
+  if (
+    v &&
+    v.startsWith('/') &&
+    !v.startsWith('//') &&
+    !/[\s\x00-\x1f\\]/.test(v) &&
+    v.length <= 200
+  )
+    return v
+  return '/login?ui=dev&returnTo=%2Fbrooks'
+}
 export async function provisionMember(raw: unknown, operator: string) {
   const input = MembershipGrantInputSchema.extend({
     username: z
@@ -89,7 +106,7 @@ export async function provisionMember(raw: unknown, operator: string) {
     username,
     password,
     publicOrigin,
-    loginPath: '/login?ui=dev&returnTo=%2Fresearch%3Fui%3Ddev',
+    loginPath: provisionLoginPath(),
     membership: await membershipStatus(username),
   }
 }

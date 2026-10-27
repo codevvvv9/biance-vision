@@ -18,7 +18,7 @@ test('administrator publishes contacts and delivers a provisioned account only a
     else if (path === '/api/admin/users') body = { users: [] }
     else if (path === '/api/admin/audit-logs') body = { records: [], usernames: [] }
     else if (path === '/api/admin/website-config') body = { contacts: { version: 1, revision: r.method() === 'GET' ? 0 : 1, telegram: '', email: 'codevvvv9@gmail.com', updatedAt: Date.now() } }
-    else if (path === '/api/admin/users/provision') { provisioned = true; body = { username: 'bv_test_user', password: 'review-only-random-pass12', publicOrigin: 'https://user.example.test', loginPath: '/login?ui=dev&returnTo=%2Fresearch%3Fui%3Ddev', membership } }
+    else if (path === '/api/admin/users/provision') { provisioned = true; body = { username: 'bv_test_user', password: 'review-only-random-pass12', publicOrigin: 'https://user.example.test', loginPath: '/login?ui=dev&returnTo=%2Fbrooks', membership } }
     await route.fulfill({ status: path.endsWith('/provision') ? 201 : 200, json: body })
   })
   await page.addInitScript(() => localStorage.setItem('app-lang', 'zh-CN'))
