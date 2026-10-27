@@ -13,6 +13,7 @@ import { useDirtyForm, useConfirmDiscard } from './ui/forms'
 import {
   MembershipGrantFields,
   newGrant,
+  grantFieldErrors,
   useMemberLabel,
 } from './MembershipForms'
 type Receipt = {
@@ -76,7 +77,8 @@ export function MemberUserPanel({
     [dirty, setDirty] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
-    [reason, setReason] = useState('')
+    [reason, setReason] = useState(''),
+    [submitted, setSubmitted] = useState(false)
   useDirtyForm(dirty)
   const s = detail.data?.membership
   const close = async () => {
@@ -89,6 +91,7 @@ export function MemberUserPanel({
     try {
       await fn()
       setDirty(false)
+      setSubmitted(false)
       setInput({ ...newGrant(), action: s?.managed ? 'renew' : 'migrate' })
       store.invalidate()
     } catch (e) {
@@ -149,14 +152,21 @@ export function MemberUserPanel({
           />
           <Form
             layout="vertical"
-            onFinish={() =>
+            onFinish={() => {
+              setSubmitted(true)
+              if (
+                Object.keys(
+                  grantFieldErrors(value, plans.data?.plans ?? []),
+                ).length
+              )
+                return
               void run(() =>
                 api(`/admin/users/${encodeURIComponent(username)}/membership`, {
                   method: 'POST',
                   body: value,
                 }),
               )
-            }
+            }}
           >
             <MembershipGrantFields
               value={value}
@@ -166,15 +176,13 @@ export function MemberUserPanel({
               }}
               plans={plans.data?.plans ?? []}
               managed={s.managed}
+              submitted={submitted}
             />
             <Button
               type="primary"
               htmlType="submit"
               loading={busy}
-              disabled={
-                !value.versionId ||
-                (value.action === 'switch' && !value.confirmReplace)
-              }
+              disabled={value.action === 'switch' && !value.confirmReplace}
             >
               {L('saveMembershipAccess')}
             </Button>

@@ -105,6 +105,49 @@ test('plan editor exposes independent AI references and preserves draft revision
     },
   })
 })
+test('new plan submit shows required-field hints instead of raw backend errors', async ({
+  page,
+}) => {
+  await page.goto('/admin/membership')
+  await page.getByRole('button', { name: '新增套餐', exact: true }).click()
+  await page.getByRole('button', { name: '保存草稿', exact: true }).click()
+  await expect(page.getByText('请输入套餐标识')).toBeVisible()
+  await expect(page.getByText('请输入中文名称')).toBeVisible()
+  await expect(page.getByText('请输入英文名称')).toBeVisible()
+  // 必填项逐项校验：填好一项，该项提示即时消隐
+  await page.getByLabel('Plan identifier', { exact: true }).fill('newplan')
+  await expect(page.getByText('请输入套餐标识')).toBeHidden()
+  await page.getByLabel('Chinese plan name', { exact: true }).fill('新人月度')
+  await page
+    .getByLabel('English plan name', { exact: true })
+    .fill('Newcomer Monthly')
+  await expect(page.getByText('请输入英文名称')).toBeHidden()
+  const posted = page.waitForRequest(
+    (r) =>
+      r.method() === 'PUT' && r.url().includes('/membership/plans/newplan'),
+  )
+  await page.getByRole('button', { name: '保存草稿', exact: true }).click()
+  expect((await posted).postDataJSON()).toMatchObject({
+    config: { name: '新人月度', nameEn: 'Newcomer Monthly' },
+  })
+})
+test('grant submit is blocked with field hints until required fields are valid', async ({
+  page,
+}) => {
+  await page.goto('/admin/membership')
+  await page.getByRole('tab', { name: '用户会员', exact: true }).click()
+  await page
+    .getByRole('button', { name: '开通／续费／详情', exact: true })
+    .click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  // 未选套餐 + 金额被清空：提交须给出字段级提示而非放行到服务端
+  await page.getByLabel('Paid amount', { exact: true }).fill('')
+  await page
+    .getByRole('button', { name: '确认保存会员授权', exact: true })
+    .click()
+  await expect(page.getByText('请选择已发布的套餐')).toBeVisible()
+  await expect(page.getByText('金额格式不正确', { exact: false })).toBeVisible()
+})
 test('member details show current access and renewal controls', async ({
   page,
 }) => {

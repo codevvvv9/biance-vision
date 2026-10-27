@@ -15,6 +15,7 @@ import { Modal } from './ui/overlays'
 import {
   MembershipGrantFields,
   newGrant,
+  grantFieldErrors,
   useMemberLabel,
 } from './MembershipForms'
 export function ProvisionUserPanel({
@@ -57,7 +58,8 @@ function ProvisionDialog({
     [error, setError] = useState(''),
     [delivery, setDelivery] = useState<Delivery | null>(null),
     [copied, setCopied] = useState(false),
-    [dirty, setDirty] = useState(false)
+    [dirty, setDirty] = useState(false),
+    [submitted, setSubmitted] = useState(false)
   const store = useMemo(
       () =>
         createPollingStore<{
@@ -88,6 +90,7 @@ function ProvisionDialog({
       })
       setDelivery(d)
       setDirty(false)
+      setSubmitted(false)
       onCreated()
     } catch (e) {
       setError((e as Error).message)
@@ -162,7 +165,15 @@ function ProvisionDialog({
           </Space>
         </div>
       ) : (
-        <Form layout="vertical" onFinish={() => void submit()}>
+        <Form
+          layout="vertical"
+          onFinish={() => {
+            setSubmitted(true)
+            if (Object.keys(grantFieldErrors(value, r.data?.plans ?? [])).length)
+              return
+            void submit()
+          }}
+        >
           <Form.Item label={L('usernameOptional')}>
             <Input
               value={username}
@@ -181,6 +192,7 @@ function ProvisionDialog({
               setDirty(true)
             }}
             plans={r.data?.plans ?? []}
+            submitted={submitted}
           />
           <Alert
             type="info"
@@ -193,7 +205,6 @@ function ProvisionDialog({
             type="primary"
             htmlType="submit"
             loading={busy}
-            disabled={!value.versionId}
           >
             {L('createAndDeliver')}
           </Button>
