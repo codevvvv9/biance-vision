@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
+import { useAuth } from '../auth/AuthContext'
 import { analyzeBrooks } from 'biance-vision-brooks'
 import type { BrooksDisplay, EventQuote, FollowUpAction, Position, ResearchRun } from 'biance-vision-brooks'
 import { useMarket } from '../market/MarketContext'
@@ -17,6 +18,7 @@ import BrooksChart from '../brooks/BrooksChart'
 import type { BrooksChartLevel } from '../brooks/BrooksChart'
 import { PositionForm, QuoteForm } from './ResearchForms'
 import { EvidenceDrawer } from './ResearchResult'
+import { ResearchGate } from './ResearchGate'
 import { useResearchRun, sseConnLabel } from './useResearchRun'
 import { useResearchConversation } from './useResearchConversation'
 import { useResearchCandles } from './useResearchCandles'
@@ -54,6 +56,28 @@ const FALLBACK_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
 /** 研究台中栏固定全量标注（无 Brooks 复盘页的显示开关） */
 const RESEARCH_DISPLAY: BrooksDisplay = { swings: true, legs: true, io: true, signals: true, ema: true, regime: true }
 
+// 草稿双 key（docs/specs/ui.md，按账号隔离）：「当前输入」持续保存；
+// 「待发送备份」发送前写入——失败/403 后清空了输入仍可恢复，成功后清除。
+// 持续保存只写 draft key，空输入不会覆盖 pending 备份。
+const DRAFT_KEY = 'bv.research.draft.v1'
+const PENDING_KEY = 'bv.research.pending.v1'
+interface ResearchDraft { owner: string | null; chat: string; question: string }
+function readResearchDraft(owner: string | null): ResearchDraft {
+  const fallback: ResearchDraft = { owner, chat: '', question: '' }
+  try {
+    const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? 'null') as ResearchDraft | null
+    if (!d || (d.owner !== owner && d.owner !== null)) return fallback
+    return { owner, chat: String(d.chat ?? ''), question: String(d.question ?? '') }
+  } catch { return fallback }
+}
+function readResearchPending(owner: string | null): string | null {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? 'null') as { owner: string | null; text: string } | null
+    if (!p || (p.owner !== owner && p.owner !== null) || typeof p.text !== 'string' || p.text.trim() === '') return null
+    return p.text
+  } catch { return null }
+}
+
 interface Evaluation {
   quoteId: string
   breakevenWinRate: number
@@ -66,11 +90,19 @@ interface Evaluation {
 }
 
 export default function ResearchPage(): JSX.Element {
+  // 门禁在最外层（ResearchGate）：权限未明确放行前 Content 不挂载，其 hooks
+  // （行情/会话/轮询请求）不会执行；render prop 传入 readOnly 供页面显式消费
+  return <ResearchGate>{({ readOnly }) => <ResearchPageContent readOnly={readOnly} />}</ResearchGate>
+}
+
+function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const [scenario, setScenario] = useState<Scenario>('perp')
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [horizon, setHorizon] = useState<Horizon>('1h')
-  const [question, setQuestion] = useState('')
+  const [savedDraft] = useState(() => readResearchDraft(user?.username ?? null))
+  const [question, setQuestion] = useState(savedDraft.question)
   const [tab, setTab] = useState<'chart' | 'run' | 'evidence'>('chart')
   /** 「发起研究 / 录入」弹层（默认收起，对话为主操作面） */
   const [toolsOpen, setToolsOpen] = useState(false)
@@ -198,6 +230,20 @@ export default function ResearchPage(): JSX.Element {
     void refreshLeft()
   }, [refreshLeft])
 
+  // 草稿持续保存（当前输入，按账号隔离）：只写 draft key，不触碰待发送备份
+  useEffect(() => {
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ owner: user?.username ?? null, chat: conv.input, question })) } catch { /* Storage can be disabled. */ }
+  }, [user, conv.input, question])
+  // 待发送备份恢复（挂载一次）：当前聊天输入为空才回填，请求期间的新输入优先；处理完即清除
+  useEffect(() => {
+    const pending = readResearchPending(user?.username ?? null)
+    if (pending !== null) {
+      if (conv.input.trim() === '') conv.setInput(pending)
+      try { sessionStorage.removeItem(PENDING_KEY) } catch { /* optional */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // 倒计时刷新（30s 一次重拉报价评估）
   useEffect(() => {
     const t = setInterval(() => void refreshLeft(), 30_000)
@@ -229,6 +275,7 @@ export default function ResearchPage(): JSX.Element {
   useEffect(() => setHighlightTime(null), [symbol, marketType, chartInterval])
 
   const createRun = async (): Promise<void> => {
+    if (readOnly) return
     try {
       const r = await api<{ run: ResearchRun }>('/research/runs', {
         method: 'POST',
@@ -258,6 +305,7 @@ export default function ResearchPage(): JSX.Element {
    * 复查、报价评估仍带报价、历史复盘不变成当前研究；无 input 的旧 run 退回当前关联。
    * interval:'same'（事件到期临近重估）保持原周期并按当前时刻重估。 */
   const rerunFrom = async (opts: { horizon?: Horizon; asOfNow?: boolean } = {}): Promise<void> => {
+    if (readOnly) return
     const activeRun = tracker.activeRun
     if (activeRun === null) return
     const src = (activeRun.input ?? {}) as Partial<NonNullable<ResearchRun['input']>>
@@ -301,9 +349,22 @@ export default function ResearchPage(): JSX.Element {
       return
     }
     if (a.action === 'counter_search') {
+      // 追问=新研究消息：只读模式下与发送同口径禁用（重跑/换周期经 rerunFrom 已挡）
+      if (readOnly) return
       void conv.send(t('research:main.counterFollowUp', { symbol: tracker.activeRun?.symbol ?? symbol, horizon: tracker.activeRun?.horizon ?? horizon }))
       return
     }
+  }
+
+  /** 聊天发送（readOnly 同口径禁用）：发送前写待发送备份，失败/403 后输入被清空仍可恢复 */
+  const sendChat = (): void => {
+    if (readOnly || conv.busy || conv.input.trim() === '') return
+    const text = conv.input
+    try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ owner: user?.username ?? null, text })) } catch { /* Storage can be disabled. */ }
+    void conv.send().then((ok) => {
+      if (ok) { try { sessionStorage.removeItem(PENDING_KEY) } catch { /* optional */ } }
+      else if (conv.input.trim() === '') conv.setInput(text)
+    })
   }
 
   /** 报价级结算确认（W6）：写 userConfirmedOutcome 并同步该报价下未确认预测 */
@@ -619,12 +680,12 @@ export default function ResearchPage(): JSX.Element {
                 value={conv.input}
                 onChange={(e) => conv.setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) void conv.send()
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) sendChat()
                 }}
                 placeholder={t('research:main.inputPlaceholder')}
                 aria-label={t('research:main.inputAria')}
               />
-              <button className="btn btn-primary" disabled={conv.busy || conv.input.trim() === ''} onClick={() => void conv.send()}>
+              <button className="btn btn-primary" disabled={readOnly || conv.busy || conv.input.trim() === ''} onClick={sendChat}>
                 {t('research:main.send')}
               </button>
             </div>
@@ -654,7 +715,7 @@ export default function ResearchPage(): JSX.Element {
                 {product === 'event' && (
                   <p className="muted">{selectedQuote === '' ? t('research:main.noQuoteSelected') : t('research:main.quoteLinked', { id: selectedQuote.slice(0, 8) })}</p>
                 )}
-                <button className="btn btn-primary" onClick={() => void createRun()}>{t('research:main.startResearch')}</button>
+                <button className="btn btn-primary" disabled={readOnly} onClick={() => void createRun()}>{t('research:main.startResearch')}</button>
               </div>
               {product === 'perp' && <PositionForm symbol={symbol} onSaved={() => void refreshLeft()} />}
               {product === 'event' && <QuoteForm symbol={symbol} onSaved={() => void refreshLeft()} />}

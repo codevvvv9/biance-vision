@@ -63,6 +63,7 @@
     "access:check": "tsx scripts/ai-access-check.ts",
     "knowledge:enhance-eval": "tsx scripts/knowledge-enhance-eval.ts",
     "membership:check": "tsx scripts/membership-check.ts && tsx scripts/membership-polling-check.ts",
+    "research:check": "tsx scripts/research-access-check.ts",
     "membership:load": "tsx scripts/membership-load.ts"
   },
   "devDependencies": {

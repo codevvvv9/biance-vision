@@ -67,6 +67,8 @@ await db.execute(sql`delete from conversations where user_id = ${USER}`)
   // stopPrice=1 → 不会被触发（当前价远高于 1），走结构分支
   const row = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: {
       product: 'perp', symbol: 'BTCUSDT', marketType: 'usdm_perp', horizon: '1h',
       question: '多头持仓是否继续持有', positionId: pos[0].id, asOf: now,
@@ -118,6 +120,8 @@ await db.execute(sql`delete from conversations where user_id = ${USER}`)
   // stopPrice=999999 → 当前价必然已跌破 → 触发止损 exit
   const row = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: {
       product: 'perp', symbol: 'BTCUSDT', marketType: 'usdm_perp', horizon: '1h',
       positionId: pos[0].id, asOf: now,
@@ -206,6 +210,8 @@ await db.execute(sql`delete from conversations where user_id = ${USER}`)
   const { PgRunStore } = await import('../server/src/research/runs/store.js')
   const row = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: { product: 'perp', symbol: 'BTCUSDT', marketType: 'usdm_perp', horizon: '1h', asOf: now },
   })
   // 阶段 A：真实阶段跑到 retrieve（用生产 checkpointOf 落检查点），模拟此后 worker 崩溃

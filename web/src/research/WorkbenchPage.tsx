@@ -22,6 +22,7 @@ import type { FollowUpAction } from 'biance-vision-brooks'
 import { Combobox } from './Combobox'
 import { authUrl } from './uiMode'
 import { ENTRY_KEY, parseEntry, type ResearchEntryDraftV1 } from './websiteEntry'
+import { ResearchGate } from './ResearchGate'
 import { useResearchConversation } from './useResearchConversation'
 import type { ConversationContextSync } from './useResearchConversation'
 import { useResearchRun } from './useResearchRun'
@@ -38,6 +39,22 @@ const SCENES = {
 } as const
 const TERMINAL = ['published', 'failed', 'cancelled']
 const DRAFT_KEY = 'bv.workbench.drafts.v1'
+// 待发送备份（与「当前输入」DRAFT_KEY 分离，docs/specs/ui.md）：发送前写入——防「已清空
+// 输入框后才收到失败/403」丢失草稿；成功受理后清除；挂载时当前输入为空才恢复，
+// 用户在请求期间的新输入优先（备份不覆盖新内容）
+const PENDING_KEY = 'bv.workbench.pending.v1'
+interface PendingState { owner: string | null; scene: Scene; text: string }
+function savePending(scene: Scene, text: string, owner: string | null): void {
+  try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ owner, scene, text })) } catch { /* Storage can be disabled. */ }
+}
+function clearPending(): void { try { sessionStorage.removeItem(PENDING_KEY) } catch { /* optional */ } }
+function readPending(owner: string | null): PendingState | null {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? 'null') as PendingState | null
+    if (!p || (p.owner !== owner && p.owner !== null) || !['spot', 'perp', 'event'].includes(p.scene) || typeof p.text !== 'string' || p.text.trim() === '') return null
+    return { owner, scene: p.scene as Scene, text: p.text }
+  } catch { return null }
+}
 interface DraftState { owner: string | null; scene: Scene; symbol: string; horizon: Horizon; drafts: Record<Scene, string> }
 function readDraft(owner: string | null): DraftState {
   const fallback: DraftState = { owner, scene: 'perp', symbol: 'BTCUSDT', horizon: '1h', drafts: { spot: '', perp: '', event: '' } }
@@ -86,6 +103,12 @@ function useLayerFocus(ref: RefObject<HTMLElement>, open: boolean, modal: boolea
 }
 
 export default function WorkbenchPage(): JSX.Element {
+  // 门禁在最外层（ResearchGate）：权限未明确放行前 Content 不挂载，其 hooks
+  // （数据请求/定时器/SSE）不会执行；render prop 传入 readOnly 供页面显式消费
+  return <ResearchGate>{({ readOnly }) => <WorkbenchContent readOnly={readOnly} />}</ResearchGate>
+}
+
+function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   const { t, i18n } = useTranslation()
   const zh = i18n.language.startsWith('zh')
   const websiteLocale = zh ? 'zh' : 'en'
@@ -153,7 +176,9 @@ export default function WorkbenchPage(): JSX.Element {
   useEffect(() => { if (user && entry && !selectedConversation && !selectedRun && !Object.values(drafts).some(d => d.trim())) applyEntry() }, [user, entry, selectedConversation, selectedRun])
   const run = tracker.activeRun
   const running = !!run && !TERMINAL.includes(run.status)
-  const locked = conv.busy || conv.loadingConversation || contextLoading || conv.cardBusy !== null || runLoading || running || retryBusy || (!!selectedConversation && conv.convId !== selectedConversation)
+  // readOnly（研究权限未生效）并入 locked：禁发送/切场景等创作操作；浏览历史、
+  // 查看证据、取消任务不受影响（下方对应 handler 另有一道同状态检查，不只靠按钮禁用）
+  const locked = readOnly || conv.busy || conv.loadingConversation || contextLoading || conv.cardBusy !== null || runLoading || running || retryBusy || (!!selectedConversation && conv.convId !== selectedConversation)
   const restoreContext = (c?: Partial<ConversationContextSync>): void => {
     if (!c) return
     setScene(c.product === 'event' ? 'event' : c.product === 'teaching' ? 'spot' : 'perp')
@@ -164,6 +189,14 @@ export default function WorkbenchPage(): JSX.Element {
   }
 
   useEffect(() => { try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ owner: user?.username ?? null, scene, symbol, horizon, drafts })) } catch { /* Storage can be disabled. */ } }, [user, scene, symbol, horizon, drafts])
+  // 发送备份恢复（挂载一次）：当前场景输入为空才回填，新输入优先；处理完即清除备份
+  useEffect(() => {
+    const p = readPending(user?.username ?? null)
+    if (!p) return
+    setDrafts(d => (d[p.scene].trim() === '' ? { ...d, [p.scene]: p.text } : d))
+    clearPending()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => { if (user) { void conv.refreshConversations(); void refreshTools() } }, [user, conv.refreshConversations, refreshTools])
   // P1-8 输入面板配置（服务端 /config/research-ui；失败回退内置，不阻塞页面）
   useEffect(() => {
@@ -239,13 +272,16 @@ export default function WorkbenchPage(): JSX.Element {
     updateUrl({ conversation: null, run: null }); inputRef.current?.focus()
   }
   const send = async (): Promise<void> => {
-    if (!drafts[scene].trim() || locked || quota?.remaining === 0) return
+    if (readOnly || !drafts[scene].trim() || locked || quota?.remaining === 0) return
     if (!user) { login(); return }
     if (!/^[A-Z0-9]{3,30}USDT$/.test(symbol)) { setPageError(t('research:run.invalidSymbol')); return }
     const raw = drafts[scene]; setDrafts(prev => ({ ...prev, [scene]: '' })); setPageError('')
+    // 发送前先写待发送备份：清空输入后才收到失败/403 时原文可恢复（挂载恢复+下方回填）
+    savePending(scene, raw, user.username)
     nearBottom.current = true
     const sent = await conv.send(raw)
     if (!sent) setDrafts(prev => ({ ...prev, [scene]: prev[scene] || raw }))
+    else clearPending()
     inputRef.current?.focus()
   }
   const openPanel = (next: 'chart' | 'evidence', id: string | null = null): void => { setEvidenceId(id); setPanel(next) }
@@ -259,7 +295,7 @@ export default function WorkbenchPage(): JSX.Element {
   // asOf 默认沿用原研究时点（replay 换周期仍在同一历史时点）；asOfNow=true（事件
   // 「临近到期重估」）时以当前时刻重估同一报价。
   const createRunDirect = async (opts: { horizon?: Horizon; asOfNow?: boolean } = {}): Promise<void> => {
-    if (!run || retryBusy) return
+    if (readOnly || !run || retryBusy) return
     setRetryBusy(true)
     try {
       const src = (run.input ?? {}) as Partial<NonNullable<ResearchRun['input']>>
@@ -297,6 +333,8 @@ export default function WorkbenchPage(): JSX.Element {
       return
     }
     if (a.action === 'counter_search') {
+      // 追问=新研究消息：只读模式下与发送同口径禁用（重跑/换周期经 createRunDirect 已挡）
+      if (readOnly) return
       void conv.send(t('research:wb.counterFollowUp', { symbol: run?.symbol ?? symbol, horizon: run?.horizon ?? horizon }))
       return
     }
@@ -314,7 +352,7 @@ export default function WorkbenchPage(): JSX.Element {
     {compact && navOpen && <button className="wb-shade" aria-label={t('research:wb.closeNavAria')} onClick={() => setNavOpen(false)} />}
     <aside ref={navRef} tabIndex={-1} className={`wb-sidebar ${navOpen ? 'is-open' : ''}`} role={compact ? 'dialog' : undefined} aria-modal={compact && navOpen || undefined} aria-label={t('research:wb.navAria')}>
       <div className="wb-brand"><Link to="/research?ui=dev" aria-label={t('research:wb.homeAria')}><Logo /><span>{brand.name}<span className="wb-brand-sub">{t('research:wb.brandSub')}</span></span></Link><button className="wb-icon" aria-label={collapsed ? t('research:wb.expandNav') : t('research:wb.collapseNav')} onClick={() => compact ? setNavOpen(false) : setCollapsed(!collapsed)}>☷</button></div>
-      <button className="wb-new" disabled={conv.busy || conv.cardBusy !== null || retryBusy} onClick={newChat}><span aria-hidden>＋</span><span className="wb-nav-text">{t('research:wb.newChat')}</span></button>
+      <button className="wb-new" disabled={conv.busy || conv.cardBusy !== null || retryBusy || readOnly} onClick={newChat}><span aria-hidden>＋</span><span className="wb-nav-text">{t('research:wb.newChat')}</span></button>
       <div className="wb-history"><div className="wb-section-title">{t('research:wb.historyTitle')}</div>
         {!user ? <div className="wb-history-empty"><span aria-hidden>◌</span><p>{t('research:wb.loginToSave').split('\n').map((line, i, arr) => <span key={i}>{line}{i < arr.length - 1 && <br />}</span>)}</p></div> : <>
           {conv.historyError && <div className="wb-history-error" role="alert">{conv.historyError}<button onClick={() => void conv.refreshConversations()}>{t('research:wb.retry')}</button></div>}

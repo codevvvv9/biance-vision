@@ -15,27 +15,14 @@ import type {
   MembershipCampaign,
   PublicMembershipCatalog,
 } from 'biance-vision-brooks'
-import { getDb } from '../db.js'
 import { getAiProfilesMasked, aiProfileByName } from '../ai.js'
 import { readWebsiteContacts } from '../admin/websiteSettings.js'
-
-type Db = NonNullable<ReturnType<typeof getDb>>
-export type Executor = Pick<Db, 'execute'>
-export const membershipError = (
-  message: string,
-  statusCode = 400,
-  code = 'membership_invalid',
-) => Object.assign(new Error(message), { statusCode, code })
-export function membershipDb(): Db {
-  const db = getDb()
-  if (!db)
-    throw membershipError(
-      '会员服务暂不可用 / Membership unavailable',
-      503,
-      'membership_unavailable',
-    )
-  return db
-}
+import { featureAccess } from './access.js'
+// 错误形状与 DB 句柄的属主在 core.ts（access.ts 与本文件共享，避免 service↔access 循环依赖）；
+// 此处 re-export 维持既有 import 路径（meter.ts / routes.ts 等均从 './service.js' 取）
+export { membershipError, membershipDb } from './core.js'
+import { membershipDb, membershipError } from './core.js'
+export type Executor = import('./core.js').Executor
 export const epoch = (v: unknown): number => new Date(v as string).getTime()
 export const dayOf = (now: number): string =>
   new Date(now + 8 * 3600000).toISOString().slice(0, 10)
@@ -334,6 +321,11 @@ export async function membershipStatus(
       ...(forAdmin ? { adminSeconds: refresh.adminSeconds } : {}),
     },
     contacts: { telegram: contacts.telegram, email: contacts.email },
+    access: {
+      // 功能级有效权限（与 status/额度分离）：到期账号 current 可能仍在，但 access 不允许；
+      // 判定规则单点在 access.ts，此处只透传，避免与 createRun/路由门禁各自维护一套口径
+      research: await featureAccess(username, 'research', now, db),
+    },
   }
 }
 export async function assignMembership(

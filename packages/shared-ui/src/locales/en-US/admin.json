@@ -972,6 +972,8 @@
     "membershipRenew": "Membership / renew",
     "managedMembers": "Managed members",
     "activeMembers": "Active members",
+    "internalMembers": "Internal accounts",
+    "internalPlanTag": "Internal",
     "receivedTotalUsdt": "Received total USDT"
   }
 }

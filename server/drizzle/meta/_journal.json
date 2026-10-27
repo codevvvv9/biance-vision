@@ -267,6 +267,13 @@
       "when": 1793081641081,
       "tag": "0037_rename_chained_fk_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793164800000,
+      "tag": "0038_internal_plan",
+      "breakpoints": true
     }
   ]
 }

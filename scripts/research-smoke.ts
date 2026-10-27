@@ -172,6 +172,8 @@ let runId = ''
   const positionId = posRows[0].id
   const row = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: {
       product: 'perp',
       symbol: 'BTCUSDT',
@@ -224,6 +226,8 @@ let runId = ''
     .where(sql`id = ${positionId}`)
   const staleRun = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: { product: 'perp', symbol: 'BTCUSDT', marketType: 'usdm_perp', horizon: '1h', question: '过期持仓降级验证', positionId, asOf: now },
   })
   await executeRun(staleRun.id)
@@ -238,6 +242,8 @@ let runId = ''
 {
   const row = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: { product: 'teaching', symbol: 'BTCUSDT', marketType: 'spot', horizon: '1d', asOf: now },
   })
   await requestCancel(row.id, USER)
@@ -373,6 +379,8 @@ let runId = ''
   })
   const row = await createRun({
     userId: USER,
+    // 进程内冒烟直调（非 HTTP 用户路径）：显式系统豁免会员判定
+    source: 'system',
     create: { product: 'event', symbol: 'BTCUSDT', marketType: 'usdm_perp', horizon: '10m', quoteId, asOf: now },
   })
   await executeRun(row.id)

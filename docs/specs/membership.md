@@ -1,10 +1,12 @@
 # 可配置会员机制
 
-状态：业务实现已整合并上线 v0.19.1（2026-10-26），初始套餐待管理员确认 AI 绑定后发布；生产同资源容量验收待执行。结果见 [验收记录](../validation/membership.md) 与 [发布记录](../releases/v0.19.0-integration.md)。
+状态：业务实现已整合并上线 v0.19.1（2026-10-26），初始套餐待管理员确认 AI 绑定后发布；生产同资源容量验收待执行。结果见 [验收记录](../validation/membership.md) 与 [发布记录](../releases/v0.19.0-integration.md)。研究访问门禁与内部固定套餐见下文「研究访问门禁」一节。
 
 ## 业务与配置
 
 PostgreSQL 为套餐、会员授权和用量的唯一真源。迁移 `0035_membership` 创建四个未上架草稿：14 天免费试用（每日 10 次）、月付 15/8 USDT、年付 120/60 USDT、终身 299/100 USDT（付费默认每日 100 次，6 次/分钟，无累计上限）。金额精确到 6 位小数。
+
+迁移 `0038_internal_plan` 追加**内部固定套餐**（`plan_id='internal'`，仿 trial 的代码约定）：终身、价格 0、不公开展示（public=false）、三功能全开、每日不限、60 次/分钟、档案 `default`，随迁移**自动发布并上架**（幂等三步 + 冲突双向 jsonb 校验，已存在且配置不一致时迁移显式失败，绝不静默改绑）。供开发/内部人员测试使用；授予即 0 元开通（免费套餐实收必须为零的既有校验生效）。管理端开通下拉对其标注「内部」，统计单列（见下）。
 
 套餐的名称、双语说明、有效期、价格、功能、额度、排序、公开展示及聊天/研究 AI 档案均由后台编辑。保存草稿使用 expectedRevision；发布创建不可变版本。下架不改变存量授权。初始活动关闭，管理员确认后开启。
 
@@ -25,6 +27,28 @@ PostgreSQL 为套餐、会员授权和用量的唯一真源。迁移 `0035_membe
 统一客户端为计量写操作生成幂等键，也允许调用方传入原键重试；成功和失败完成后均使本人用量失效。流式聊天在关闭原始响应前显式结算，重放仍返回文本和会话编号，避免 hijack 绕过常规响应钩子。
 
 每次新请求直接读授权、结束时间及停用状态，展示缓存不参与判权；数据库不可用拒绝调用。到期仍可登录、查看行情及已有研究；已受理研究允许完成。
+
+## 研究访问门禁
+
+功能级有效权限的**判定单点**在 `server/src/membership/access.ts` 的 `featureAccess(username, feature)`（OCP：按 feature 参数化，chat/translate 将来收口即复用）：
+
+- **已纳管**（membership_accounts 有行）：停用（accounts.disabled 或 chat_policy.disabled）→ 拒 `disabled`；无进行中授权（未开始/已结束/撤销）→ 拒（曾有授权 `expired` / 从未授权 `no_grant`），**不回退 legacy 残留额度**；有效授权 → 按绑定的不可变 plan_versions `features[feature]` 判（`plan_feature`）。
+- **未纳管**：chat_policy.disabled → 拒；app_settings 有 `ai_access:<username>` → 允（legacy 保留，额度/停用仍走 aiAccess 既有规则）；否则拒（`no_access`）。
+- 权限与额度分离：额度耗尽/限速由 meter 与 aiAccess 既有配额错误表达。
+- DB 异常在权限查询边界显式转**受控 503**（membership_unavailable，不泄露底层信息）——「服务不可用」不得被解释为「无权限」。
+
+消费方：`membershipStatus()` 返回 `access.research`（契约字段，前端唯一权限语义来源）；研究路由 preHandler；`createRun()` 用户路径兜底。错误码与 meter 对齐：停用/到期/缺功能沿用既有 `membership_disabled`/`membership_expired`/`membership_feature_unavailable`，仅「无任何授权」用新码 `research_access_required`；`/api/research/chat` 的 catch 对授权 403 与 5xx 原样上抛（保留领域码、全局 5xx 脱敏），不回显底层错误。
+
+**门禁范围**：只拦「创建研究运行」——`POST /api/research/chat`、`POST /api/research/runs`（preHandler）与 `createRun()` 兜底（覆盖会话消息→createRun 路径，已有会话每次触发重新判权）。新闻归因、概念 RAG 问答等不创建 run 的聊天分支保留为普通会话能力；将来划入付费研究时在对应动作前用 featureAccess 检查。**历史访问**：读取研究、查看证据、取消已受理任务、已受理任务继续完成均不拦。
+
+**系统调用边界**：`createRun` 增加服务端内部控制流参数 `source: 'user' | 'system'`（默认 `'user'` 受检，新调用点自动纳管；该参数不进入任何 HTTP schema，客户端伪造无效——body 中的 `source` 字段会被忽略，权限判定不受影响）。`evalRunner` 评测与进程内冒烟脚本显式传 `'system'` 豁免。
+
+**统计口径**（`GET /api/admin/membership/stats`）：`managed`＝进过会员体系的账号总数（含禁用/到期/internal）；`active`＝进行中授权且未停用的去重用户，internal 从中**排除**；`internalActive`＝internal 单列（仍包含在 managed 中）；`received` 不受 internal 影响（其价格恒为 0）。注意 `active` 含有效 trial，不能解释为「付费会员数」。
+
+**版本语义**：修改套餐 research 开关不立即影响存量用户（授权绑定不可变版本）。验收路径：关闭 research → 发布新版本 → 用户「立即切换」→ 权限随之变化。
+
+检查：`pnpm research:check`（独立临时库，覆盖判定矩阵、user/system 边界、伪造 source、错误码透传、DB 异常 503、拒绝零落库）。
+
 
 用户请求通过独立 AsyncLocalStorage 上下文绑定聊天 AI，研究创建时冻结研究 AI 连接、生成参数和套餐版本。套餐仅保存档案引用，密钥运行时在服务端解析，不写入 run 或公开响应。AI 档案仍可运维更新，已发布套餐引用的档案禁止删除。研究规则、预算和校验器不随会员档位复制或放宽。后台知识处理任务使用其系统配置。
 

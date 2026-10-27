@@ -185,6 +185,29 @@ Status: verified for the documented automated, isolated integration and producti
 
 三个刷新间隔后台独立配置（默认 60 秒，30–300 秒），查询完成后串行调度，隐藏/离线暂停，失败退避并显示旧数据更新时间；组件共用页面 store。到期/停用由每次 AI 请求后端实时拦截，轮询不承担判权。细则与验收见 [会员方案](membership.md)。
 
+## 研究终端会员门禁（2026-10-27，implemented）
+
+判定语义单一来源：服务端 `featureAccess`（membership/access.ts）→ 状态端点 `access.research` → 前端唯一消费点 `useResearchAccess()`（web/src/membership/access.ts）。语义细则、系统调用边界与统计口径见 [会员方案](membership.md)「研究访问门禁」。
+
+导航 tab：Header TABS 声明式 `visible` 谓词（OCP——按属性控显的 tab 注册自己的谓词，渲染逻辑通用）；`/research` 注册 `allowed`，会员数据未到不渲染（先隐藏后出现，同 `ai.status.configured` 先例）。
+
+页面门禁 `ResearchGate`（web/src/research/ResearchGate.tsx，render prop 传模式）包住**独立页面组件**（hooks 全部移入 `*Content`，权限未放行时组件不挂载、零请求）：
+
+| 状态 | 行为 |
+|---|---|
+| 未登录（无 membership store） | 直接渲染游客态（原有游客展示+登录引导，禁止匿名提交为现状），不落入加载占位 |
+| 首查进行中 | 加载占位（Content 不挂载） |
+| 首查失败 | 失败重试卡（`refresh(true)` 绕过退避） |
+| 已有数据+后台刷新失败 | 保留主体不卸载（草稿/SSE/历史定位不受影响）+ 顶部横幅 |
+| 新数据明确拒绝 | 门禁引导卡：联系开通（contacts）+「查看历史研究」入口 |
+
+readOnly 模式（经历史入口进入 / allowed=false 在主体中）由页面**显式消费**（不依赖额度推断——research:false 时额度可能>0、无套餐时为 null）：隐藏/禁用发送、新建研究、重跑、追问、重新评估，**对应 handler 一并检查**；读取、证据查看、取消任务允许。权限与额度分别判断，服务端逐次兜底。
+
+草稿持久化（页面自身职责，按账号隔离 sessionStorage）：「当前输入」持续保存（Workbench 既有 `bv.workbench.drafts.v1` + ResearchPage 补 `bv.research.draft.v1`）；「待发送备份」发送前写入（`*.pending.v1`）——失败/403 后输入已清空仍可恢复（失败回填 `prev || raw` + 挂载时当前输入为空才恢复备份），成功受理后清除；持续保存只写 draft key，空输入不会覆盖备份；用户在请求期间的新输入优先。权限失效切换与重获授权后草稿均可恢复。
+
+验收（website/tests/browser/terminal.spec.ts）：非会员引导卡+主体零请求、刷新失败不卸载、403 后草稿恢复（即时+reload）、未登录游客态正常展示且不请求私有数据；服务端矩阵见 `pnpm research:check`。
+
+
 
 ## DuckStrat 品牌入口（2026-10-26）
 

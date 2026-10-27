@@ -63,6 +63,16 @@ export interface MembershipPeriod {
   requestsPerMinute: number
   features: z.infer<typeof MembershipFeaturesSchema>
 }
+/** 功能级有效权限（与 status/额度分离）：status 描述账号展示态，
+ * access 描述「此刻能否使用某能力」——到期账号 current 可能仍在，但 access 不允许。
+ * source：membership=有效套餐授权；legacy=旧 ai_access 额度；null=无授权。
+ * reason：拒绝原因（plan_feature=绑定版本未含该功能；expired=纳管但无进行中授权；
+ * disabled=账号或聊天策略停用；no_grant=纳管但从未有有效授权；no_access=无任何授权）。 */
+export interface MembershipFeatureAccess {
+  allowed: boolean
+  source: 'membership' | 'legacy' | null
+  reason: 'plan_feature' | 'expired' | 'disabled' | 'no_grant' | 'no_access' | null
+}
 export interface MembershipStatus {
   legacyAccess?: { totalLimit: number; used: number; remaining: number }
   managed: boolean
@@ -75,6 +85,7 @@ export interface MembershipStatus {
   serverTime: number
   refresh: { userSeconds: number; revision: number; adminSeconds?: number }
   contacts: { telegram: string; email: string }
+  access: { research: MembershipFeatureAccess }
 }
 export interface MembershipPlanRecord {
   id: string

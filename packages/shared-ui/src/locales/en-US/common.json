@@ -61,6 +61,13 @@
   },
   "membership": {
     "retry": "Retry",
+    "researchGateTitle": "Research terminal is a membership feature",
+    "researchGateBody": "Research access is not enabled for this account yet. It becomes available with a membership or an internal account; existing research conversations remain viewable.",
+    "researchGateContact": "Contact to enable",
+    "researchGateHistory": "View past research",
+    "researchGateRefreshFailed": "Membership status refresh failed; showing the last known state. The server still verifies research access on every request.",
+    "researchGateReadonly": "Read-only mode: research access is not active. You can review history and cancel pending tasks, but cannot start new research.",
+    "researchGateLoadFailedTitle": "Membership status unavailable",
     "legacyAccount": "Legacy account",
     "trial": "Trial",
     "active": "Active",
