@@ -84,7 +84,9 @@ export const test = base.extend<{
           const body = request.postDataJSON();
           if (body.password !== "correct") {
             status = 401;
-            data = { message: "Invalid credentials" };
+            // 对齐真实服务端契约（authRoutes failLogin 统一出口）：401 必带
+            // invalid_credentials 码，前端 errors 词典按码出文案
+            data = { statusCode: 401, error: "Unauthorized", message: "用户名或密码错误", code: "invalid_credentials" };
           } else {
             authenticated = true;
             data = { user: { username: "fixture-admin", role: "superadmin" } };
