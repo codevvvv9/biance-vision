@@ -91,11 +91,14 @@ test('custom password is delivered verbatim; random reset still posts an empty b
   await page.addInitScript(() => localStorage.setItem('app-lang', 'zh-CN'))
   await page.goto(`${admin}/admin/panel`)
   await page.getByRole('button', { name: '额度 / 重置密码', exact: true }).click()
-  await page.getByLabel('自定义密码', { exact: true }).fill('custom-pass-123')
-  await page.getByLabel('bv_pw_user · 额度 / 重置密码').getByRole('button', { name: '保存', exact: true }).click()
+  // 填入自定义密码 → 按钮变「设置密码」，按原文交付
+  await page.locator('#custom-password').fill('custom-pass-123')
+  await page.getByRole('button', { name: '设置密码', exact: true }).click()
   await page.getByRole('button', { name: '确认', exact: true }).click()
   await expect(page.getByLabel('随机密码', { exact: true })).toHaveValue('custom-pass-123')
   expect(mutations.find(m => m.path.endsWith('/reset-credentials'))?.body).toEqual({ password: 'custom-pass-123' })
+  // 留空 → 按钮回到「重置交付密码」，空 body 生成随机（原设计保持）
+  await page.locator('#custom-password').fill('')
   await page.getByRole('button', { name: '重置交付密码', exact: true }).click()
   await page.getByRole('button', { name: '确认', exact: true }).click()
   await expect(page.getByLabel('随机密码', { exact: true })).toHaveValue('handover-pass-42')

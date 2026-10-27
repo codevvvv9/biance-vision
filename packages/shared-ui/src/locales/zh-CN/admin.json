@@ -680,6 +680,7 @@
     "resetPassword": "重置交付密码",
         "resetPasswordImpact": "确认重置 {{username}} 的密码？原密码和已有会话将失效。",
     "setCustomPassword": "自定义密码",
+    "setPasswordAction": "设置密码",
     "customPasswordPlaceholder": "自定义密码（4~64 位），留空则用随机",
     "renameUser": "改名",
     "renameTitle": "改名用户",
