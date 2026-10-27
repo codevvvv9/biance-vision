@@ -241,7 +241,11 @@ export function registerMembershipAdminRoutes(
     deps.requireSuperadmin(req)
     statusHeaders(reply)
     const [stats] = await membershipDb().execute(
-      sql`SELECT (SELECT count(*)::int FROM membership_accounts) AS managed,(SELECT count(DISTINCT g.username)::int FROM membership_grants g JOIN membership_accounts a ON a.username=g.username JOIN users u ON u.username=g.username WHERE g.revoked_at IS NULL AND NOT a.disabled AND NOT coalesce((u.chat_policy->>'disabled')::boolean,false) AND g.starts_at<=now() AND (g.ends_at IS NULL OR g.ends_at>now())) AS active,(SELECT coalesce(sum(paid_amount),0)::text FROM membership_receipts WHERE voided_at IS NULL) AS received`,
+      // 口径（docs/specs/membership.md）：managed=进过会员体系的账号总数（含禁用/到期/internal）；
+      // active=进行中授权且未停用的去重用户，internal 套餐（plan_id='internal'）移出 active 单列
+      // internalActive——active 含有效 trial，不能解释为「付费会员数」；received 不受 internal
+      // 影响（internal 价格恒为 0，实收必为 0）
+      sql`SELECT (SELECT count(*)::int FROM membership_accounts) AS managed,(SELECT count(DISTINCT g.username)::int FROM membership_grants g JOIN membership_plan_versions v ON v.id=g.version_id JOIN membership_accounts a ON a.username=g.username JOIN users u ON u.username=g.username WHERE g.revoked_at IS NULL AND NOT a.disabled AND NOT coalesce((u.chat_policy->>'disabled')::boolean,false) AND g.starts_at<=now() AND (g.ends_at IS NULL OR g.ends_at>now()) AND v.plan_id<>'internal') AS active,(SELECT count(DISTINCT g.username)::int FROM membership_grants g JOIN membership_plan_versions v ON v.id=g.version_id JOIN membership_accounts a ON a.username=g.username JOIN users u ON u.username=g.username WHERE g.revoked_at IS NULL AND NOT a.disabled AND NOT coalesce((u.chat_policy->>'disabled')::boolean,false) AND g.starts_at<=now() AND (g.ends_at IS NULL OR g.ends_at>now()) AND v.plan_id='internal') AS "internalActive",(SELECT coalesce(sum(paid_amount),0)::text FROM membership_receipts WHERE voided_at IS NULL) AS received`,
     )
     return { stats, refresh: await readRefresh() }
   })

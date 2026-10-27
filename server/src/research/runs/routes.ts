@@ -24,6 +24,7 @@ import { handleResearchChat } from './chat.js'
 import { listRunEventsAfter, getEvidenceItem } from './store.js'
 import { createConversation, getConversationForUser, listConversations, listMessages, patchContext, postMessage } from './conversation.js'
 import { assertChatAllowed, recordChatMessage } from '../../chatPolicy.js'
+import { assertResearchAccess } from '../../membership/access.js'
 import { accessCtxFromSession, canSeeAccess } from '../../knowledge/access.js'
 import { getDocument } from '../../knowledge/store.js'
 import { getBlobStore } from '../../knowledge/blobstore.js'
@@ -32,6 +33,15 @@ import { projectEvidenceSource } from './evidenceSource.js'
 
 interface RunRouteDeps {
   requireSession: (req: FastifyRequest) => SessionRecord
+}
+
+/** 研究创建入口 preHandler（声明式挂载）：非会员拒绝（403 research_access_required /
+ *  既有 membership_* 码）；权限查询边界 DB 异常为受控 503，不会被解释为「无权限」 */
+function researchAccessPreHandler(deps: RunRouteDeps) {
+  return async (req: FastifyRequest) => {
+    const session = deps.requireSession(req)
+    await assertResearchAccess(session.username)
+  }
 }
 
 function ensureStorage(reply: FastifyReply): boolean {
@@ -218,7 +228,9 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
 
 
   // ---- 对话入口：自然语言 → 意图槽位 → 创建研究运行（多轮带 lastRunId 继承上下文） ----
-  app.post('/api/research/chat', async (req, reply) => {
+  // 研究创建入口门禁（docs/specs/membership.md）：非会员（无有效套餐且无 legacy ai_access）拒绝；
+  // 判定单点 membership/access.ts；GET/取消/完成等历史访问与普通聊天不受限
+  app.post('/api/research/chat', { preHandler: researchAccessPreHandler(deps) }, async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
     // 遗留入口同样纳入用户级聊天管控（与对话消息口径一致）
@@ -233,11 +245,14 @@ export function registerResearchRunRoutes(app: FastifyInstance, deps: RunRouteDe
       return reply.code(202).send(outcome)
     } catch (err) {
       const e = err as { statusCode?: number; message: string }
+      // 授权类 403 与 5xx 交给全局错误处理器：403 透传领域码（research_access_required /
+      // membership_* 等），5xx 统一脱敏不回显底层错误；其余 4xx 保持 chat_failed 包装
+      if (e.statusCode === 403 || (e.statusCode ?? 500) >= 500) throw err
       return reply.code(e.statusCode ?? 500).send({ code: 'chat_failed', message: e.message })
     }
   })
 
-  app.post('/api/research/runs', async (req, reply) => {
+  app.post('/api/research/runs', { preHandler: researchAccessPreHandler(deps) }, async (req, reply) => {
     const session = deps.requireSession(req)
     if (!ensureStorage(reply)) return reply
     // 直建 run 也要过用户级管控，堵住绕过对话入口的通道

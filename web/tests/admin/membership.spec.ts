@@ -54,7 +54,7 @@ test.beforeEach(async ({ page }) => {
         },
       }
     else if (path === '/api/admin/membership/stats')
-      body = { stats: { active: 1, managed: 1, received: '15' }, refresh }
+      body = { stats: { active: 1, managed: 1, internalActive: 0, received: '15' }, refresh }
     await route.fulfill({ status: 200, json: body })
   })
 })

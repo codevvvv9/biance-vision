@@ -1,5 +1,6 @@
 import { memberCalls } from '../../membership/context.js'
 import { activeMembership, exactProfile, membershipError } from '../../membership/service.js'
+import { assertResearchAccess } from '../../membership/access.js'
 import { MembershipPlanSchema } from 'biance-vision-brooks'
 /**
  * 研究运行持久化（RunStore 的 PG 实现）与进程内进度总线。
@@ -286,7 +287,15 @@ export async function createRun(input: {
   userId: string
   create: ResearchRunCreate
   conversationId?: string
+  /** 调用方来源（服务端内部控制流，不进入任何 HTTP schema，客户端无法伪造）：
+   * - 'user'（默认，收紧）：用户触发的创建——HTTP 入口有 preHandler，此处兜底覆盖
+   *   会话消息→createRun 路径（conversation.ts），每次触发重新判权；无研究授权即 403。
+   * - 'system'：进程内受信任调用（evalRunner 评测/冒烟脚本），显式豁免会员判定。 */
+  source?: 'user' | 'system'
 }): Promise<ResearchRunRow> {
+  // 用户路径兜底门禁（HTTP 入口已有 preHandler；此处覆盖会话消息→createRun 路径，
+  // 每次触发重新判权）。system 仅供进程内受信任调用（评测/冒烟），不进入任何 HTTP schema。
+  if (input.source !== 'system') await assertResearchAccess(input.userId)
   const asOf = input.create.asOf ?? Date.now()
   // P1-1 场景：显式传入优先；缺省按产品+引用推导（历史复盘 asOf 早于创建时刻 → replay-analysis）。
   // 2026-10-20 评审 #5：先算场景再冻结——freezeRunConfig 需按 (name, scene) 冻结提示词集

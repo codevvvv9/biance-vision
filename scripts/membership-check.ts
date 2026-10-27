@@ -87,8 +87,14 @@ try {
     },
   })
   const plans = await listPlans()
-  assert.equal(plans.length, 4)
-  assert.ok(plans.every((p) => !p.enabled && !p.publishedVersionId))
+  // 0038 起 internal 固定套餐由迁移种子自动发布+上架（0 价/不公开/含 research）；
+  // 其余四个仍是未发布草稿
+  assert.equal(plans.length, 5)
+  const internalPlan = plans.find((p) => p.id === 'internal')!
+  assert.ok(internalPlan.enabled && internalPlan.publishedVersionId)
+  assert.equal(internalPlan.draft.price, '0')
+  assert.equal(internalPlan.draft.public, false)
+  assert.ok(plans.every((p) => p.id === 'internal' || (!p.enabled && !p.publishedVersionId)))
   const trial = plans.find((p) => p.id === 'trial')!,
     monthly = plans.find((p) => p.id === 'monthly')!,
     lifetime = plans.find((p) => p.id === 'lifetime')!

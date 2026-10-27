@@ -71,7 +71,8 @@ export function MembershipGrantFields({
           }}
           options={published.map((p) => ({
             value: p.publishedVersionId!,
-            label: `${p.draft.name} / ${p.draft.nameEn} · v${p.versions.find((v) => v.id === p.publishedVersionId)?.revision}`,
+            // internal 套餐加「（内部）」标记，防止运营误当正式套餐授予
+            label: `${p.draft.name} / ${p.draft.nameEn} · v${p.versions.find((v) => v.id === p.publishedVersionId)?.revision}${p.id === 'internal' ? ` · ${L('internalPlanTag')}` : ''}`,
           }))}
         />
       </Form.Item>

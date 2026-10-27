@@ -972,6 +972,8 @@
     "membershipRenew": "会员 / 续费",
     "managedMembers": "已绑定会员",
     "activeMembers": "有效会员",
+    "internalMembers": "内部账号",
+    "internalPlanTag": "内部",
     "receivedTotalUsdt": "累计实收 USDT"
   }
 }

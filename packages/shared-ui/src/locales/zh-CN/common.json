@@ -61,6 +61,13 @@
   },
   "membership": {
     "retry": "重试",
+    "researchGateTitle": "研究终端为会员功能",
+    "researchGateBody": "当前账号暂未开通研究权限。开通会员或内部账号后即可发起研究；已有研究会话仍可查看。",
+    "researchGateContact": "联系开通",
+    "researchGateHistory": "查看历史研究",
+    "researchGateRefreshFailed": "会员状态刷新失败，当前展示最近一次状态；期间服务端仍会逐次校验研究权限。",
+    "researchGateReadonly": "只读模式：研究权限未生效，可查看历史与取消任务，不能发起新研究。",
+    "researchGateLoadFailedTitle": "无法获取会员状态",
     "legacyAccount": "待迁移账号",
     "trial": "试用中",
     "active": "会员有效",

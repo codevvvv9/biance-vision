@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthContext'
 import { useMarket } from '../market/MarketContext'
 import { useAi } from '../ai/AiContext'
+import { useResearchAccess } from '../membership/access'
 import { fmtPct, fmtPrice } from '../utils'
 import { currentLocale } from '../i18n'
 import { notificationState, requestNotifications } from '../notify'
@@ -16,13 +17,17 @@ interface Tab {
   to: string
   labelKey: string
   end?: boolean
+  /** 声明式可见性谓词（OCP：按属性控显的 tab 注册自己的谓词，渲染逻辑通用）；
+   * 不注册（缺省）对所有登录用户可见。返回 false 时数据未到也不渲染（先隐藏后出现）。 */
+  visible?: (researchAccess: { allowed: boolean }) => boolean
 }
 
 const TABS: Tab[] = [
   { to: '/dashboard', labelKey: 'nav.overview', end: true },
   // 异动榜/预警中心入口暂时隐藏（聚焦研究 agent 三场景建议）；路由保留，直达链接仍可用
   { to: '/brooks', labelKey: 'nav.priceAction' },
-  { to: '/research', labelKey: 'nav.research' },
+  // 研究终端为会员能力（docs/specs/membership.md）：仅当前有效套餐 research 特性可用时显示入口
+  { to: '/research', labelKey: 'nav.research', visible: (a) => a.allowed },
 ]
 
 const QUICK = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
@@ -116,6 +121,7 @@ export default function Header(): JSX.Element {
   const { status, soundOn, toggleSound, upColor, toggleUpColor } = useMarket()
   const ai = useAi()
   const { user, logout } = useAuth()
+  const researchAccess = useResearchAccess()
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [perm, setPerm] = useState<NotificationPermissionState>(notificationState())
@@ -160,7 +166,7 @@ export default function Header(): JSX.Element {
       </div>
 
       <nav className="nav">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => !tab.visible || tab.visible(researchAccess)).map((tab) => (
           <NavLink key={tab.to} to={tab.to} end={tab.end} className={({ isActive }) => (isActive ? 'on' : '')}>
             {t(tab.labelKey)}
           </NavLink>

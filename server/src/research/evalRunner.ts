@@ -146,6 +146,8 @@ async function evalDialog(items: DialogItem[]): Promise<{ metrics: Record<string
   for (const item of items) {
     const run = await createRun({
       userId: 'eval-dialog',
+      // 进程内评测调用：显式系统豁免（不挂 HTTP、不经用户路径，客户端无法伪造 source）
+      source: 'system',
       create: {
         product: item.product ?? 'teaching',
         symbol: item.symbol,
@@ -197,6 +199,8 @@ async function evalReplay(items: ReplayItem[]): Promise<{ metrics: Record<string
   for (const item of items) {
     const run = await createRun({
       userId: 'eval-replay',
+      // 进程内评测调用：显式系统豁免（不挂 HTTP、不经用户路径，客户端无法伪造 source）
+      source: 'system',
       create: {
         product: 'teaching',
         symbol: item.symbol,

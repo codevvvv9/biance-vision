@@ -775,7 +775,7 @@ function MembershipStats() {
     store = useMemo(
       () =>
         createPollingStore<{
-          stats: { managed: number; active: number; received: string }
+          stats: { managed: number; active: number; internalActive: number; received: string }
           refresh: MembershipRefresh
         }>({
           load: (signal) => api('/admin/membership/stats', { signal }),
@@ -790,6 +790,7 @@ function MembershipStats() {
       <Space wrap>
         {L('managedMembers')}: {r.data?.stats?.managed ?? '—'} ·{' '}
         {L('activeMembers')}: {r.data?.stats?.active ?? '—'} ·{' '}
+        {L('internalMembers')}: {r.data?.stats?.internalActive ?? '—'} ·{' '}
         {L('receivedTotalUsdt')}: {r.data?.stats?.received ?? '—'}
       </Space>
     </Card>

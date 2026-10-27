@@ -56,4 +56,16 @@ export const membership = {
   serverTime: 1792972800000,
   refresh,
   contacts: { telegram: 'test_contact', email: 'test@example.test' },
+  access: { research: { allowed: true, source: 'membership', reason: null } },
+}
+/** 非会员形态（研究门禁引导卡场景）：无 current、access 拒绝（no_access） */
+export const membershipDenied = {
+  ...membership,
+  managed: false,
+  status: 'legacy',
+  current: null,
+  upcoming: [],
+  usedToday: 0,
+  remainingToday: null,
+  access: { research: { allowed: false, source: null, reason: 'no_access' } },
 }
