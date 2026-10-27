@@ -35,9 +35,6 @@ export const RENAME_COLUMN_MAP: ReadonlyArray<{ table: string; column: string }>
   { table: 'portfolio_positions', column: 'user_id' },
   { table: 'predictions', column: 'user_id' },
   { table: 'trader_profiles', column: 'user_id' },
-  { table: 'membership_grants', column: 'username' },
-  { table: 'membership_receipts', column: 'username' },
-  { table: 'membership_redemptions', column: 'username' },
   { table: 'security_leases', column: 'owner' },
 ]
 
@@ -50,6 +47,10 @@ export const CASCADE_FK_TABLES: ReadonlyArray<{ table: string; column: string }>
   { table: 'membership_accounts', column: 'username' },
   { table: 'membership_usage', column: 'username' },
   { table: 'membership_reservations', column: 'username' },
+  // 0037 起链式级联：users → accounts → grants/receipts/redemptions 一语句全迁
+  { table: 'membership_grants', column: 'username' },
+  { table: 'membership_receipts', column: 'username' },
+  { table: 'membership_redemptions', column: 'username' },
 ]
 
 /**
