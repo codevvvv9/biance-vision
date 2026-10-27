@@ -260,6 +260,13 @@
       "when": 1793074655882,
       "tag": "0036_user_rename_fk_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793081641081,
+      "tag": "0037_rename_chained_fk_cascade",
+      "breakpoints": true
     }
   ]
 }
