@@ -60,6 +60,8 @@ export const PUBLIC_ERROR_REGISTRY: Readonly<Record<string, ErrorDefinition>> = 
   ai_rate_limited: { httpStatus: 429, messageKey: 'errors.ai_rate_limited', retryable: true, logLevel: 'warn' },
   rate_limited: { httpStatus: 429, messageKey: 'errors.rate_limited', retryable: true, logLevel: 'warn' },
   login_throttled: { httpStatus: 429, messageKey: 'errors.login_throttled', retryable: true, logLevel: 'warn' },
+  concurrency_limited: { httpStatus: 503, messageKey: 'errors.concurrency_limited', retryable: true, logLevel: 'warn' },
+  region_blocked: { httpStatus: 403, messageKey: 'errors.region_blocked', retryable: false, logLevel: 'info' },
   service_unavailable: { httpStatus: 503, messageKey: 'errors.service_unavailable', retryable: true, logLevel: 'error' },
   security_state_unavailable: { httpStatus: 503, messageKey: 'errors.security_state_unavailable', retryable: true, logLevel: 'error' },
   internal_error: { httpStatus: 500, messageKey: 'errors.internal_error', retryable: false, logLevel: 'error' },

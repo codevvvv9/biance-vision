@@ -8,6 +8,9 @@
  */
 export { api, setUnauthorizedHandler, fetchAdminUsers, updateChatPolicy, cutOffUserChat, fetchAdminConversations, fetchAdminConversation } from './api'
 export type { ApiOptions } from './api'
+export { ApiError } from './api'
+export { apiErrorMessage } from './errors'
+
 export * from './types'
 export * from './utils'
 export { default as i18n, currentLocale, klinechartsLocale, KLINECHARTS_LOCALE } from './i18n'

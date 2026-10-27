@@ -2,6 +2,7 @@ import { brand } from '@biance/brand/identity'
 import { useState, type CSSProperties } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { apiErrorMessage } from '@biance/shared-ui'
 import { useAuth } from '../auth/AuthContext'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
@@ -39,7 +40,7 @@ export default function LoginPage(): JSX.Element {
       clearAuthReturn()
       navigate(from, { replace: true })
     } catch (err) {
-      setError((err as Error).message || t('login.failed'))
+      setError(apiErrorMessage(err) || t('login.failed'))
     } finally {
       setBusy(false)
     }

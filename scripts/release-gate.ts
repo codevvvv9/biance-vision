@@ -25,6 +25,7 @@ const steps: Step[] = [
   { name: '结构引擎自测（36 项）', cmd: 'pnpm brooks:selftest' },
   { name: '产品计算锚点（30 项）', cmd: 'pnpm research:calc-check' },
   { name: '管理端域名门禁（35 项）', cmd: 'pnpm admin:gate-check' },
+  { name: '错误码 i18n 自测（8 项）', cmd: 'pnpm errors:selftest' },
   { name: '登录回归（入口同构/计数/锁定，需 PG）', cmd: 'pnpm login:regression', skip: skipDb },
   { name: 'chatPolicy 原子成功累计（P1-3/C，需 PG）', cmd: 'pnpm chat:usage-atomic-check', skip: skipDb },
   { name: "共享限流原语（P1-2，需 PG）", cmd: "pnpm rate-limit:atomic-check", skip: skipDb },
