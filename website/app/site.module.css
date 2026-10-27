@@ -482,7 +482,7 @@
 
 /* DuckStrat: full-viewport hero — one fused copy+narrative panel on the left, the game on the right. */
 .site :global(.hero-wide) { position: relative; display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr); gap: clamp(28px, 3vw, 52px); align-items: stretch; width: 100%; max-width: 1760px; margin-inline: auto; min-height: calc(100vh - 89px); min-height: calc(100svh - 89px); padding: 64px clamp(24px, 4.5vw, 72px) 24px; }
-.site :global(.hero-wide .hero-intro) { align-self: center; }
+.site :global(.hero-wide .hero-intro) { align-self: stretch; }
 .site :global(.hero-game) { align-self: stretch; min-height: 0; display: flex; }
 .site :global(.hero-game > *) { flex: 1; min-width: 0; }
 /* Fused panel: copy strip and the narrative duck share one card (same shell language as the scene cards). */
@@ -494,8 +494,8 @@
 .site :global(.hero-intro .hero-copy > p) { font-size: 13px; margin: 8px 0 0; line-height: 1.9; }
 .site :global(.hero-intro .button-row) { margin-top: 13px; justify-content: flex-start; }
 .site :global(.hero-intro .hero-footnote) { margin-top: 12px; justify-content: flex-start; font-size: 7px; gap: 9px; letter-spacing: .7px; }
-/* DuckHero fused in: nested card shell stripped, and the scene width follows the viewport height so the panel always fits the hero with real slack. Its meaning line is dropped here — the game card on the right carries the same words. Height budget: 89px header + 64px hero pad + ~334px panel chrome + 24px bottom pad + ~74px slack for font-render variance; 1.556 = 560/360; 1400px keeps giant-portrait scenes sane. */
-.site :global(.hero-intro > section) { border: 0; background: none; box-shadow: none; padding: 10px 2px 0; width: min(100%, max(240px, min(1400px, calc((100svh - 585px) * 1.556)))); margin: 10px auto 0; }
+/* DuckHero fused in: nested card shell stripped, and the scene width follows the viewport height so the panel always fits the hero with real slack. Its meaning line is dropped here — the game card on the right carries the same words. The intro panel stretches flush with the game card (shared top/bottom baselines): copy strip owns the top, the scene is pinned to the bottom via margin-top auto, and the flexible gap between them carries the font-render tolerance. Height budget: 89px header + 64px hero pad + ~334px panel chrome + 24px bottom pad + ~74px slack; the scene reclaims ~36px of that slack, leaving ~38px of breathing gap on mainstream heights. 1.556 = 560/360; 1400px keeps giant-portrait scenes sane. */
+.site :global(.hero-intro > section) { border: 0; background: none; box-shadow: none; padding: 10px 2px 0; width: min(100%, max(240px, min(1400px, calc((100svh - 549px) * 1.556)))); margin: auto auto 0; }
 .site :global(.hero-intro > section > div:nth-child(3)) { min-height: 40px; }
 .site :global(.hero-intro > section > div:nth-child(4)) { padding-top: 8px; margin-top: 6px; }
 .site :global(.hero-intro > section > p:last-child) { display: none; }
