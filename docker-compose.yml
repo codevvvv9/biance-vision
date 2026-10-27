@@ -89,7 +89,7 @@ services:
       BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
       # 登录限流/幂等等安全状态的主体哈希 key（32B hex）：本地开发给固定默认值零配置可跑；
       # 生产由 deploy/vps/compose.override.yml 强制注入真实值（:?set in .env）
-      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:-6c6f63616c2d6465762d6f6e6c792d68656b657921}
+      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:-304ee4918fb7fe9a4133a2228f23aa31a8a83af0f56b656623ea6535dc5e7fc1}
 
     # JSON 镜像 + seed-users.json + secrets.json 放宿主机这份目录，容器重建数据不丢
     volumes:
@@ -120,7 +120,7 @@ services:
       BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
       # 登录限流/幂等等安全状态的主体哈希 key（32B hex）：本地开发给固定默认值零配置可跑；
       # 生产由 deploy/vps/compose.override.yml 强制注入真实值（:?set in .env）
-      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:-6c6f63616c2d6465762d6f6e6c792d68656b657921}
+      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:-304ee4918fb7fe9a4133a2228f23aa31a8a83af0f56b656623ea6535dc5e7fc1}
 
     volumes:
       - ./server/data:/app/server/data
@@ -147,7 +147,7 @@ services:
       BV_AUTO_MIGRATE: "0" # 迁移由 migrate 容器先行（W3-S2）
       # 登录限流/幂等等安全状态的主体哈希 key（32B hex）：本地开发给固定默认值零配置可跑；
       # 生产由 deploy/vps/compose.override.yml 强制注入真实值（:?set in .env）
-      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:-6c6f63616c2d6465762d6f6e6c792d68656b657921}
+      BV_SUBJECT_HMAC_KEY: ${BV_SUBJECT_HMAC_KEY:-304ee4918fb7fe9a4133a2228f23aa31a8a83af0f56b656623ea6535dc5e7fc1}
 
     volumes:
       - ./server/data:/app/server/data
