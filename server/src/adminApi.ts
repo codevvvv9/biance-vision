@@ -38,6 +38,7 @@ import { registerAdminRoutes } from './admin/routes.js'
 import { registerInsightsAdminRoutes } from './admin/insightsRoutes.js'
 import { registerWebsiteSettingsRoutes } from './admin/websiteSettings.js'
 import { registerProvisionUserRoutes } from './admin/provisionUsers.js'
+import { registerRenameUserRoutes } from './admin/renameUser.js'
 import { refreshCapabilities } from './admin/capabilities.js'
 import {
   aiModelName,
@@ -147,6 +148,7 @@ registerAdminRoutes(app, { requireSuperadmin })
 registerInsightsAdminRoutes(app, { requireSuperadmin })
 registerWebsiteSettingsRoutes(app, { requireSuperadmin })
 registerProvisionUserRoutes(app, { requireSuperadmin })
+registerRenameUserRoutes(app, { requireSuperadmin })
 registerMembershipAdminRoutes(app, { requireSuperadmin })
 
 // 知识库（multipart 上传；解析入队由共享 pg-boss 交给 worker 消费）

@@ -13,6 +13,9 @@ importers:
       '@types/node':
         specifier: ^22.5.0
         version: 22.20.4
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(pg@8.23.0)(postgres@3.4.9)
       fastify:
         specifier: ^4.28.1
         version: 4.29.1

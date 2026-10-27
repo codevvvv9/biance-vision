@@ -26,6 +26,8 @@ jobs:
       # release:gate 本地门槛，依赖库内行情数据，不在无状态 CI 里伪造环境）
       - run: pnpm website:check
       - run: pnpm check:i18n
+        # 改名级联清单门禁：新表带用户列未登记 RENAME_COLUMN_MAP 直接红（防静默丢关联）
+      - run: pnpm user:rename-map-check
         # i18n 门禁：词典 zh/en 一致 + admin 页面 t()/text() 用到的 key 必须在词典
         # （v0.18.2 前队列页 18 个 key 漏录线上满屏回显 ui.colQueue 的事故锚点）
       - run: pnpm typecheck

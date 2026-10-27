@@ -85,10 +85,20 @@ export const saveAccess = (username: string, access: Access) =>
       },
     },
   );
-export const resetCredentials = (username: string) =>
+export const resetCredentials = (username: string, password?: string) =>
   api<{ password: string }>(
     `/admin/users/${encodeURIComponent(username)}/reset-credentials`,
-    { method: "POST", body: {} },
+    { method: "POST", body: password ? { password } : {} },
+  );
+export interface RenameResult {
+  from: string;
+  to: string;
+  migrated: Record<string, number>;
+}
+export const renameUser = (username: string, to: string) =>
+  api<RenameResult>(
+    `/admin/users/${encodeURIComponent(username)}/rename`,
+    { method: "POST", body: { to } },
   );
 export const loadAudit = (username: string) =>
   api<{ records: AuditRecord[]; usernames: string[] }>(
