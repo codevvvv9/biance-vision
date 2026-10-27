@@ -21,6 +21,7 @@ import {
   loadAudit,
 } from "./features/panel/api";
 import { ProvisionUserPanel } from "./ProvisionUserPanel";
+import { RenameUserPanel } from "./RenameUserPanel";
 import { UserAccessPanel } from "./UserAccessPanel";
 import { WebsiteSettings } from "./WebsiteSettings";
 import { useResource } from "./ui/resource";
@@ -69,7 +70,8 @@ function Users(): JSX.Element {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
-    [accessUser, setAccessUser] = useState<string | null>(null);
+    [accessUser, setAccessUser] = useState<string | null>(null),
+    [renameTarget, setRenameUser] = useState<string | null>(null);
   const run = async (op: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true);
@@ -201,6 +203,15 @@ function Users(): JSX.Element {
                       {text("quotaCredentials")}
                     </Button>
                   )}
+                  {user.role === "user" && (
+                    <Button
+                      size="small"
+                      disabled={busy}
+                      onClick={() => setRenameUser(user.username)}
+                    >
+                      {text("renameUser")}
+                    </Button>
+                  )}
                   <Button
                     size="small"
                     danger
@@ -221,6 +232,13 @@ function Users(): JSX.Element {
           key={accessUser}
           username={accessUser}
           onClose={() => setAccessUser(null)}
+        />
+      )}
+      {renameTarget && (
+        <RenameUserPanel
+          username={renameTarget}
+          onClose={() => setRenameUser(null)}
+          onRenamed={() => void resource.reload()}
         />
       )}
     </div>

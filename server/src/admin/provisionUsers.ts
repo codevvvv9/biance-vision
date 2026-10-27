@@ -109,11 +109,15 @@ export function registerProvisionUserRoutes(app: FastifyInstance, deps: { requir
     const db = getDb()
     const target = db ? (await db.select({ role: users.role }).from(users).where(eq(users.username, username)).limit(1))[0] : null
     if (!target || target.role !== 'user') throw bad('仅可重置普通用户的交付密码', 404)
+    // 请求体可选：自定义密码（4~64 位，与 createUser 同规则）；缺省则生成随机交付密码
+    const parsed = z.object({ password: z.string().min(4).max(64) }).partial().strict().safeParse(req.body ?? {})
+    if (!parsed.success) throw bad('密码长度需在 4~64 位之间')
+    const custom = typeof parsed.data.password === 'string' && parsed.data.password.length > 0
+    const password = custom ? parsed.data.password as string : crypto.randomBytes(18).toString('base64url')
     await initUsers({ seed: false })
-    const password = crypto.randomBytes(18).toString('base64url')
     await updatePassword(username, password)
-    recordAudit(session, { action: 'settings_update', target: username, detail: '重置交付密码并使现有会话失效' })
+    recordAudit(session, { action: 'settings_update', target: username, detail: custom ? '设置自定义交付密码并使现有会话失效' : '重置交付密码并使现有会话失效' })
     reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache')
-    return { username, password }
+    return { username, password, custom }
   })
 }

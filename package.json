@@ -36,6 +36,7 @@
     "observability:gate-check": "tsx scripts/observability-gate-check.ts",
     "research:calc-check": "tsx scripts/perp-event-calc-check.ts",
     "admin:gate-check": "tsx scripts/admin-gate-check.ts",
+    "user:rename-map-check": "tsx scripts/user-rename-map-check.ts",
     "login:regression": "tsx scripts/login-regression.ts",
     "research:p1-check": "tsx scripts/p1-regression-check.ts",
     "eval:conversations": "tsx scripts/eval-conversations.ts",
@@ -67,6 +68,7 @@
     "@types/node": "^22.5.0",
     "fastify": "^4.28.1",
     "tsx": "^4.19.0",
+    "drizzle-orm": "0.45.2",
     "typescript": "^5.6.0"
   },
   "pnpm": {

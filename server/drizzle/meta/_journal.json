@@ -253,6 +253,13 @@
       "when": 1792972800000,
       "tag": "0035_membership",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793074655882,
+      "tag": "0036_user_rename_fk_cascade",
+      "breakpoints": true
     }
   ]
 }

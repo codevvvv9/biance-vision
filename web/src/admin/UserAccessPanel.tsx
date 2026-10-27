@@ -60,10 +60,11 @@ function AccessDialog({
     [baseline, setBaseline] = useState(JSON.stringify(initial)),
     [busy, setBusy] = useState(false),
     [password, setPassword] = useState(""),
+    [custom, setCustom] = useState(""),
     [error, setError] = useState(""),
     [success, setSuccess] = useState("");
   const dirty = JSON.stringify(access) !== baseline;
-  useDirtyForm(dirty || Boolean(password));
+  useDirtyForm(dirty || Boolean(password) || Boolean(custom));
   const close = async () => {
     if (!busy && (await discard(dirty || Boolean(password)))) onClose();
   };
@@ -82,12 +83,12 @@ function AccessDialog({
       setBusy(false);
     }
   };
-  const reset = async () => {
+  const reset = async (pwd?: string) => {
     if (
       busy ||
       !(await modal.confirm({
         getContainer: overlayContainer,
-        title: text("resetPassword"),
+        title: pwd ? text("setCustomPassword") : text("resetPassword"),
         content: text("resetPasswordImpact", { username }),
         okText: text("confirm"),
         cancelText: text("cancel"),
@@ -98,7 +99,8 @@ function AccessDialog({
     setError("");
     setPassword("");
     try {
-      setPassword((await resetCredentials(username)).password);
+      setPassword((await resetCredentials(username, pwd || undefined)).password);
+      setCustom("");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -164,7 +166,28 @@ function AccessDialog({
       ) : (
         <p>{text("legacyQuota")}</p>
       )}
-      <Space wrap style={{ marginTop: 16 }}>
+      <Form layout="vertical" style={{ marginTop: 16 }}>
+        <Form.Item label={text("setCustomPassword")} htmlFor="custom-password" style={{ marginBottom: 8 }}>
+          <Space.Compact style={{ width: "100%" }}>
+            <Input.Password
+              id="custom-password"
+              aria-label={text("setCustomPassword")}
+              autoComplete="new-password"
+              placeholder={text("customPasswordPlaceholder")}
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              disabled={busy}
+            />
+            <Button
+              disabled={busy || custom.length < 4 || custom.length > 64}
+              onClick={() => void reset(custom)}
+            >
+              {text("save")}
+            </Button>
+          </Space.Compact>
+        </Form.Item>
+      </Form>
+      <Space wrap style={{ marginTop: 8 }}>
         <Button danger disabled={busy} onClick={() => void reset()}>
           {text("resetPassword")}
         </Button>
