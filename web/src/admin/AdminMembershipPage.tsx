@@ -24,7 +24,7 @@ import {
 } from 'biance-vision-brooks'
 import { api } from '../api'
 import { usePolling } from '../membership/polling'
-import { useMemberLabel } from './MembershipForms'
+import { useMemberLabel, AMOUNT_RE } from './MembershipForms'
 import { MemberUserPanel } from './MemberUserPanel'
 import { Modal, overlayContainer } from './ui/overlays'
 import { useDirtyForm, useConfirmDiscard } from './ui/forms'
@@ -44,10 +44,27 @@ function PlanEditor({
     [id, setId] = useState(record.id),
     [value, setValue] = useState(record.draft),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false)
+    [busy, setBusy] = useState(false),
+    [submitted, setSubmitted] = useState(false)
   const dirty =
     id !== record.id || JSON.stringify(value) !== JSON.stringify(record.draft)
   useDirtyForm(dirty)
+  // 提交前校验（规则与服务端 savePlan 契约一致）：返回词典 key，空对象=可提交；
+  // 首次提交后才展示文案，随填写实时消隐
+  const errors: Record<string, string> = {}
+  if (!id.trim()) errors.id = 'planIdRequired'
+  else if (!/^[a-zA-Z0-9_-]{1,40}$/.test(id)) errors.id = 'planIdFormat'
+  if (!value.name.trim()) errors.name = 'nameRequired'
+  else if (value.name.trim().length > 80) errors.name = 'nameTooLong'
+  if (!value.nameEn.trim()) errors.nameEn = 'nameEnRequired'
+  else if (value.nameEn.trim().length > 80) errors.nameEn = 'nameTooLong'
+  if (!AMOUNT_RE.test(value.price)) errors.price = 'amountFormat'
+  if (!AMOUNT_RE.test(value.introPrice)) errors.introPrice = 'amountFormat'
+  const invalid = Object.keys(errors).length > 0,
+    show = (k: keyof typeof errors) =>
+      submitted && errors[k]
+        ? { validateStatus: 'error' as const, help: L(errors[k]) }
+        : {}
   const field = <K extends keyof MembershipPlan>(
     key: K,
     v: MembershipPlan[K],
@@ -89,6 +106,8 @@ function PlanEditor({
       <Form
         layout="vertical"
         onFinish={async () => {
+          setSubmitted(true)
+          if (invalid) return
           setBusy(true)
           setError('')
           try {
@@ -105,7 +124,11 @@ function PlanEditor({
           }
         }}
       >
-        <Form.Item label={L('planIdentifier')}>
+        <Form.Item
+          label={L('planIdentifier')}
+          required={record.revision === 0}
+          {...show('id')}
+        >
           <Input
             aria-label="Plan identifier"
             value={id}
@@ -115,16 +138,19 @@ function PlanEditor({
           />
         </Form.Item>
         <Space wrap>
-          <Form.Item label={L('chineseName')}>
+          <Form.Item label={L('chineseName')} required {...show('name')}>
             <Input
               aria-label="Chinese plan name"
               value={value.name}
+              maxLength={80}
               onChange={(e) => field('name', e.target.value)}
             />
           </Form.Item>
-          <Form.Item label="English name">
+          <Form.Item label="English name" required {...show('nameEn')}>
             <Input
+              aria-label="English plan name"
               value={value.nameEn}
+              maxLength={80}
               onChange={(e) => field('nameEn', e.target.value)}
             />
           </Form.Item>
@@ -168,15 +194,24 @@ function PlanEditor({
           </Form.Item>
         </Space>
         <Space wrap>
-          <Form.Item label={L('regularPriceUsdt')}>
+          <Form.Item
+            label={L('regularPriceUsdt')}
+            required
+            {...show('price')}
+          >
             <Input
               aria-label="Regular price"
               value={value.price}
               onChange={(e) => field('price', e.target.value)}
             />
           </Form.Item>
-          <Form.Item label={L('introductoryPriceUsdt')}>
+          <Form.Item
+            label={L('introductoryPriceUsdt')}
+            required
+            {...show('introPrice')}
+          >
             <Input
+              aria-label="Introductory price"
               value={value.introPrice}
               onChange={(e) => field('introPrice', e.target.value)}
             />
@@ -265,7 +300,6 @@ function PlanEditor({
           type="primary"
           htmlType="submit"
           loading={busy}
-          disabled={!id}
         >
           {L('saveDraft')}
         </Button>
@@ -433,6 +467,9 @@ function CampaignForm({
     [baseline, setBaseline] = useState(initial),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
+    [submitted, setSubmitted] = useState(false),
+    // 服务端契约：活动名称 1-100 字符
+    nameError = value.name.trim() ? '' : 'campaignNameRequired',
     dirty = JSON.stringify(value) !== JSON.stringify(baseline)
   useEffect(() => {
     if (!dirty) {
@@ -445,6 +482,8 @@ function CampaignForm({
     <Form
       layout="vertical"
       onFinish={async () => {
+        setSubmitted(true)
+        if (nameError) return
         setBusy(true)
         setError('')
         try {
@@ -473,9 +512,16 @@ function CampaignForm({
         {L('capacityUsedRemaining')}: {initial.capacity} / {initial.used} /{' '}
         {initial.remaining}
       </p>
-      <Form.Item label={L('campaignName')}>
+      <Form.Item
+        label={L('campaignName')}
+        required
+        validateStatus={submitted && nameError ? 'error' : undefined}
+        help={submitted && nameError ? L(nameError) : undefined}
+      >
         <Input
+          aria-label="Campaign name"
           value={value.name}
+          maxLength={100}
           onChange={(e) => setValue({ ...value, name: e.target.value })}
         />
       </Form.Item>

@@ -8,6 +8,45 @@ export function useMemberLabel() {
   const { t } = useTranslation('admin')
   return (key: string) => t(`membership.${key}`)
 }
+/** 金额格式契约（与服务端 zod 一致）：1-8 位整数，可选 1-6 位小数 */
+export const AMOUNT_RE = /^\d{1,8}(\.\d{1,6})?$/
+/** 与服务端 micros() 等价的金额相等判定：去小数尾零后字符串比较 */
+export function sameAmount(a: string, b: string): boolean {
+  const norm = (s: string) => {
+    const m = /^(\d+)(?:\.(\d*))?$/.exec(s.trim())
+    return m ? `${m[1]}.${(m[2] ?? '').replace(/0+$/, '')}` : null
+  }
+  const x = norm(a),
+    y = norm(b)
+  return x !== null && y !== null && x === y
+}
+export type GrantFieldErrors = Partial<
+  Record<'versionId' | 'paidAmount' | 'note', string>
+>
+/** 授予表单提交前校验（规则对应服务端契约），返回待翻译的词典 key；
+ * 空对象 = 可提交。versionId 必选；实收须为金额格式；实收与套餐价
+ * 不一致时备注必填（useIntro 生效时预期价为优惠价）。 */
+export function grantFieldErrors(
+  value: MembershipGrantInput,
+  plans: MembershipPlanRecord[],
+): GrantFieldErrors {
+  const e: GrantFieldErrors = {},
+    published = plans.filter((p) => p.enabled && p.publishedVersionId),
+    config = published
+      .find((p) => p.publishedVersionId === value.versionId)
+      ?.versions.find((v) => v.id === value.versionId)?.config
+  if (!value.versionId) e.versionId = 'planRequired'
+  if (!AMOUNT_RE.test(value.paidAmount)) e.paidAmount = 'amountFormat'
+  const expected = value.useIntro ? config?.introPrice : config?.price
+  if (
+    config &&
+    expected !== undefined &&
+    !sameAmount(expected, value.paidAmount) &&
+    !value.note.trim()
+  )
+    e.note = 'noteRequiredOnMismatch'
+  return e
+}
 export function newGrant(): MembershipGrantInput {
   return {
     operationId: crypto.randomUUID(),
@@ -26,18 +65,33 @@ export function MembershipGrantFields({
   onChange,
   plans,
   managed = false,
+  submitted = false,
 }: {
   value: MembershipGrantInput
   onChange: (v: MembershipGrantInput) => void
   plans: MembershipPlanRecord[]
   managed?: boolean
+  /** 首次提交后置 true：字段错误文案随填写实时消隐，避免一打开就满屏红 */
+  submitted?: boolean
 }) {
   const L = useMemberLabel(),
     set = (patch: Partial<MembershipGrantInput>) =>
       onChange({ ...value, ...patch })
   const published = plans.filter((p) => p.enabled && p.publishedVersionId),
     selected = published.find((p) => p.publishedVersionId === value.versionId),
-    config = selected?.versions.find((v) => v.id === value.versionId)?.config
+    config = selected?.versions.find((v) => v.id === value.versionId)?.config,
+    err = submitted ? grantFieldErrors(value, plans) : {},
+    fieldProps = (k: keyof GrantFieldErrors) =>
+      err[k]
+        ? { validateStatus: 'error' as const, help: L(err[k]!) }
+        : {},
+    /** 实收与预期价不一致 → 备注变为必填，红星即时提示（不必等提交） */
+    noteRequired =
+      !!config &&
+      !sameAmount(
+        value.useIntro ? config.introPrice : config.price,
+        value.paidAmount,
+      )
   return (
     <>
       {managed && (
@@ -54,7 +108,7 @@ export function MembershipGrantFields({
           />
         </Form.Item>
       )}
-      <Form.Item label={L('publishedPlan')} required>
+      <Form.Item label={L('publishedPlan')} required {...fieldProps('versionId')}>
         <Select
           aria-label="Membership plan"
           value={value.versionId || undefined}
@@ -107,7 +161,11 @@ export function MembershipGrantFields({
         </Form.Item>
       )}
       <Space wrap align="start">
-        <Form.Item label={L('receivedUsdt')} required>
+        <Form.Item
+          label={L('receivedUsdt')}
+          required
+          {...fieldProps('paidAmount')}
+        >
           <Input
             aria-label="Paid amount"
             value={value.paidAmount}
@@ -137,7 +195,11 @@ export function MembershipGrantFields({
           onChange={(e) => set({ paymentReference: e.target.value })}
         />
       </Form.Item>
-      <Form.Item label={L('noteRequiredWhenPaymentDiffersFromPrice')}>
+      <Form.Item
+        label={L('noteRequiredWhenPaymentDiffersFromPrice')}
+        required={noteRequired}
+        {...fieldProps('note')}
+      >
         <Input.TextArea
           value={value.note}
           maxLength={1000}
