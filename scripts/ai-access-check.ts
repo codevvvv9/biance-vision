@@ -28,6 +28,7 @@ try {
   const { initUsers, verifyLogin, createSession, findSession, findLiveSession } = await import('../server/src/users.js')
   const { saveAiProfiles, resolveAiProfileName } = await import('../server/src/ai.js')
   const { provisionUser, registerProvisionUserRoutes } = await import('../server/src/admin/provisionUsers.js')
+  const { provisionLoginPath } = await import('../server/src/membership/routes.js')
   const { saveWebsiteContacts, readWebsiteContacts, registerWebsiteSettingsRoutes } = await import('../server/src/admin/websiteSettings.js')
   const { reserveAiAccess, refundAiAccess, readAiAccess, registerAiAccessGuard } = await import('../server/src/aiAccess.js')
   assert.equal(await initDb(), true)
@@ -36,6 +37,17 @@ try {
   const input = { username: 'trial_user', profileName: 'default', totalLimit: 3, dailyLimit: null, requestsPerMinute: 60 }
   const account = await provisionUser(input, 'test-admin')
   assert.equal(account.publicOrigin, 'https://user.example.test')
+  // 交付登录链接默认落在 /brooks（研究端有会员门禁，trial 类账号跳 /research 会被挡）
+  assert.equal(account.loginPath, '/login?ui=dev&returnTo=%2Fbrooks')
+  // .env（PROVISION_LOGIN_PATH）可免发版覆盖落地页；外站/非法值一律回退默认
+  process.env.PROVISION_LOGIN_PATH = '/login?ui=dev&returnTo=%2Fdashboard'
+  assert.equal(provisionLoginPath(), '/login?ui=dev&returnTo=%2Fdashboard')
+  process.env.PROVISION_LOGIN_PATH = 'https://evil.example.test/phish'
+  assert.equal(provisionLoginPath(), '/login?ui=dev&returnTo=%2Fbrooks')
+  process.env.PROVISION_LOGIN_PATH = '//protocol-relative.example.test'
+  assert.equal(provisionLoginPath(), '/login?ui=dev&returnTo=%2Fbrooks')
+  delete process.env.PROVISION_LOGIN_PATH
+  assert.equal(provisionLoginPath(), '/login?ui=dev&returnTo=%2Fbrooks')
   assert.equal(account.role, 'user'); assert.equal(account.password.length, 24)
   assert.ok(verifyLogin(account.username, account.password)); assert.equal(resolveAiProfileName(account.username), 'default')
   assert.equal((await readAiAccess(account.username))?.used, 0)
@@ -43,7 +55,7 @@ try {
   const rows = await db.execute(sql`SELECT password_hash FROM users WHERE username = ${account.username}`)
   assert.notEqual(rows[0].password_hash, account.password)
   assert.ok(!JSON.stringify(await readAiAccess(account.username)).includes(account.password))
-  pass('普通用户、scrypt 密码、档案绑定、初始额度一次保存成功；交付 URL 使用已配置用户域名')
+  pass('普通用户、scrypt 密码、档案绑定、初始额度一次保存成功；交付 URL 使用已配置用户域名，默认落地 /brooks、env 覆盖生效且外站值回退')
   await assert.rejects(() => provisionUser({ ...input, username: 'missing_profile', profileName: 'missing' }, 'admin'))
   await assert.rejects(() => provisionUser({ ...input, username: 'role_injection', role: 'superadmin' }, 'admin'))
   await assert.rejects(() => provisionUser({ ...input, username: 'TRIAL_USER' }, 'admin'))
