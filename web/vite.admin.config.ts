@@ -92,6 +92,20 @@ export default defineConfig({
   server: {
     port: adminWebPort,
     strictPort: true,
-    proxy: adminApiTarget ? { '/api': { target: adminApiTarget, changeOrigin: true } } : undefined,
+    // 与用户端 vite.config.ts 同款 Origin 归一：changeOrigin 只重写 Host，
+    // 浏览器 Origin（localhost:17844）原样透传会被 sourceGuard 判跨源 →
+    // 登录等写请求 403「跨来源写请求被拒绝」。此处把 Origin 重写为上游
+    // 地址，代理 hop 归一为同源（生产走 Caddy 信任链，无需此改写）。
+    proxy: adminApiTarget ? {
+      '/api': {
+        target: adminApiTarget,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (typeof req.headers.origin === 'string') proxyReq.setHeader('origin', adminApiTarget)
+          })
+        },
+      },
+    } : undefined,
   },
 })
