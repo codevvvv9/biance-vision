@@ -286,7 +286,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: rgba(4, 6, 12, 0.55);
+  background: rgba(12, 17, 28, 0.55);
   color: var(--text-2);
   font-size: 13px;
   z-index: 3;
@@ -1486,7 +1486,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: rgba(10, 16, 30, 0.97);
+  background: rgba(28, 38, 57, 0.97);
   border: 1px solid var(--line-2);
   border-radius: 12px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
@@ -1555,7 +1555,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: rgba(10, 16, 30, 0.97);
+  background: rgba(28, 38, 57, 0.97);
   border: 1px solid var(--line-2);
   border-radius: 12px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
@@ -1651,7 +1651,7 @@
 .md-view th,
 .md-view td { border: 1px solid var(--line-2); padding: 4px 8px; text-align: left; vertical-align: top; white-space: normal; word-break: break-word; }
 .md-view th { background: var(--bg-3); color: var(--text); font-weight: 600; white-space: nowrap; }
-.md-view tbody tr:nth-child(2n) td { background: rgba(16, 26, 46, 0.45); }
+.md-view tbody tr:nth-child(2n) td { background: rgba(38, 51, 73, 0.45); }
 /* 数学公式（rehype-katex）：行内随文，块级独立居中且超宽可横向滚动 */
 .md-view .katex { font-size: 1.06em; }
 .md-view .katex-display { margin: 8px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }

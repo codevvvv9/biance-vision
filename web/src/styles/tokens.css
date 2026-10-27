@@ -1,12 +1,15 @@
 /* Shared brand tokens. Presentation and effects belong to each application. */
 :root {
-  --bg-0: #04060c;
-  --bg-1: #070b14;
-  --bg-2: #0b1120;
-  --bg-3: #101a2e;
-  --line: #1a2438;
-  --line-2: #24304a;
-  --line-3: #33436b;
+  /* 暗色色阶：每档感知亮度(L*)差约 5，浮层(bg-2)对页面(bg-0)差约 10，
+     对齐 antd darkAlgorithm 的层级逻辑（base→elevated 明显可辨）；
+     色相保持科技蓝调（navy+cyan），底色不落到纯黑。 */
+  --bg-0: #0c111c;
+  --bg-1: #131b2b;
+  --bg-2: #1c2639;
+  --bg-3: #263349;
+  --line: #2a3a58;
+  --line-2: #3a4f75;
+  --line-3: #526a96;
 
   --text: #e8eefc;
   --text-1: #c9d6ef;
@@ -29,6 +32,6 @@
   --radius: 14px;
   --radius-sm: 9px;
 
-  --panel-bg: linear-gradient(180deg, rgba(18, 28, 50, 0.72), rgba(10, 16, 30, 0.86));
+  --panel-bg: linear-gradient(180deg, rgba(28, 40, 64, 0.72), rgba(19, 27, 43, 0.86));
   --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
 }

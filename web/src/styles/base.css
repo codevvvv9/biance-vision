@@ -252,7 +252,7 @@ body {
   color: var(--text-2);
   border: 1px solid var(--line-2);
   border-radius: 999px;
-  background: rgba(10, 16, 30, 0.6);
+  background: rgba(28, 38, 57, 0.6);
   white-space: nowrap;
 }
 .conn-dot {
@@ -294,7 +294,7 @@ body {
   height: 30px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-2);
-  background: rgba(10, 16, 30, 0.6);
+  background: rgba(28, 38, 57, 0.6);
   color: var(--text-3);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
@@ -322,7 +322,7 @@ body {
   align-items: center;
   height: 38px;
   border-bottom: 1px solid var(--line);
-  background: rgba(7, 11, 20, 0.66);
+  background: rgba(19, 27, 43, 0.66);
   overflow: hidden;
   position: relative;
 }
@@ -338,7 +338,7 @@ body {
   letter-spacing: 0.22em;
   color: var(--down);
   border-right: 1px solid var(--line);
-  background: rgba(10, 16, 30, 0.6);
+  background: rgba(28, 38, 57, 0.6);
 }
 .tape-empty {
   padding-left: 16px;
