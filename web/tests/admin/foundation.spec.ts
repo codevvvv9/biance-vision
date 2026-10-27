@@ -20,7 +20,7 @@ test('login preserves deep link and errors, logout revokes and permits login aga
   await page.getByLabel('账号', { exact: true }).fill('admin')
   await page.getByLabel('密码', { exact: true }).fill('wrong')
   await page.getByRole('button', { name: '登录管理后台', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Invalid credentials')
+  await expect(page.getByRole('alert')).toContainText('用户名或密码错误')
   await page.getByLabel('密码', { exact: true }).fill('correct')
   await page.getByRole('button', { name: '登录管理后台', exact: true }).click()
   await expect(page.getByRole('heading', { name: '知识库', exact: true })).toBeVisible()
