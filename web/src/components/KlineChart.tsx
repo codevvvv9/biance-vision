@@ -50,7 +50,7 @@ export function ensureStyles(): void {
         last: { upColor: '#00d68f', downColor: '#ff4d6a' },
       },
       tooltip: {
-        rect: { color: 'rgba(10, 16, 30, 0.92)', borderColor: '#24304a' },
+        rect: { color: 'rgba(19, 27, 43, 0.92)', borderColor: '#3a4f75' },
         text: { color: '#8ea0c2' },
       },
     },
@@ -59,16 +59,16 @@ export function ensureStyles(): void {
       tooltip: { text: { color: '#8ea0c2' } },
     },
     xAxis: {
-      axisLine: { color: '#24304a' },
+      axisLine: { color: '#3a4f75' },
       tickText: { color: '#5a6b8c' },
-      tickLine: { color: '#24304a' },
+      tickLine: { color: '#3a4f75' },
     },
     yAxis: {
-      axisLine: { color: '#24304a' },
+      axisLine: { color: '#3a4f75' },
       tickText: { color: '#5a6b8c' },
-      tickLine: { color: '#24304a' },
+      tickLine: { color: '#3a4f75' },
     },
-    separator: { color: '#1a2438' },
+    separator: { color: '#2a3a58' },
     crosshair: {
       horizontal: {
         line: { color: '#3d5a8a' },
