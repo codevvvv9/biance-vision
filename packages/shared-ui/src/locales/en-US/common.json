@@ -43,7 +43,7 @@
     "pageLoading": "Loading page"
   },
   "footer": {
-    "disclaimer": "Data source: Binance public market data (REST + WebSocket, 1s push) · For educational and research use only; not investment advice"
+    "disclaimer": "For educational and research use only; not investment advice"
   },
   "fullscreen": {
     "enter": "Full screen",
