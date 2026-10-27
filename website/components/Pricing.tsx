@@ -47,7 +47,7 @@ export function Pricing({
         }),
       [zh, initial],
     ),
-    { data, error, updatedAt } = useSyncExternalStore(
+    { data, error, loading, updatedAt } = useSyncExternalStore(
       store.subscribe,
       store.getSnapshot,
       store.getSnapshot,
@@ -69,10 +69,18 @@ export function Pricing({
               ? ` · ${zh ? '上次更新' : 'Last updated'} ${new Date(updatedAt).toLocaleTimeString()}`
               : ''}{' '}
             <button
-              className="button button-outline"
-              onClick={() => void store.refresh()}
+              type="button"
+              className="retry-link"
+              onClick={() => void store.refresh(true)}
+              disabled={loading}
             >
-              {zh ? '重试' : 'Retry'}
+              {loading
+                ? zh
+                  ? '正在重试…'
+                  : 'Retrying…'
+                : zh
+                  ? '重试'
+                  : 'Retry'}
             </button>
           </p>
         )}

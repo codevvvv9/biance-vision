@@ -16,7 +16,8 @@ export interface PollingSnapshot<T> {
 export interface PollingStore<T> {
   subscribe(listener: () => void): () => void
   getSnapshot(): PollingSnapshot<T>
-  refresh(): Promise<void>
+  /** `force` bypasses the failure backoff gate — reserved for explicit user retries. */
+  refresh(force?: boolean): Promise<void>
   invalidate(): void
 }
 export function browserPollingEnvironment(): PollingEnvironment {
@@ -134,11 +135,11 @@ export function createPollingStore<T>(options: {
       void refresh()
     }, delay)
   }
-  const refresh = (): Promise<void> => {
+  const refresh = (force = false): Promise<void> => {
     if (flight) return flight
     clear()
     if (!listeners.size || !env.active()) return Promise.resolve()
-    if (retryNotBefore > env.now()) {
+    if (!force && retryNotBefore > env.now()) {
       timer = env.schedule(() => void refresh(), retryNotBefore - env.now())
       return Promise.resolve()
     }

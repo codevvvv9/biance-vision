@@ -24,7 +24,7 @@ export function Header({ locale }: { locale: Locale }) {
       <a className="brand-link" href={`/${locale}`} aria-label={brand.name}><Brand /></a>
       <button className="menu-toggle" aria-expanded={open} aria-controls="main-navigation" onClick={() => setOpen(!open)} aria-label={text(locale, 'Toggle navigation', '展开或收起导航')}><span /><span /></button>
       <nav id="main-navigation" className={`navigation ${open ? 'is-open' : ''}`} aria-label={text(locale, 'Main navigation', '主导航')}>
-        <div className="nav-links">{nav.map(([path, label]) => <a key={path} href={`/${locale}/${path}`} aria-current={pathname.startsWith(`/${locale}/${path}`) ? 'page' : undefined} onClick={() => setOpen(false)}>{label}</a>)}</div>
+        <div className="nav-links">{nav.map(([path, label]) => <a key={path} href={`/${locale}/${path}`} className={path === 'demo' ? 'nav-demo' : undefined} aria-current={pathname.startsWith(`/${locale}/${path}`) ? 'page' : undefined} onClick={() => setOpen(false)}>{label}</a>)}</div>
         <div className="nav-actions">
           <a className="language-switch" href={otherPath} lang={other === 'zh' ? 'zh-CN' : 'en'} hrefLang={other === 'zh' ? 'zh-CN' : 'en'} aria-label={text(locale, '切换到中文', 'Switch to English')}>{other === 'zh' ? '中文' : 'EN'}</a>
           <a className="login-link" href={loginUrl(locale)}>{text(locale, 'Log in', '已有账号登录')} <Arrow diagonal /></a>
