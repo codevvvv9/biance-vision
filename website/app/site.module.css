@@ -16,6 +16,14 @@
 .site :global(.brand-name > span) { display: block; font-size: 10px; font-weight: 450; color: #6f889d; letter-spacing: 6.1px; margin-top: 7px; }
 .site :global(.navigation) { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .site :global(.nav-links), .site :global(.nav-actions) { display: flex; align-items: center; gap: 30px; }
+/* The research demo is the primary self-serve path: a quiet breathing halo (dot + aura) keeps it discoverable without shouting. Same teal as the status dots elsewhere. */
+.site :global(.nav-links a.nav-demo) { position: relative; display: inline-flex; align-items: center; gap: 7px; }
+.site :global(.nav-links a.nav-demo)::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #78d7b9; box-shadow: 0 0 6px #6df6c666; animation: navDemoBreath 2.8s ease-in-out infinite; flex-shrink: 0; }
+.site :global(.nav-links a.nav-demo)::after { content: ''; position: absolute; inset: -9px -13px; border-radius: 8px; background: radial-gradient(closest-side, #6df6c61f, transparent 74%); animation: navDemoBreath 2.8s ease-in-out infinite; pointer-events: none; }
+@keyframes navDemoBreath { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .site :global(.nav-links a.nav-demo)::before, .site :global(.nav-links a.nav-demo)::after { animation: none; opacity: .8; }
+}
 .site :global(.nav-links a), .site :global(.login-link) { color: #a6b2c4; font-size: 12px; transition: color .18s; white-space: nowrap; }
 .site :global(.nav-links a:hover), .site :global(.nav-links a[aria-current]), .site :global(.login-link:hover) { color: #f4f7fb; }
 .site :global(.login-link) { display: inline-flex; align-items: center; gap: 7px; }
@@ -103,6 +111,10 @@
 .site :global(.section-heading h2), .site :global(.faq-section h2), .site :global(.contact-copy h2) { margin-top: 17px; font-size: 39px; letter-spacing: -1.4px; white-space: pre-line; }
 .site :global(.section-heading > p) { max-width: 340px; font-size: 12px; margin-bottom: 4px; }
 .site :global(.text-link) { display: inline-flex; align-items: center; gap: 10px; color: #a6cbbb; font-size: 12px; }
+/* Quiet inline retry for failed data reads — never a full button in the middle of page copy. */
+.site :global(.retry-link) { display: inline-flex; align-items: center; margin-left: 8px; padding: 0; border: 0; background: none; cursor: pointer; color: #a6cbbb; font: inherit; text-decoration: underline; text-decoration-color: #a6cbbb4d; text-underline-offset: 3px; }
+.site :global(.retry-link:disabled) { opacity: .55; cursor: default; }
+.site :global(.retry-link:not(:disabled):hover) { text-decoration-color: currentColor; }
 .site :global(.text-link svg) { width: 15px; }
 .site :global(.capability-grid) { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #b5d1ed13; border-radius: 8px; overflow: hidden; background: linear-gradient(130deg, #101a24, #0b121d); }
 .site :global(.capability) { position: relative; padding: 25px 30px 33px; border-right: 1px solid #b5d1ed13; }
@@ -327,6 +339,7 @@
   .site :global(.navigation.is-open) { display: flex; flex-direction: column; align-items: stretch; gap: 25px; }
   .site :global(.nav-links) { flex-direction: column; align-items: stretch; gap: 0; }
   .site :global(.nav-links a) { font-size: 14px; padding: 11px 0; }
+  .site :global(.nav-links a.nav-demo)::after { display: none; }
   .site :global(.nav-actions) { justify-content: space-between; gap: 15px; }
   .site :global(.nav-actions .button), .site :global(.login-link) { font-size: 11px; }
   .site :global(.brand-name) { font-size: 13px; }
@@ -481,7 +494,7 @@
 .site :global(.pricing-amount span) { font-size: 14px; }
 
 /* DuckStrat: full-viewport hero — one fused copy+narrative panel on the left, the game on the right. */
-.site :global(.hero-wide) { position: relative; display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr); gap: clamp(28px, 3vw, 52px); align-items: stretch; width: 100%; max-width: 1760px; margin-inline: auto; min-height: calc(100vh - 89px); min-height: calc(100svh - 89px); padding: 64px clamp(24px, 4.5vw, 72px) 24px; }
+.site :global(.hero-wide) { position: relative; display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr); gap: clamp(28px, 3vw, 52px); align-items: stretch; width: 100%; max-width: 1760px; margin-inline: auto; min-height: calc(100vh - 89px); min-height: calc(100svh - 89px); padding: 40px clamp(24px, 4.5vw, 72px) 24px; }
 .site :global(.hero-wide .hero-intro) { align-self: stretch; }
 .site :global(.hero-game) { align-self: stretch; min-height: 0; display: flex; }
 .site :global(.hero-game > *) { flex: 1; min-width: 0; }
@@ -494,8 +507,8 @@
 .site :global(.hero-intro .hero-copy > p) { font-size: 13px; margin: 8px 0 0; line-height: 1.9; }
 .site :global(.hero-intro .button-row) { margin-top: 13px; justify-content: flex-start; }
 .site :global(.hero-intro .hero-footnote) { margin-top: 12px; justify-content: flex-start; font-size: 7px; gap: 9px; letter-spacing: .7px; }
-/* DuckHero fused in: nested card shell stripped, and the scene width follows the viewport height so the panel always fits the hero with real slack. Its meaning line is dropped here — the game card on the right carries the same words. The intro panel stretches flush with the game card (shared top/bottom baselines): copy strip owns the top, the scene is pinned to the bottom via margin-top auto, and the flexible gap between them carries the font-render tolerance. Height budget: 89px header + 64px hero pad + ~334px panel chrome + 24px bottom pad + ~74px slack; the scene reclaims ~36px of that slack, leaving ~38px of breathing gap on mainstream heights. 1.556 = 560/360; 1400px keeps giant-portrait scenes sane. */
-.site :global(.hero-intro > section) { border: 0; background: none; box-shadow: none; padding: 10px 2px 0; width: min(100%, max(240px, min(1400px, calc((100svh - 549px) * 1.556)))); margin: auto auto 0; }
+/* DuckHero fused in: nested card shell stripped, and the scene width follows the viewport height so the panel always fits the hero with real slack. Its meaning line is dropped here — the game card on the right carries the same words. The intro panel stretches flush with the game card (shared top/bottom baselines): copy strip owns the top, the scene is pinned to the bottom via margin-top auto, and the flexible gap between them carries the font-render tolerance. The formula holds that gap at a steady ~48px across mainstream heights (89px header + 40px hero pad + 24px bottom pad + ~334px panel chrome + ~48px gap = 531 ≈ constant below the 1.556 multiplier). 1.556 = 560/360; 1400px keeps giant-portrait scenes sane; the 240px floor guards short viewports. */
+.site :global(.hero-intro > section) { border: 0; background: none; box-shadow: none; padding: 10px 2px 0; width: min(100%, max(240px, min(1400px, calc((100svh - 525px) * 1.556)))); margin: auto auto 0; }
 .site :global(.hero-intro > section > div:nth-child(3)) { min-height: 40px; }
 .site :global(.hero-intro > section > div:nth-child(4)) { padding-top: 8px; margin-top: 6px; }
 .site :global(.hero-intro > section > p:last-child) { display: none; }
