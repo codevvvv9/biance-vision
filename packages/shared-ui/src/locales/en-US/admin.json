@@ -680,6 +680,7 @@
     "resetPassword": "Reset delivery password",
         "resetPasswordImpact": "Reset the password for {{username}}? Their old password and sessions will be revoked.",
     "setCustomPassword": "Custom password",
+    "setPasswordAction": "Set password",
     "customPasswordPlaceholder": "Custom password (4-64 chars); leave empty for random",
     "renameUser": "Rename",
     "renameTitle": "Rename user",

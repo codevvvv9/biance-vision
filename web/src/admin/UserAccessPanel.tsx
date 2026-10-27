@@ -83,9 +83,11 @@ function AccessDialog({
       setBusy(false);
     }
   };
-  const reset = async (pwd?: string) => {
+  // 统一入口：填了自定义密码按原文交付；留空保持原设计生成随机交付密码（两者都会使既有会话失效）
+  const applyPassword = async () => {
+    const pwd = custom.trim();
+    if (busy || (pwd && (pwd.length < 4 || pwd.length > 64))) return;
     if (
-      busy ||
       !(await modal.confirm({
         getContainer: overlayContainer,
         title: pwd ? text("setCustomPassword") : text("resetPassword"),
@@ -176,21 +178,20 @@ function AccessDialog({
               placeholder={text("customPasswordPlaceholder")}
               value={custom}
               onChange={(e) => setCustom(e.target.value)}
+              onPressEnter={() => void applyPassword()}
               disabled={busy}
             />
             <Button
-              disabled={busy || custom.length < 4 || custom.length > 64}
-              onClick={() => void reset(custom)}
+              danger
+              disabled={busy || (custom.trim().length > 0 && custom.trim().length < 4) || custom.trim().length > 64}
+              onClick={() => void applyPassword()}
             >
-              {text("save")}
+              {custom.trim() ? text("setPasswordAction") : text("resetPassword")}
             </Button>
           </Space.Compact>
         </Form.Item>
       </Form>
       <Space wrap style={{ marginTop: 8 }}>
-        <Button danger disabled={busy} onClick={() => void reset()}>
-          {text("resetPassword")}
-        </Button>
         {password && (
           <Button
             onClick={() => {
