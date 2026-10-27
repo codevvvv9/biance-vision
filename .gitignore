@@ -63,3 +63,6 @@ web/playwright-report/
 
 # AppleDouble metadata is not application source.
 ._*
+
+# 本地覆盖（登录限流 HMAC key 等本地环境值）
+docker-compose.override.yml
