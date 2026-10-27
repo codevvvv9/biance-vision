@@ -16,13 +16,13 @@
 .site :global(.brand-name > span) { display: block; font-size: 10px; font-weight: 450; color: #6f889d; letter-spacing: 6.1px; margin-top: 7px; }
 .site :global(.navigation) { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .site :global(.nav-links), .site :global(.nav-actions) { display: flex; align-items: center; gap: 30px; }
-/* The research demo is the primary self-serve path: a quiet breathing halo (dot + aura) keeps it discoverable without shouting. Same teal as the status dots elsewhere. */
-.site :global(.nav-links a.nav-demo) { position: relative; display: inline-flex; align-items: center; gap: 7px; }
-.site :global(.nav-links a.nav-demo)::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #78d7b9; box-shadow: 0 0 6px #6df6c666; animation: navDemoBreath 2.8s ease-in-out infinite; flex-shrink: 0; }
-.site :global(.nav-links a.nav-demo)::after { content: ''; position: absolute; inset: -9px -13px; border-radius: 8px; background: radial-gradient(closest-side, #6df6c61f, transparent 74%); animation: navDemoBreath 2.8s ease-in-out infinite; pointer-events: none; }
-@keyframes navDemoBreath { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+/* The research demo is the primary self-serve path: a rotating conic border beam — the same flowing outline as the app login card (web/src/components/fx/fx.css .fx-beam) — keeps it discoverable. Browsers without @property support degrade to a static gradient ring. */
+@property --nav-beam-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.site :global(.nav-links a.nav-demo) { position: relative; }
+.site :global(.nav-links a.nav-demo)::before { content: ''; position: absolute; inset: -7px -12px; border-radius: 8px; padding: 1.5px; background: conic-gradient(from var(--nav-beam-angle), transparent 0deg, #00e5ff 45deg, color-mix(in srgb, #7c5cff 85%, white) 85deg, transparent 145deg, transparent 360deg); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; animation: navBeamSpin 5s linear infinite; pointer-events: none; }
+@keyframes navBeamSpin { to { --nav-beam-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) {
-  .site :global(.nav-links a.nav-demo)::before, .site :global(.nav-links a.nav-demo)::after { animation: none; opacity: .8; }
+  .site :global(.nav-links a.nav-demo)::before { animation: none; }
 }
 .site :global(.nav-links a), .site :global(.login-link) { color: #a6b2c4; font-size: 12px; transition: color .18s; white-space: nowrap; }
 .site :global(.nav-links a:hover), .site :global(.nav-links a[aria-current]), .site :global(.login-link:hover) { color: #f4f7fb; }
@@ -339,7 +339,6 @@
   .site :global(.navigation.is-open) { display: flex; flex-direction: column; align-items: stretch; gap: 25px; }
   .site :global(.nav-links) { flex-direction: column; align-items: stretch; gap: 0; }
   .site :global(.nav-links a) { font-size: 14px; padding: 11px 0; }
-  .site :global(.nav-links a.nav-demo)::after { display: none; }
   .site :global(.nav-actions) { justify-content: space-between; gap: 15px; }
   .site :global(.nav-actions .button), .site :global(.login-link) { font-size: 11px; }
   .site :global(.brand-name) { font-size: 13px; }
