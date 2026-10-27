@@ -9,6 +9,9 @@
 .site :global(.skip-link) { position: fixed; top: -80px; left: 24px; z-index: 100; padding: 12px 20px; background: #60f0d0; color: #091c18; }
 .site :global(.skip-link:focus) { top: 12px; }
 .site :global(.site-header) { position: sticky; top: 0; z-index: 40; background: #090e17e8; border-bottom: 1px solid #c5d7ed0b; backdrop-filter: blur(20px); }
+/* A light band sweeping left-to-right along the header divider — the same cyan→purple language as the demo nav beam, riding on the faint base border. */
+.site :global(.site-header)::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, #00e5ff 35%, color-mix(in srgb, #7c5cff 85%, white) 65%, transparent); background-size: 45% 100%; background-repeat: no-repeat; animation: headerSweep 3.6s linear infinite; pointer-events: none; }
+@keyframes headerSweep { from { background-position: -110% 0; } to { background-position: 230% 0; } }
 .site :global(.header-inner) { width: min(1392px, calc(100% - 80px)); height: 88px; margin: auto; display: flex; align-items: center; gap: 55px; }
 .site :global(.brand-link) { display: inline-flex; }
 .site :global(.brand) { display: inline-flex; align-items: center; gap: 11px; color: #72edcf; }
@@ -22,6 +25,7 @@
 .site :global(.nav-links a.nav-demo)::before { content: ''; position: absolute; inset: -7px -12px; border-radius: 8px; padding: 1.5px; background: conic-gradient(from var(--nav-beam-angle), transparent 0deg, #00e5ff 45deg, color-mix(in srgb, #7c5cff 85%, white) 85deg, transparent 145deg, transparent 360deg); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; animation: navBeamSpin 5s linear infinite; pointer-events: none; }
 @keyframes navBeamSpin { to { --nav-beam-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) {
+  .site :global(.site-header)::after { animation: none; background-position: 0 0; }
   .site :global(.nav-links a.nav-demo)::before { animation: none; }
 }
 .site :global(.nav-links a), .site :global(.login-link) { color: #a6b2c4; font-size: 12px; transition: color .18s; white-space: nowrap; }
