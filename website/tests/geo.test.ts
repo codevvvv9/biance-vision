@@ -1,4 +1,5 @@
 import { strict as assert } from 'node:assert'
+import { locales } from '../lib/site'
 import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { checkContent } from '../scripts/check-content'
@@ -33,7 +34,7 @@ test('build CIDR validation rejects empty, malformed, duplicate, host-bit and ca
 })
 test('logger allowlist is generated only from the published public manifest and contains no tool/API routes', async () => {
   const paths = JSON.parse(await readFile(new URL('../runtime/public-paths.json', import.meta.url), 'utf8'))
-  assert.deepEqual(paths, ['/', '/robots.txt', '/sitemap.xml', ...['en', 'zh'].flatMap(locale => pagePaths.map(p => `/${locale}${p ? `/${p}` : ''}`))])
+  assert.deepEqual(paths, ['/', '/robots.txt', '/sitemap.xml', ...locales.flatMap(locale => pagePaths.map(p => `/${locale}${p ? `/${p}` : ''}`))])
   assert.ok(paths.every((p: string) => !protectedPaths.some(block => p.startsWith(block))))
 })
 
