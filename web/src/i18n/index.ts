@@ -4,5 +4,5 @@
  * 引用本模块即完成 barrel 加载（含 i18n init）。
  */
 import '@biance/shared-ui'
-export { i18n as default, currentLocale, klinechartsLocale, KLINECHARTS_LOCALE } from '@biance/shared-ui'
+export { i18n as default, currentLocale, contentLocale, websiteLocale, klinechartsLocale, KLINECHARTS_LOCALE, KLINECHARTS_ZH_TW } from '@biance/shared-ui'
 export type { AppLocale } from '@biance/shared-ui'

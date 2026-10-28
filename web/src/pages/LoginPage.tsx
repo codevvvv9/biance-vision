@@ -1,8 +1,8 @@
 import { brand } from '@biance/brand/identity'
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { apiErrorMessage } from '@biance/shared-ui'
+import { apiErrorMessage, websiteLocale as websiteLocaleOf } from '@biance/shared-ui'
 import { useAuth } from '../auth/AuthContext'
 import AuthFx from '../components/AuthFx'
 import { Logo } from '../components/Header'
@@ -17,11 +17,12 @@ export default function LoginPage(): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const { t, i18n } = useTranslation('auth')
-  const websiteLocale = i18n.language.startsWith('zh') ? 'zh' : 'en'
+  const websiteLocale = websiteLocaleOf()
   const { t: tc } = useTranslation('common')
   const from = authReturnTo(location.search, location.state as { from?: string } | null)
 
   const [username, setUsername] = useState('')
+  useEffect(() => { document.title = t('login.pageTitle') }, [t])
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -97,7 +98,7 @@ export default function LoginPage(): JSX.Element {
         <div className="auth-foot">
           {t('login.noAccount')}
           <a href={`/${websiteLocale}/contact`} onClick={() => rememberAuthReturn(from)}>{t('login.contactAdmin')}</a>
-          <a href={`/${websiteLocale}`} onClick={() => rememberAuthReturn(from)}>{websiteLocale === 'zh' ? '返回官网' : 'Back to website'}</a>
+          <a href={`/${websiteLocale}`} onClick={() => rememberAuthReturn(from)}>{t('login.backToSite')}</a>
           {researchUiMode(location.search) === 'dev' && <Link to={from}>{t('login.backToWorkbench')}</Link>}
         </div>
       </div>

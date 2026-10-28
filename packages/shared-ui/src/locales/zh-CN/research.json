@@ -453,7 +453,20 @@
     "viewChart": "查看图表 ↗",
     "newConversation": "新的研究对话",
     "researchOf": "{{symbol}} · 研究",
-    "viewsAria": "工作台视图"
+    "viewsAria": "工作台视图",
+    "entryExpiredNotice": "官网问题已失效，请重新输入或选择下方示例问题。",
+    "entryInvalidNotice": "问题已失效，请重新输入或选择示例。",
+    "entryRestoredNotice": "官网问题已恢复，请检查后确认发送。",
+    "websiteLink": "官网",
+    "resultHelpTitle": "如何阅读研究结果",
+    "resultHelpBody": "先看结论适用的场景与时间，再核对支持证据、反对证据和失效条件。数据不足时先补充问题或等待，不将研究结果视为保证。",
+    "resultHelpLink": "完整阅读指南",
+    "entryRegion": "官网问题恢复",
+    "entryPending": "官网有一个待恢复的问题。恢复仅填写输入框，由你确认发送。",
+    "entryConflict": "当前有草稿或历史会话。替换会切换到新会话，请先保存需要保留的文字。",
+    "entryRestore": "恢复官网问题",
+    "entryKeep": "保留当前草稿",
+    "pageErrorGuide": "查看首次使用指南"
   },
   "candle": {
     "no_snapshot": "该运行无快照记录（旧版本数据）",

@@ -5,7 +5,8 @@
     "kind": "guide",
     "topic": {
       "en": "START HERE",
-      "zh": "从这里开始"
+      "zh": "从这里开始",
+      "zh-TW": "從這裡開始"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -75,6 +76,39 @@
             "title": "4. 遇到不可用状态"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "第一次研究：從問題到證據。",
+        "summary": "瞭解開通步驟，準備一個明確的問題，讀懂第一次研究結果。",
+        "body": "content/zh-TW/getting-started.mdx",
+        "url": "/zh-TW/guides/getting-started",
+        "translation": "/en/guides/getting-started",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "1. 聯絡開通"
+          },
+          {
+            "id": "section-2",
+            "title": "2. 提出一個明確的問題"
+          },
+          {
+            "id": "section-3",
+            "title": "3. 確認傳送，再閱讀結果"
+          },
+          {
+            "id": "section-4",
+            "title": "4. 遇到不可用狀態"
+          }
+        ]
       }
     }
   },
@@ -84,7 +118,8 @@
     "kind": "guide",
     "topic": {
       "en": "RESEARCH BASICS",
-      "zh": "研究基础"
+      "zh": "研究基础",
+      "zh-TW": "研究基礎"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -156,6 +191,40 @@
             "title": "知道何时停止沿用结果"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "讀懂推理，而不只看結論。",
+        "summary": "按資料時間、證據、反證與失效條件的順序閱讀研究。",
+        "body": "content/zh-TW/reading-research-results.mdx",
+        "url": "/zh-TW/guides/reading-research-results",
+        "translation": "/en/guides/reading-research-results",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "從資訊邊界開始"
+          },
+          {
+            "id": "section-2",
+            "title": "結論包含條件"
+          },
+          {
+            "id": "section-3",
+            "title": "同時閱讀支援與反對證據"
+          },
+          {
+            "id": "section-4",
+            "title": "知道何時停止沿用結果"
+          }
+        ]
       }
     }
   },
@@ -165,7 +234,8 @@
     "kind": "guide",
     "topic": {
       "en": "PRICE ACTION",
-      "zh": "价格行为"
+      "zh": "价格行为",
+      "zh-TW": "價格行為"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -235,6 +305,39 @@
             "title": "使用方法，同时保留边界"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "離開上下文，形態沒有完整含義。",
+        "summary": "為什麼趨勢、區間、確認時間與反例必須一起研究。",
+        "body": "content/zh-TW/price-action-context.mdx",
+        "url": "/zh-TW/guides/price-action-context",
+        "translation": "/en/guides/price-action-context",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "先描述市場，再命名形態"
+          },
+          {
+            "id": "section-2",
+            "title": "區分觀察與確認"
+          },
+          {
+            "id": "section-3",
+            "title": "用反例檢驗解釋"
+          },
+          {
+            "id": "section-4",
+            "title": "使用方法，同時保留邊界"
+          }
+        ]
       }
     }
   },
@@ -244,7 +347,8 @@
     "kind": "guide",
     "topic": {
       "en": "EVENT RESEARCH",
-      "zh": "事件研究"
+      "zh": "事件研究",
+      "zh-TW": "事件研究"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -316,6 +420,40 @@
             "title": "不以猜测替代不可用证据"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "事件研究，從準確報價開始。",
+        "summary": "區分執行價、到期時間、本金和總返還，理解不可用結果。",
+        "body": "content/zh-TW/event-quotes.mdx",
+        "url": "/zh-TW/guides/event-quotes",
+        "translation": "/en/guides/event-quotes",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "以實際產品條款為準"
+          },
+          {
+            "id": "section-2",
+            "title": "分別確認每個輸入"
+          },
+          {
+            "id": "section-3",
+            "title": "剩餘時間影響研究適用性"
+          },
+          {
+            "id": "section-4",
+            "title": "不以猜測替代不可用證據"
+          }
+        ]
       }
     }
   },
@@ -325,7 +463,8 @@
     "kind": "page",
     "topic": {
       "en": "ABOUT THE PROJECT",
-      "zh": "关于项目"
+      "zh": "关于项目",
+      "zh-TW": "關於專案"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -407,6 +546,45 @@
             "title": "开通与地区边界"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "DuckStrat 是什麼？",
+        "summary": "一個獨立的加密市場研究工作臺。瞭解維護者、產品範圍與使用邊界。",
+        "body": "content/zh-TW/about.mdx",
+        "url": "/zh-TW/about",
+        "translation": "/en/about",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-26",
+        "modifiedAt": "2026-10-26",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "一個獨立的研究專案"
+          },
+          {
+            "id": "section-2",
+            "title": "誰在維護這些內容"
+          },
+          {
+            "id": "section-3",
+            "title": "使用行情資料不代表關聯關係"
+          },
+          {
+            "id": "section-4",
+            "title": "開通後可以做什麼"
+          },
+          {
+            "id": "section-5",
+            "title": "開通與地區邊界"
+          }
+        ]
       }
     }
   },
@@ -416,7 +594,8 @@
     "kind": "page",
     "topic": {
       "en": "RESEARCH METHOD",
-      "zh": "研究方法"
+      "zh": "研究方法",
+      "zh-TW": "研究方法"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -496,6 +675,44 @@
             "title": "提前说明失效条件"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "DuckStrat 如何開展研究",
+        "summary": "從資訊邊界出發，觀察結構，檢驗觀點，並說明什麼會使解釋失效。",
+        "body": "content/zh-TW/methodology.mdx",
+        "url": "/zh-TW/methodology",
+        "translation": "/en/methodology",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "brooks"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "凍結資訊邊界"
+          },
+          {
+            "id": "section-2",
+            "title": "在上下文中觀察結構"
+          },
+          {
+            "id": "section-3",
+            "title": "保留有力的反對解釋"
+          },
+          {
+            "id": "section-4",
+            "title": "校驗輸入並披露缺口"
+          },
+          {
+            "id": "section-5",
+            "title": "提前說明失效條件"
+          }
+        ]
       }
     }
   },
@@ -505,7 +722,8 @@
     "kind": "guide",
     "topic": {
       "en": "RESEARCH NOTES",
-      "zh": "研究手记"
+      "zh": "研究手记",
+      "zh-TW": "研究手記"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -585,6 +803,44 @@
             "title": "把标签变成研究问题"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "什麼是 H2 二次進場？",
+        "summary": "理解計數思路、趨勢背景，以及為什麼第二次嘗試仍然需要檢驗。",
+        "body": "content/zh-TW/second-entry-h2.mdx",
+        "url": "/zh-TW/guides/second-entry-h2",
+        "translation": "/en/guides/second-entry-h2",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "直接解釋"
+          },
+          {
+            "id": "section-2",
+            "title": "先確定背景，再討論標籤"
+          },
+          {
+            "id": "section-3",
+            "title": "一個示意過程"
+          },
+          {
+            "id": "section-4",
+            "title": "反例與失效條件"
+          },
+          {
+            "id": "section-5",
+            "title": "把標籤變成研究問題"
+          }
+        ]
       }
     }
   },
@@ -594,7 +850,8 @@
     "kind": "guide",
     "topic": {
       "en": "RESEARCH NOTES",
-      "zh": "研究手记"
+      "zh": "研究手记",
+      "zh-TW": "研究手記"
     },
     "status": "published",
     "relatedDemo": "range-breakout",
@@ -666,6 +923,40 @@
             "title": "限制与异常情形"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "已收盤 K 線與即時價格回答不同問題",
+        "summary": "區分已確認觀察與不斷變化的報價，避免把後來的資訊放回更早的快照。",
+        "body": "content/zh-TW/closed-candles-and-live-price.mdx",
+        "url": "/zh-TW/guides/closed-candles-and-live-price",
+        "translation": "/en/guides/closed-candles-and-live-price",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "即時更新不等於已收盤"
+          },
+          {
+            "id": "section-2",
+            "title": "分別記錄三個時間"
+          },
+          {
+            "id": "section-3",
+            "title": "怎樣核對研究結果"
+          },
+          {
+            "id": "section-4",
+            "title": "限制與異常情形"
+          }
+        ]
       }
     }
   },
@@ -675,7 +966,8 @@
     "kind": "guide",
     "topic": {
       "en": "RESEARCH NOTES",
-      "zh": "研究手记"
+      "zh": "研究手记",
+      "zh-TW": "研究手記"
     },
     "status": "published",
     "relatedDemo": "wait-for-confirmation",
@@ -755,6 +1047,44 @@
             "title": "结果不能证明什么"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "如何複查永續持倉研究",
+        "summary": "依賴複查結果前，先核對持倉假設、市場背景、費用輸入和失效條件。",
+        "body": "content/zh-TW/reviewing-perpetual-research.mdx",
+        "url": "/zh-TW/guides/reviewing-perpetual-research",
+        "translation": "/en/guides/reviewing-perpetual-research",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "binance-funding",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "複查是在檢驗已有假設"
+          },
+          {
+            "id": "section-2",
+            "title": "確認輸入含義"
+          },
+          {
+            "id": "section-3",
+            "title": "區分價格、標記價格與資金費率"
+          },
+          {
+            "id": "section-4",
+            "title": "檢驗繼續持倉的理由"
+          },
+          {
+            "id": "section-5",
+            "title": "結果不能證明什麼"
+          }
+        ]
       }
     }
   },
@@ -764,7 +1094,8 @@
     "kind": "guide",
     "topic": {
       "en": "RESEARCH NOTES",
-      "zh": "研究手记"
+      "zh": "研究手记",
+      "zh-TW": "研究手記"
     },
     "status": "published",
     "relatedDemo": "wait-for-confirmation",
@@ -844,6 +1175,44 @@
             "title": "使用可复核的比较方法"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "選擇 AI 加密研究工具的核對清單",
+        "summary": "用同一個問題核對證據追溯、不確定性、適用流程與開通條件。",
+        "body": "content/zh-TW/research-tool-checklist.mdx",
+        "url": "/zh-TW/guides/research-tool-checklist",
+        "translation": "/en/guides/research-tool-checklist",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-26",
+        "modifiedAt": "2026-10-26",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "product-method",
+          "product-access"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "先明確需要完成的任務"
+          },
+          {
+            "id": "section-2",
+            "title": "用同一個問題檢驗證據追溯"
+          },
+          {
+            "id": "section-3",
+            "title": "尋找真實的限制說明"
+          },
+          {
+            "id": "section-4",
+            "title": "核對隱私、開通與實際操作"
+          },
+          {
+            "id": "section-5",
+            "title": "使用可複核的比較方法"
+          }
+        ]
       }
     }
   },
@@ -853,7 +1222,8 @@
     "kind": "demo",
     "topic": {
       "en": "TEACHING CASE · NOT LIVE",
-      "zh": "教学案例 · 非实时研究"
+      "zh": "教学案例 · 非实时研究",
+      "zh-TW": "教學案例 · 非即時研究"
     },
     "status": "published",
     "relatedDemo": "trend-pullback",
@@ -935,6 +1305,45 @@
             "title": "把方法用于自己的问题"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "趨勢回撥：先檢驗背景，再討論延續",
+        "summary": "通過教學案例，區分上行背景與尚未確認的入場想法。",
+        "body": "content/zh-TW/trend-pullback.mdx",
+        "url": "/zh-TW/demo/trend-pullback",
+        "translation": "/en/demo/trend-pullback",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "研究問題"
+          },
+          {
+            "id": "section-2",
+            "title": "快照與圖例"
+          },
+          {
+            "id": "section-3",
+            "title": "支援證據與反對解釋"
+          },
+          {
+            "id": "section-4",
+            "title": "什麼會改變觀點"
+          },
+          {
+            "id": "section-5",
+            "title": "把方法用於自己的問題"
+          }
+        ]
       }
     }
   },
@@ -944,7 +1353,8 @@
     "kind": "demo",
     "topic": {
       "en": "TEACHING CASE · NOT LIVE",
-      "zh": "教学案例 · 非实时研究"
+      "zh": "教学案例 · 非实时研究",
+      "zh-TW": "教學案例 · 非即時研究"
     },
     "status": "published",
     "relatedDemo": "range-breakout",
@@ -1026,6 +1436,45 @@
             "title": "下一步研究"
           }
         ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "區間突破：區分嘗試與站穩",
+        "summary": "收在邊界之外是一項觀察，不能證明市場會持續停留在那裡。",
+        "body": "content/zh-TW/range-breakout.mdx",
+        "url": "/zh-TW/demo/range-breakout",
+        "translation": "/en/demo/range-breakout",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "研究問題"
+          },
+          {
+            "id": "section-2",
+            "title": "快照與圖例"
+          },
+          {
+            "id": "section-3",
+            "title": "支援證據與反證"
+          },
+          {
+            "id": "section-4",
+            "title": "什麼會削弱解釋"
+          },
+          {
+            "id": "section-5",
+            "title": "下一步研究"
+          }
+        ]
       }
     }
   },
@@ -1035,7 +1484,8 @@
     "kind": "demo",
     "topic": {
       "en": "TEACHING CASE · NOT LIVE",
-      "zh": "教学案例 · 非实时研究"
+      "zh": "教学案例 · 非实时研究",
+      "zh-TW": "教學案例 · 非即時研究"
     },
     "status": "published",
     "relatedDemo": "wait-for-confirmation",
@@ -1115,6 +1565,45 @@
           {
             "id": "section-5",
             "title": "继续提出更好的问题"
+          }
+        ]
+      },
+      "zh-TW": {
+        "locale": "zh-TW",
+        "title": "等待確認也是研究結果",
+        "summary": "證據仍然矛盾時，說明不確定性，並定義何時值得重新觀察。",
+        "body": "content/zh-TW/wait-for-confirmation.mdx",
+        "url": "/zh-TW/demo/wait-for-confirmation",
+        "translation": "/en/demo/wait-for-confirmation",
+        "author": "project-maintainers",
+        "reviewedAt": "2026-10-24",
+        "modifiedAt": "2026-10-24",
+        "reviewScope": "source-and-implementation-check",
+        "sources": [
+          "brooks",
+          "binance-candles",
+          "product-method"
+        ],
+        "toc": [
+          {
+            "id": "section-1",
+            "title": "研究問題"
+          },
+          {
+            "id": "section-2",
+            "title": "快照與圖例"
+          },
+          {
+            "id": "section-3",
+            "title": "為什麼不能給出更強結論"
+          },
+          {
+            "id": "section-4",
+            "title": "重新觀察的條件"
+          },
+          {
+            "id": "section-5",
+            "title": "繼續提出更好的問題"
           }
         ]
       }

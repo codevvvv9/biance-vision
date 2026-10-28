@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test('public HTML, language entry, indexing metadata and genuine 404s', async ({ request }) => {
-  for (const [lang, target] of [['zh-CN,en;q=.8', '/zh'], ['fr,en;q=.8', '/en'], ['', '/en']]) {
+  for (const [lang, target] of [['zh-CN,en;q=.8', '/zh'], ['zh-TW,zh;q=0.9,en;q=0.8', '/zh-TW'], ['zh-HK,en;q=.8', '/zh-TW'], ['zh-Hant;q=.9,en;q=.8', '/zh-TW'], ['fr,en;q=.8', '/en'], ['', '/en']]) {
     const response = await request.get('/', { headers: { 'accept-language': lang }, maxRedirects: 0 })
     expect(response.status()).toBe(302)
     expect(response.headers().location).toBe(target)
@@ -22,6 +22,7 @@ test('public HTML, language entry, indexing metadata and genuine 404s', async ({
   expect(await (await request.get('/robots.txt')).text()).toContain('GPTBot')
   const sitemap = await (await request.get('/sitemap.xml')).text()
   expect(sitemap).toContain('/en/guides/getting-started')
+  expect(sitemap).toContain('/zh-TW/guides/getting-started')
   expect(sitemap).not.toContain('/login')
 })
 
@@ -29,15 +30,20 @@ test('responsive home remains readable and navigation preserves the same page', 
   const errors: string[] = []
   page.on('pageerror', e => errors.push(e.message))
   await page.goto('/en')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Navigate risk.')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Navigate risk')
   await expect(page.getByRole('link', { name: 'View research demo', exact: true }).first()).toHaveAttribute('href', '/en/demo')
   for (const width of [390, 768, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1000 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `overflow at ${width}`).toBe(true)
   }
   await page.goto('/en/guides/getting-started')
-  await page.getByRole('link', { name: '切换到中文' }).click()
+  await page.locator('.lang-menu summary').click()
+  await page.getByRole('link', { name: '简体中文', exact: true }).click()
   await expect(page).toHaveURL(/\/zh\/guides\/getting-started$/)
+  // the traditional entry survives the same path swap
+  await page.locator('.lang-menu summary').click()
+  await page.getByRole('link', { name: '繁體中文', exact: true }).click()
+  await expect(page).toHaveURL(/\/zh-TW\/guides\/getting-started$/)
   expect(errors).toEqual([])
 })
 

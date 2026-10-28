@@ -5,7 +5,7 @@ import type { BrooksDisplay, ResearchResult, ResearchRun, SharedLocale } from 'b
 import BrooksChart from '../brooks/BrooksChart'
 import type { BrooksChartLevel } from '../brooks/BrooksChart'
 import { useMarket } from '../market/MarketContext'
-import { currentLocale } from '../i18n'
+import { contentLocale } from '../i18n'
 import { useResearchCandles } from './useResearchCandles'
 
 const TF = { '10m': '1m', '30m': '5m', '1h': '15m', '1d': '1h', '1w': '4h' }
@@ -14,7 +14,7 @@ const DISPLAY: BrooksDisplay = { swings: true, legs: true, io: true, signals: tr
 /** Only mounted for an authenticated, selected run. Composer settings cannot alter this chart. */
 export default function WorkbenchChart({ run, result, highlightTime }: { run: ResearchRun; result: ResearchResult | null; highlightTime: number | null }): JSX.Element {
   const { t } = useTranslation()
-  const locale: SharedLocale = currentLocale()
+  const locale: SharedLocale = contentLocale()
   const { upColor } = useMarket()
   const interval = TF[run.horizon]
   const { bars, loading, error, source, fallbackReason } = useResearchCandles(run.symbol, run.marketType, interval, run.asOf, run.id)

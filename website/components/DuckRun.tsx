@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { toTraditional } from '@/lib/zh-tw'
 import { brand, duck } from '@biance/brand/identity'
 import { text, type Locale } from '@/lib/site'
 import { defaultHeroGame, validateHeroGame } from '@/lib/hero-game'
@@ -28,10 +29,10 @@ function mulberry(seed: number) {
 }
 
 function rankFor(locale: Locale, seconds: number) {
-  if (seconds >= 60) return text(locale, 'Disciplined strategist', '纪律策略师')
-  if (seconds >= 30) return text(locale, 'Informed decisions', '有据判断')
-  if (seconds >= 15) return text(locale, 'Risk aware', '初识风险')
-  return text(locale, 'Still drifting', '随波逐流')
+  if (seconds >= 60) return text(locale, 'Disciplined strategist', '纪律策略师', '紀律策略師')
+  if (seconds >= 30) return text(locale, 'Informed decisions', '有据判断', '有據判斷')
+  if (seconds >= 15) return text(locale, 'Risk aware', '初识风险', '初識風險')
+  return text(locale, 'Still drifting', '随波逐流', '隨波逐流')
 }
 
 /**
@@ -203,7 +204,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
         return
       }
       const risk = config.current.risks[Math.floor(rand() * config.current.risks.length)]!
-      const label = locale === 'zh' ? risk.zh : risk.en
+      const label = locale === 'zh' ? risk.zh : locale === 'zh-TW' ? toTraditional(risk.zh) : risk.en
       let yFrac = .14 + rand() * .72
       for (let attempt = 0; attempt < 5; attempt++) {
         const clash = G.obstacles.some(o => o.kind === 'pill' && o.x > W * .42 && Math.abs(o.y - yFrac) < .2)
@@ -217,7 +218,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
         const drift = rand() < .5 ? -1 : 1
         const y2 = Math.min(.9, Math.max(.1, yFrac + drift * (.24 + rand() * .08)))
         const risk2 = config.current.risks[Math.floor(rand() * config.current.risks.length)]!
-        const label2 = locale === 'zh' ? risk2.zh : risk2.en
+        const label2 = locale === 'zh' ? risk2.zh : locale === 'zh-TW' ? toTraditional(risk2.zh) : risk2.en
         G.obstacles.push({ kind: 'pill', x: W + 12 + rand() * 30, y: y2, label: label2, glyph: risk2.glyph, w: measurePill(label2), wK: oi, counted: false, seed: Math.floor(rand() * 1e9) })
       }
     }
@@ -542,7 +543,7 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
         ctx.font = monoFont(7 * ui)
         ctx.textAlign = 'left'
         ctx.textBaseline = 'alphabetic'
-        ctx.fillText(text(locale, 'DISCIPLINE', '纪律'), (13 + 3 * 17 + 4) * ui, 17 * ui)
+        ctx.fillText(text(locale, 'DISCIPLINE', '纪律', '紀律'), (13 + 3 * 17 + 4) * ui, 17 * ui)
         ctx.textAlign = 'right'
         ctx.fillStyle = '#dfe8ec'
         ctx.font = monoFont(14 * ui, '600')
@@ -706,36 +707,36 @@ export function DuckRun({ locale, fill }: { locale: Locale; fill?: boolean }) {
   }
 
   const announce = mode === 'over' && result
-    ? text(locale, `Run complete: ${result.time} seconds, ${result.dodged} risks dodged, ${result.evidence} evidence collected.`, `本次航行 ${result.time} 秒，避开 ${result.dodged} 个风险，收集 ${result.evidence} 条证据。`)
+    ? text(locale, `Run complete: ${result.time} seconds, ${result.dodged} risks dodged, ${result.evidence} evidence collected.`, `本次航行 ${result.time} 秒，避开 ${result.dodged} 个风险，收集 ${result.evidence} 条证据。`, `本次航行 ${result.time} 秒，避開 ${result.dodged} 個風險，蒐集 ${result.evidence} 條證據。`)
     : ''
 
-  return <section className={styles.scene} data-fill={fill ? 'true' : undefined} aria-label={text(locale, 'DuckStrat risk-run mini game', 'DuckStrat 风险漂流小游戏')} data-mode={mode}>
-    <div className={styles.heading}><span className={styles.eyebrow}>{text(locale, 'RISK RUN', '风险漂流')}</span><span className={styles.sceneIndex}>{best === null ? text(locale, 'BEST —', '最佳 —') : `BEST ${best}s`}</span></div>
+  return <section className={styles.scene} data-fill={fill ? 'true' : undefined} aria-label={text(locale, 'DuckStrat risk-run mini game', 'DuckStrat 风险漂流小游戏', 'DuckStrat 風險漂流小遊戲')} data-mode={mode}>
+    <div className={styles.heading}><span className={styles.eyebrow}>{text(locale, 'RISK RUN', '风险漂流', '風險漂流')}</span><span className={styles.sceneIndex}>{best === null ? text(locale, 'BEST —', '最佳 —', '最佳 —') : `BEST ${best}s`}</span></div>
     <div ref={stageRef} className={`${styles.stage}${fsFallback ? ` ${styles.fsFallback}` : ''}`} data-mode={mode} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onContextMenu={event => { if (mode === 'playing') event.preventDefault() }}>
-      <canvas ref={canvasRef} className={styles.canvas} role="img" aria-label={text(locale, 'Steerable duck dodging risk labels on a flowing market river', '小黄鸭在市场水流中躲避风险标签')} />
-      <button type="button" className={styles.fsBtn} onClick={() => void toggleExpand()} aria-label={expanded ? text(locale, 'Exit fullscreen', '退出全屏') : text(locale, 'Play fullscreen', '全屏游玩')} aria-pressed={expanded}>{expanded ? '✕' : '⤢'}</button>
+      <canvas ref={canvasRef} className={styles.canvas} role="img" aria-label={text(locale, 'Steerable duck dodging risk labels on a flowing market river', '小黄鸭在市场水流中躲避风险标签', '小黃鴨在市場水流中躲避風險標籤')} />
+      <button type="button" className={styles.fsBtn} onClick={() => void toggleExpand()} aria-label={expanded ? text(locale, 'Exit fullscreen', '退出全屏', '退出全屏') : text(locale, 'Play fullscreen', '全屏游玩', '全屏遊玩')} aria-pressed={expanded}>{expanded ? '✕' : '⤢'}</button>
       <div className={styles.overlay} data-mode={mode}>
         {mode === 'over' && result ? <div className={styles.overCard}>
-          <span className={styles.overKicker}>{text(locale, 'RUN COMPLETE', '本次航行')}</span>
-          <p className={styles.overTitle}>{text(locale, 'A risk caught the duck.', '小黄鸭撞上了一个风险。')}</p>
+          <span className={styles.overKicker}>{text(locale, 'RUN COMPLETE', '本次航行', '本次航行')}</span>
+          <p className={styles.overTitle}>{text(locale, 'A risk caught the duck.', '小黄鸭撞上了一个风险。', '小黃鴨撞上了一個風險。')}</p>
           <strong className={styles.rank}>{rankFor(locale, result.time)}</strong>
-          <p className={styles.stats}>{result.time}s · ↷ {result.dodged} {text(locale, 'dodged', '避开')} · ✦ {result.evidence} {text(locale, 'evidence', '证据')}</p>
+          <p className={styles.stats}>{result.time}s · ↷ {result.dodged} {text(locale, 'dodged', '避开', '避開')} · ✦ {result.evidence} {text(locale, 'evidence', '证据', '證據')}</p>
           {result.newBest
-            ? <span className={styles.newBest}>{text(locale, 'NEW BEST', '新纪录')}</span>
-            : <span className={styles.newBest}>{text(locale, `BEST ${best ?? result.time}s`, `最佳 ${best ?? result.time} 秒`)}</span>}
+            ? <span className={styles.newBest}>{text(locale, 'NEW BEST', '新纪录', '新紀錄')}</span>
+            : <span className={styles.newBest}>{text(locale, `BEST ${best ?? result.time}s`, `最佳 ${best ?? result.time} 秒`, `最佳 ${best ?? result.time} 秒`)}</span>}
           <div className={styles.overActions}>
-            <button type="button" className={styles.primaryBtn} onClick={() => startRef.current()}>{text(locale, 'Run again', '再来一局')}</button>
-            <a className={styles.ghostLink} href={`/${locale}/methodology`}>{text(locale, 'See the method', '了解研究方法')} ↗</a>
+            <button type="button" className={styles.primaryBtn} onClick={() => startRef.current()}>{text(locale, 'Run again', '再来一局', '再來一局')}</button>
+            <a className={styles.ghostLink} href={`/${locale}/methodology`}>{text(locale, 'See the method', '了解研究方法', '瞭解研究方法')} ↗</a>
           </div>
         </div> : <>
-          <p className={styles.tip}>{text(locale, 'Dodge the risks.', '避开风险，')}<em>{text(locale, 'gather evidence.', '收集证据。')}</em></p>
-          <p className={styles.sub}>{text(locale, 'Three disciplines absorb three hits. How far can you sail?', '三层「纪律」可挡三次碰撞，看你能航行多远。')}</p>
-          <button type="button" className={styles.primaryBtn} onClick={() => startRef.current()}>{text(locale, 'Start the run', '开始航行')}</button>
-          <span className={styles.hint}>{text(locale, 'MOUSE · TOUCH ·', '鼠标 · 触摸 ·')} <span className={styles.key}>↑</span><span className={styles.key}>↓</span></span>
+          <p className={styles.tip}>{text(locale, 'Dodge the risks.', '避开风险，', '避開風險，')}<em>{text(locale, 'gather evidence.', '收集证据。', '收集證據。')}</em></p>
+          <p className={styles.sub}>{text(locale, 'Three disciplines absorb three hits. How far can you sail?', '三层「纪律」可挡三次碰撞，看你能航行多远。', '三層「紀律」可擋三次碰撞，看你能航行多遠。')}</p>
+          <button type="button" className={styles.primaryBtn} onClick={() => startRef.current()}>{text(locale, 'Start the run', '开始航行', '開始航行')}</button>
+          <span className={styles.hint}>{text(locale, 'MOUSE · TOUCH ·', '鼠标 · 触摸 ·', '滑鼠 · 觸控 ·')} <span className={styles.key}>↑</span><span className={styles.key}>↓</span></span>
         </>}
       </div>
     </div>
-    <p className={styles.meaning}><strong>Duck</strong> {text(locale, 'stays nimble around risk.', '灵活避开风险。')} <strong>Strat</strong> {text(locale, 'builds strategy on evidence.', '让策略建立在证据之上。')}</p>
+    <p className={styles.meaning}><strong>Duck</strong> {text(locale, 'stays nimble around risk.', '灵活避开风险。', '靈活避開風險。')} <strong>Strat</strong> {text(locale, 'builds strategy on evidence.', '让策略建立在证据之上。', '讓策略建立在證據之上。')}</p>
     <p className={styles.srOnly} role="status">{announce}</p>
   </section>
 }

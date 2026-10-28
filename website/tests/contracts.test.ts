@@ -5,10 +5,15 @@ import { parseEntry, ENTRY_TTL } from '../lib/research-entry'
 import { guides, demos } from '../lib/content'
 import { contactConfig, loginUrl, publicOrigin } from '../lib/site'
 
-test('browser language takes precedence, q=0 is ignored, unsupported languages permit region fallback', () => {
+test('browser language takes precedence, q=0 is ignored, traditional regions map to zh-TW', () => {
   assert.equal(browserLocale('zh-CN, en;q=.8'), 'zh')
   assert.equal(browserLocale('zh;q=.5, en-GB;q=.9'), 'en')
-  assert.equal(browserLocale('fr, zh-Hant;q=.9'), 'zh')
+  assert.equal(browserLocale('fr, zh-Hant;q=.9'), 'zh-TW')
+  assert.equal(browserLocale('zh-TW,zh;q=0.9,en;q=0.8'), 'zh-TW')
+  assert.equal(browserLocale('zh-HK,en;q=.5'), 'zh-TW')
+  assert.equal(browserLocale('zh-mo, en;q=.8'), 'zh-TW')
+  assert.equal(browserLocale('zh-Hant-TW,en;q=.7'), 'zh-TW')
+  assert.equal(browserLocale('zh-SG, en;q=.8'), 'zh')
   assert.equal(browserLocale('zh;q=0, en;q=.5'), 'en')
   assert.equal(browserLocale('fr, de;q=.8'), null)
   assert.equal(browserLocale(null), null)
@@ -36,7 +41,8 @@ test('entry drafts reject stale, future, malformed, unknown-version and invalid-
 })
 test('bilingual guides and teaching cases remain paired with substantive readable content', () => {
   assert.deepEqual(guides('en').map(g => g.slug), guides('zh').map(g => g.slug))
-  for (const locale of ['en', 'zh'] as const) {
+  assert.deepEqual(guides('zh').map(g => g.slug), guides('zh-TW').map(g => g.slug))
+  for (const locale of ['en', 'zh', 'zh-TW'] as const) {
     assert.equal(demos(locale).length, 3)
     assert.equal(guides(locale).length, 8)
     for (const guide of guides(locale)) assert.ok(guide.title && guide.description)

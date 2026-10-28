@@ -8,7 +8,7 @@ import { useMarket } from '../market/MarketContext'
 import { useAi } from '../ai/AiContext'
 import { useResearchAccess } from '../membership/access'
 import { fmtPct, fmtPrice } from '../utils'
-import { currentLocale } from '../i18n'
+import { currentLocale, websiteLocale } from '../i18n'
 import { notificationState, requestNotifications } from '../notify'
 import type { NotificationPermissionState } from '../notify'
 import LanguageSwitcher from './LanguageSwitcher'
@@ -171,7 +171,7 @@ export default function Header(): JSX.Element {
             {t(tab.labelKey)}
           </NavLink>
         ))}
-        <a href={currentLocale().startsWith('zh') ? '/zh' : '/en'}>{currentLocale().startsWith('zh') ? '官网' : 'Website'}</a>
+        <a href={`/${websiteLocale()}`}>{t('research:wb.websiteLink')}</a>
       </nav>
 
       <div className="header-right">

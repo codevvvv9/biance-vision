@@ -4,6 +4,7 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY website/package.json website/
 COPY packages/brand/package.json packages/brand/
+COPY packages/shared-ui/package.json packages/shared-ui/
 COPY server/package.json server/
 COPY web/package.json web/
 COPY shared/package.json shared/
@@ -11,6 +12,7 @@ COPY packages/shared-ui/package.json packages/shared-ui/
 RUN pnpm --filter @biance/website... install --frozen-lockfile
 COPY website website
 COPY packages/brand packages/brand
+COPY packages/shared-ui packages/shared-ui
 COPY shared shared
 # Only the public IPv4 CIDR list is copied; backend data and keys never enter this image.
 COPY website/data/cn-ipv4.txt website/data/cn-ipv4.txt

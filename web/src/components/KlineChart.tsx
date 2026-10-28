@@ -8,6 +8,9 @@ import { useFullscreen } from '../hooks/useFullscreen'
 import { useMarket } from '../market/MarketContext'
 import { fmtPct, fmtPrice, precisionFor } from '../utils'
 import { klinechartsLocale, default as i18n } from '../i18n'
+import { registerLocale } from 'klinecharts'
+import { KLINECHARTS_ZH_TW } from '@biance/shared-ui'
+registerLocale('zh-TW', KLINECHARTS_ZH_TW)
 import type { UpColorMode } from '../utils'
 import type { KlineBar } from '../types'
 

@@ -1,0 +1,47 @@
+{
+  "kline": {
+    "intervals": {
+      "1m": "1分",
+      "5m": "5分",
+      "15m": "15分",
+      "1h": "1時",
+      "4h": "4時",
+      "1d": "日線"
+    },
+    "loadFailed": "K 線載入失敗",
+    "loading": "載入 {{symbol}} K 線…",
+    "retry": "重試",
+    "fullscreen": "全屏顯示 K 線"
+  },
+  "table": {
+    "title": "即時行情",
+    "searchPlaceholder": "搜尋交易對，如 BTC",
+    "fullscreen": "全屏顯示行情",
+    "emptyMatch": "沒有匹配的交易對",
+    "connecting": "正在連線幣安行情流…",
+    "foot": "點選行切換 K 線 · 資料每秒推送",
+    "col": {
+      "symbol": "交易對",
+      "last": "最新價",
+      "changePct": "24h漲跌幅",
+      "high": "24h最高",
+      "low": "24h最低",
+      "quoteVolume": "24h成交額"
+    }
+  },
+  "stat": {
+    "high": "高",
+    "low": "低",
+    "sentiment": "市場情緒",
+    "sentimentSub": "USDT 交易對",
+    "marketBarTitle": "上漲 {{up}} 家 · 下跌 {{down}} 家",
+    "upPct": "{{pct}}% 上漲",
+    "totalVolume": "24h 總成交額",
+    "monitoring": "監控 {{count}} 交易對"
+  },
+  "tape": {
+    "label": "即時行情捲軸",
+    "connected": "正在接收幣安即時行情…",
+    "connecting": "正在連線幣安行情流…"
+  }
+}

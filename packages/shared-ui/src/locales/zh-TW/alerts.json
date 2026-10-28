@@ -1,0 +1,103 @@
+{
+  "type": {
+    "price_above": "價格突破",
+    "price_below": "價格跌破",
+    "change_above": "24h漲幅超過",
+    "change_below": "24h跌幅超過"
+  },
+  "form": {
+    "symbol": "交易對",
+    "cond": "條件",
+    "targetPrice": "目標價",
+    "threshold": "閾值 (%)",
+    "note": "備註（可選）",
+    "notePlaceholder": "例如：突破壓力位，關注回踩",
+    "submit": "+ 新增規則",
+    "busy": "新增中…",
+    "hint": "價格類規則按「突破 / 跌破」邊緣觸發：建立時若價格已在目標位另一側，需回落復位後再次突破才會提醒；漲跌幅類規則在超過閾值時立即提醒一次，回落低於閾值後可再次觸發。"
+  },
+  "toast": {
+    "loadFailed": "規則載入失敗",
+    "added": "規則已新增",
+    "addFailed": "新增失敗",
+    "toggleFailed": "操作失敗",
+    "deleteFailed": "刪除失敗",
+    "saved": "推送介面已儲存",
+    "cleared": "已清空 Webhook",
+    "saveFailed": "儲存失敗",
+    "testFailed": "測試傳送失敗"
+  },
+  "rules": {
+    "title": "預警規則",
+    "col": {
+      "symbol": "交易對",
+      "cond": "條件",
+      "note": "備註",
+      "status": "狀態",
+      "lastTriggered": "最近觸發"
+    },
+    "switchOn": "點選停用",
+    "switchOff": "點選啟用",
+    "remove": "刪除",
+    "empty": "還沒有預警規則，用上方表單新增第一條"
+  },
+  "history": {
+    "title": "觸發歷史",
+    "empty": "暫無觸發記錄",
+    "nowPrice": "現價"
+  },
+  "webhook": {
+    "title": "即時推送介面",
+    "desc": "觸發預警時，除頁面彈窗 + 系統通知 + 提示音外，服務端還會向該 Webhook 地址 POST 一條 JSON，自動適配 Server 醬 / 企業微信 / 飛書機器人格式（自定義地址為 {{payload}}），實現手機推送。",
+    "help": "檢視各平臺繫結步驟",
+    "save": "儲存",
+    "test": "測試推送"
+  },
+  "help": {
+    "title": "Webhook 推送繫結步驟",
+    "close": "關閉",
+    "sample": "地址示例：",
+    "custom": {
+      "name": "自己的服務",
+      "chip": "自定義",
+      "steps": [
+        "填入任意可公網訪問的 http(s) 地址，服務端會 POST {{payload}}，JSON 格式，超時 5 秒"
+      ]
+    }
+  },
+  "guides": {
+    "ftqq": {
+      "name": "Server醬",
+      "chip": "微信",
+      "badge": "推薦",
+      "steps": [
+        "開啟 sct.ftqq.com，用微信掃碼登入",
+        "進入「SendKey」頁面，複製你的 Key",
+        "把 https://sctapi.ftqq.com/你的Key.send 填入上方輸入框，點「儲存」",
+        "點「測試推送」，微信裡的「方糖」服務號會收到一條測試訊息"
+      ]
+    },
+    "wecom": {
+      "name": "企業微信群機器人",
+      "chip": "企微",
+      "badge": "",
+      "steps": [
+        "在企業微信目標群裡：右鍵群名 → 新增群機器人 → 新建，隨意命名",
+        "複製生成的 Webhook 地址",
+        "填入上方輸入框，點「儲存」",
+        "點「測試推送」，群裡會收到一條預警測試訊息"
+      ]
+    },
+    "feishu": {
+      "name": "飛書自定義機器人",
+      "chip": "飛書",
+      "badge": "",
+      "steps": [
+        "飛書目標群 → 設定 → 群機器人 → 新增「自定義機器人」",
+        "安全設定選「自定義關鍵詞」，填「預警」",
+        "複製生成的 Webhook 地址，填入上方輸入框並「儲存」",
+        "點「測試推送」，群裡會收到一條預警測試訊息"
+      ]
+    }
+  }
+}
