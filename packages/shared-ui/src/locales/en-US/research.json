@@ -453,7 +453,20 @@
     "viewChart": "View chart ↗",
     "newConversation": "New research conversation",
     "researchOf": "{{symbol}} · research",
-    "viewsAria": "Workbench views"
+    "viewsAria": "Workbench views",
+    "entryExpiredNotice": "Your website question expired. Write a question or choose an example below.",
+    "entryInvalidNotice": "Question expired. Write a new question or choose an example.",
+    "entryRestoredNotice": "Question restored. Review it before sending.",
+    "websiteLink": "Website",
+    "resultHelpTitle": "How to read your research",
+    "resultHelpBody": "Check the context and research time, then compare supporting evidence, opposing evidence and invalidation conditions. When data is insufficient, refine your question or wait. Research does not guarantee outcomes.",
+    "resultHelpLink": "Read the full guide",
+    "entryRegion": "Restore website question",
+    "entryPending": "A website question is ready to restore. Restoring only fills the input — you review and send it yourself.",
+    "entryConflict": "There is a draft or history open. Restoring starts a new conversation. Save any text you wish to keep first.",
+    "entryRestore": "Restore website question",
+    "entryKeep": "Keep current draft",
+    "pageErrorGuide": "Getting started"
   },
   "candle": {
     "no_snapshot": "This run has no snapshot record (legacy data)",

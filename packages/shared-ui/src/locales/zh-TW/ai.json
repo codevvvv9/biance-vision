@@ -1,0 +1,35 @@
+{
+  "fab": {
+    "open": "開啟 AI 研究助手",
+    "title": "AI 研究助手",
+    "hide": "隱藏 AI 助手入口",
+    "hideTitle": "隱藏（可從右上角使用者選單重新喚起）"
+  },
+  "chat": {
+    "aria": "AI 助手對話",
+    "title": "AI 研究助手",
+    "expand": "展開",
+    "minimize": "最小化",
+    "history": "歷史會話",
+    "historyShort": "歷史",
+    "newChatTitle": "開啟新對話（歷史會話仍可從「歷史」找回）",
+    "newChat": "✚ 新對話",
+    "close": "關閉",
+    "historyPopTitle": "🕘 歷史會話",
+    "historyEmpty": "還沒有歷史會話",
+    "untitled": "未命名會話",
+    "typing": "分析中…",
+    "openInWorkbench": "在研究工作臺開啟",
+    "welcomeSub": "直接描述問題，我會自動識別場景並啟動完整研究。試試：",
+    "suggestions": [
+      "BTC 永續現在是什麼結構？還能追多嗎？",
+      "10 分鐘後高於 60000 的事件合約值得參與嗎？",
+      "什麼是鐵絲網（Barb Wire）？怎麼識別？",
+      "幫我錄入一筆 BTCUSDT 多頭持倉"
+    ],
+    "placeholder": "描述你的問題，自動啟動研究…",
+    "send": "傳送",
+    "disclaim": "AI 輸出僅供參考，不構成投資建議",
+    "counterFollowUp": "從反證角度重新研究 {{symbol}}（{{horizon}}）：重點尋找不支援上一輪結論的證據"
+  }
+}

@@ -108,7 +108,7 @@ function Shell(): JSX.Element {
   const { user, loading } = useAuth()
   const location = useLocation()
   const { t, i18n } = useTranslation()
-  useEffect(() => { const lang = new URLSearchParams(location.search).get('lang'); if (lang === 'zh-CN' || lang === 'en-US') void i18n.changeLanguage(lang) }, [location.search, i18n])
+  useEffect(() => { const lang = new URLSearchParams(location.search).get('lang'); if (lang === 'zh-CN' || lang === 'zh-TW' || lang === 'en-US') void i18n.changeLanguage(lang) }, [location.search, i18n])
   const dev = location.pathname === '/research' && researchUiMode(location.search) === 'dev'
   const workbench = <ErrorBoundary><Suspense fallback={<PageFallback />}><WorkbenchPage key={user?.username ?? 'guest'} /></Suspense></ErrorBoundary>
 

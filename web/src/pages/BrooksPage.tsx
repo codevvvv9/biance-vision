@@ -15,7 +15,7 @@ import FullscreenButton from '../components/FullscreenButton'
 import { fmtDateTime, lsGet, lsSet } from '../utils'
 import BrooksChart from '../brooks/BrooksChart'
 import { BrooksTerm, termForSignalKind } from '../brooks/terms'
-import { currentLocale } from '../i18n'
+import { contentLocale } from '../i18n'
 import type { SharedLocale } from 'biance-vision-brooks'
 import type { BrooksChartHandle } from '../brooks/BrooksChart'
 import { analyzeBrooks } from 'biance-vision-brooks'
@@ -75,7 +75,7 @@ function sigDirClass(s: BrooksSignal): string {
 
 export default function BrooksPage(): JSX.Element {
   const { t, i18n } = useTranslation()
-  const locale: SharedLocale = currentLocale()
+  const locale: SharedLocale = contentLocale()
   const [searchParams, setSearchParams] = useSearchParams()
   const { order, subscribeKline, upColor } = useMarket()
   const { status: aiStatus, askAi, showRobot } = useAi()

@@ -1,5 +1,16 @@
 import type { Locale } from './site'
 
+/**
+ * Accept-language matchers, most specific first: traditional-Chinese regions
+ * (Taiwan / Hong Kong / Macau / any zh-Hant*) map to the zh-TW tree before the
+ * generic simplified fallback claims every remaining zh tag.
+ */
+const LOCALE_MATCHERS: readonly (readonly [RegExp, Locale])[] = [
+  [/^zh-(?:tw|hk|mo|hant)(?:-[a-z0-9]+)*$/, 'zh-TW'],
+  [/^zh(?:-[a-z0-9]+)*$/, 'zh'],
+  [/^en(?:-[a-z0-9]+)*$/, 'en'],
+]
+
 export function browserLocale(header: string | null): Locale | null {
   const preferences = (header || '').slice(0, 2048).split(',').map((item, order) => {
     const [tag, ...params] = item.trim().toLowerCase().split(';')
@@ -8,8 +19,7 @@ export function browserLocale(header: string | null): Locale | null {
     return { tag, q, order }
   }).filter(p => Number.isFinite(p.q) && p.q > 0 && p.q <= 1).sort((a, b) => b.q - a.q || a.order - b.order)
   for (const { tag } of preferences) {
-    if (/^zh(?:-[a-z0-9]+)*$/.test(tag)) return 'zh'
-    if (/^en(?:-[a-z0-9]+)*$/.test(tag)) return 'en'
+    for (const [pattern, locale] of LOCALE_MATCHERS) if (pattern.test(tag)) return locale
   }
   return null
 }

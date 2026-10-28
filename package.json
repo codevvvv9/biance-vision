@@ -68,9 +68,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
+    "@types/react": "18.3.31",
+    "drizzle-orm": "0.45.2",
     "fastify": "^4.28.1",
     "tsx": "^4.19.0",
-    "drizzle-orm": "0.45.2",
     "typescript": "^5.6.0"
   },
   "pnpm": {
@@ -95,6 +96,10 @@
           }
         }
       }
-    }
+    },
+    "hoist-pattern": [
+      "*",
+      "!@types/react"
+    ]
   }
 }

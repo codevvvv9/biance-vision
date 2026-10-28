@@ -7,6 +7,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { currentLocale } from '../i18n'
+import { toTraditional } from '@biance/shared-ui'
 import type { AppLocale } from '../i18n'
 
 export interface BrooksTermText {
@@ -21,7 +22,9 @@ export interface BrooksTermDef {
 }
 
 function pick(text: BrooksTermText, locale: AppLocale): string {
-  return locale === 'en-US' ? text.en : text.zh
+  if (locale === 'en-US') return text.en
+  // 术语表只有简体数据源；繁体 UI 经字级转换呈现（scripts/sync-zh-tw 生成）
+  return locale === 'zh-TW' ? toTraditional(text.zh) : text.zh
 }
 
 export const BROOKS_TERMS: Record<string, BrooksTermDef> = {

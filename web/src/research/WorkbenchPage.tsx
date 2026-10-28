@@ -1,4 +1,5 @@
 import { brand } from '@biance/brand/identity'
+import { websiteLocale as websiteLocaleOf } from '@biance/shared-ui'
 import { MembershipCard, useMembershipState } from '../membership/Membership'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, RefObject } from 'react'
@@ -110,8 +111,7 @@ export default function WorkbenchPage(): JSX.Element {
 
 function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   const { t, i18n } = useTranslation()
-  const zh = i18n.language.startsWith('zh')
-  const websiteLocale = zh ? 'zh' : 'en'
+  const websiteLocale = websiteLocaleOf()
   const { user, logout } = useAuth()
   const membership = useMembershipState().data
   const quota = membership ? { remaining: membership.managed ? ['expired', 'disabled'].includes(membership.status) ? 0 : membership.remainingToday : membership.legacyAccess?.remaining ?? null } : null
@@ -121,7 +121,7 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   const [saved] = useState(() => readDraft(user?.username ?? null))
   const [entry, setEntry] = useState<ResearchEntryDraftV1 | null>(() => { try { return parseEntry(sessionStorage.getItem(ENTRY_KEY)) } catch { return null } })
   const [entryNotice, setEntryNotice] = useState('')
-  useEffect(() => { try { if (sessionStorage.getItem(ENTRY_KEY) && !entry) { sessionStorage.removeItem(ENTRY_KEY); setEntryNotice(zh ? '官网问题已失效，请重新输入或选择下方示例问题。' : 'Your website question expired. Write a question or choose an example below.') } } catch { /* Manual input remains available. */ } }, [])
+  useEffect(() => { try { if (sessionStorage.getItem(ENTRY_KEY) && !entry) { sessionStorage.removeItem(ENTRY_KEY); setEntryNotice(t('research:wb.entryExpiredNotice')) } } catch { /* Manual input remains available. */ } }, [])
   const [scene, setScene] = useState<Scene>(saved.scene)
   const [symbol, setSymbol] = useState(saved.symbol)
   const [horizon, setHorizon] = useState<Horizon>(saved.horizon)
@@ -160,12 +160,12 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   }, [user])
   const applyEntry = (): void => {
     const valid = entry ? parseEntry(JSON.stringify(entry)) : null
-    if (!valid) { setEntry(null); setEntryNotice(zh ? '问题已失效，请重新输入或选择示例。' : 'Question expired. Write a new question or choose an example.'); return }
+    if (!valid) { setEntry(null); setEntryNotice(t('research:wb.entryInvalidNotice')); return }
     if (selectedConversation || selectedRun) { updateUrl({ conversation: null, run: null }); conv.newConversation(); tracker.clearRun() }
     setScene(valid.scene); setSymbol(valid.symbol); setHorizon(valid.horizon); setPositionId(''); setQuoteId('')
     setDrafts(d => ({ ...d, [valid.scene]: valid.question })); void i18n.changeLanguage(valid.locale)
     try { sessionStorage.removeItem(ENTRY_KEY) } catch { /* No storage is required for sending. */ }
-    setEntry(null); setEntryNotice(valid.locale === 'zh-CN' ? '官网问题已恢复，请检查后确认发送。' : 'Question restored. Review it before sending.'); inputRef.current?.focus()
+    setEntry(null); setEntryNotice(t('research:wb.entryRestoredNotice')); inputRef.current?.focus()
   }
   const keepDraft = (): void => { try { sessionStorage.removeItem(ENTRY_KEY) } catch { /* optional */ }; setEntry(null) }
   const context = { symbol, horizon, product: SCENES[scene].product, marketType: SCENES[scene].marketType, positionId, quoteId }
@@ -362,7 +362,7 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
               onClick={() => { setNavOpen(false); nearBottom.current = true; updateUrl({ conversation: c.id, run: null }) }}>{c.title || t('research:wb.untitled')}</button></div>)}
         </>}
       </div>
-      <div className="wb-sidebar-foot"><nav aria-label={t('research:wb.otherWorkbench')}><Link to="/dashboard">◫ <span>{t('research:wb.markets')}</span></Link><a href={`/${websiteLocale}`}>↗ <span>{zh ? '官网' : 'Website'}</span></a><Link to="/brooks">⌁ <span>{t('research:wb.priceAction')}</span></Link></nav>
+      <div className="wb-sidebar-foot"><nav aria-label={t('research:wb.otherWorkbench')}><Link to="/dashboard">◫ <span>{t('research:wb.markets')}</span></Link><a href={`/${websiteLocale}`}>↗ <span>{t('research:wb.websiteLink')}</span></a><Link to="/brooks">⌁ <span>{t('research:wb.priceAction')}</span></Link></nav>
         <div className="wb-account">{user ? <><span className="wb-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="wb-account-name">{user.username}</span><button onClick={() => void logout()} aria-label={t('research:wb.logoutAria')}>{t('research:wb.logout')}</button></> : <button className="wb-login" onClick={login}><span className="wb-avatar">↗</span><span>{t('research:wb.login')}</span></button>}</div>
       </div>
     </aside>
@@ -391,7 +391,7 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
                 {m.card && <PositionConfirmCard card={m.card} busy={conv.cardBusy !== null} onResolve={confirm => void conv.resolveCard(i, confirm)} />}
                 {m.runId && (m.runId === run?.id ? bubble : <button className="wb-run-link" disabled={running || conv.busy} onClick={() => updateUrl({ run: m.runId! })}>{t('research:wb.viewThisRun', { id: m.runId.slice(0, 8) })}</button>)}</div>
             </article>)}
-            {(run || visibleMessages.some(m => m.role === 'assistant')) && <details className="wb-result-help"><summary>{zh ? '如何阅读研究结果' : 'How to read your research'}</summary><p>{zh ? '先看结论适用的场景与时间，再核对支持证据、反对证据和失效条件。数据不足时先补充问题或等待，不将研究结果视为保证。' : 'Check the context and research time, then compare supporting evidence, opposing evidence and invalidation conditions. When data is insufficient, refine your question or wait. Research does not guarantee outcomes.'}</p><a href={`/${websiteLocale}/guides/reading-research-results`}>{zh ? '完整阅读指南' : 'Read the full guide'}</a></details>}
+            {(run || visibleMessages.some(m => m.role === 'assistant')) && <details className="wb-result-help"><summary>{t('research:wb.resultHelpTitle')}</summary><p>{t('research:wb.resultHelpBody')}</p><a href={`/${websiteLocale}/guides/reading-research-results`}>{t('research:wb.resultHelpLink')}</a></details>}
             {conv.busy && <p className="wb-thinking" role="status"><span />{t('research:wb.understanding')}</p>}
             {runLoading && <p className="wb-caption" role="status">{t('research:wb.readingRun')}</p>}
             {run && !hasInlineRun && <article className="wb-message assistant"><div className="wb-message-label">{t('research:wb.visionResearch')}</div><div className="wb-message-body">{bubble}</div></article>}
@@ -399,10 +399,10 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
         </div>
         {unread && <button className="wb-to-bottom" onClick={() => { nearBottom.current = true; const el = logRef.current; if (el) el.scrollTop = el.scrollHeight; setUnread(false) }}>{t('research:wb.toBottom')}</button>}
         <div className="wb-compose-wrap">
-          {entry && user && <div className="wb-entry" role="region" aria-label={zh ? '官网问题恢复' : 'Restore website question'}><p>{zh ? '官网有一个待恢复的问题。恢复仅填写输入框，由你确认发送。' : 'A website question is ready to restore. Review and send it yourself.'}</p><blockquote>{entry.question}</blockquote>{(Object.values(drafts).some(d => d.trim()) || selectedConversation || selectedRun) && <p>{zh ? '当前有草稿或历史会话。替换会切换到新会话，请先保存需要保留的文字。' : 'There is a draft or history open. Restoring starts a new conversation. Save any text you wish to keep first.'}</p>}<button disabled={locked} onClick={applyEntry}>{zh ? '恢复官网问题' : 'Restore website question'}</button><button onClick={keepDraft}>{zh ? '保留当前草稿' : 'Keep current draft'}</button></div>}
+          {entry && user && <div className="wb-entry" role="region" aria-label={t('research:wb.entryRegion')}><p>{t('research:wb.entryPending')}</p><blockquote>{entry.question}</blockquote>{(Object.values(drafts).some(d => d.trim()) || selectedConversation || selectedRun) && <p>{t('research:wb.entryConflict')}</p>}<button disabled={locked} onClick={applyEntry}>{t('research:wb.entryRestore')}</button><button onClick={keepDraft}>{t('research:wb.entryKeep')}</button></div>}
           {entryNotice && <p className="wb-caption" role="status">{entryNotice}</p>}
           <MembershipCard />
-          {pageError && <p className="wb-alert" role="alert">{pageError} <a href={`/${websiteLocale}/guides/getting-started`}>{zh ? '查看首次使用指南' : 'Getting started'}</a></p>}
+          {pageError && <p className="wb-alert" role="alert">{pageError} <a href={`/${websiteLocale}/guides/getting-started`}>{t('research:wb.pageErrorGuide')}</a></p>}
           {conv.historyError && selectedConversation && <p className="wb-alert" role="alert">{t('research:wb.restoreFailed', { msg: conv.historyError })}</p>}
           <ContextCard symbol={symbol} horizon={horizon} product={SCENES[scene].product}
             position={scene === 'perp' ? positions.find(p => p.id === positionId) ?? null : null}

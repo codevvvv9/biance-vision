@@ -4,6 +4,7 @@ import type { AppLocale } from '../i18n'
 
 const LANGS: { code: AppLocale; labelKey: string }[] = [
   { code: 'zh-CN', labelKey: 'lang.zh' },
+  { code: 'zh-TW', labelKey: 'lang.zhTw' },
   { code: 'en-US', labelKey: 'lang.en' },
 ]
 

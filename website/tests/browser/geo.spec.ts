@@ -3,7 +3,7 @@ import { pagePaths, published } from '../../lib/publications'
 
 const origin = process.env.WEBSITE_ORIGIN || 'http://localhost:3100'
 test('every bilingual publication is server HTML with matching metadata, source links, TOC and conversion exits', async ({ page, request }) => {
-  for (const locale of ['en', 'zh'] as const) {
+  for (const locale of ['en', 'zh', 'zh-TW'] as const) {
     for (const item of published) {
       const t = item.translations[locale]
       const response = await request.get(t.url)
@@ -30,14 +30,19 @@ test('every bilingual publication is server HTML with matching metadata, source 
   await expect(page.locator('#section-3')).toBeInViewport()
   await expect(page.locator('.article-body a[href="/en/contact"]')).toHaveCount(1)
   await expect(page.locator('.article-body a[href^="/login?"]')).toHaveCount(1)
-  await page.getByRole('link', { name: '切换到中文' }).click()
+  await page.locator('.lang-menu summary').click()
+  await page.getByRole('link', { name: '简体中文', exact: true }).click()
   await expect(page).toHaveURL(/\/zh\/guides\/second-entry-h2$/)
   await expect(page.locator('html')).toHaveAttribute('lang','zh-CN')
+  // the traditional tree serves the same publication with zh-TW metadata
+  const twResponse = await request.get('/zh-TW/guides/second-entry-h2')
+  expect(twResponse.status()).toBe(200)
+  expect(await twResponse.text()).toContain('與')
 })
 test('sitemap lists exactly the published locale pages with stable translations and dates', async ({ request }) => {
   const xml = await (await request.get('/sitemap.xml')).text()
   const locations = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map(m=>new URL(m[1]).pathname).sort()
-  expect(locations).toEqual(['en','zh'].flatMap(locale => pagePaths.map(p=>`/${locale}${p?`/${p}`:''}`)).sort())
+  expect(locations).toEqual(['en','zh','zh-TW'].flatMap(locale => pagePaths.map(p=>`/${locale}${p?`/${p}`:''}`)).sort())
   expect(xml).toContain('hreflang="x-default"')
   expect(locations.some(p=>/^\/(?:login|research|admin)(?:\/|$)/.test(p))).toBe(false)
 })
@@ -64,7 +69,7 @@ test('root language selection is GET/HEAD equivalent, ignores supplied region he
     expect(response.headers()['set-cookie']).toBeUndefined()
     expect(response.headers()['cache-control']).toContain('no-store')
   }
-  for (const locale of ['en','zh']) {
+  for (const locale of ['en','zh','zh-TW']) {
     const response = await request.get(`/${locale}/about`,{headers:{'accept-language':locale==='en'?'zh':'en','x-website-client-ip':'1.0.1.1'},maxRedirects:0})
     expect(response.status()).toBe(200); expect(response.headers().location).toBeUndefined()
   }
@@ -86,6 +91,8 @@ test('standalone cases and original diagrams are usable without JS at desktop an
     await page.setViewportSize({width:390,height:1000})
     await page.goto('/zh/about')
     await expect(page.getByText(/与 Binance 无隶属/)).toBeVisible()
+    await page.goto('/zh-TW/about')
+    await expect(page.getByText(/與 Binance 無隸屬/)).toBeVisible()
     await page.screenshot({path:'../docs/references/website-qa/geo-about-mobile.png',fullPage:true})
     await page.setViewportSize({width:1440,height:1000})
     await page.goto('/en/guides/second-entry-h2')

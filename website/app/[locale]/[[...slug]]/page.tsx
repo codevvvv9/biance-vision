@@ -5,7 +5,8 @@ import { structuredData } from '@/lib/structured-data'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { ContactPage, DemoPage, GuidesPage, HomePage, pageInfo, pagePaths } from '@/lib/pages'
-import { isLocale, pageAlternates } from '@/lib/site'
+import { isLocale, localeMeta, pageAlternates } from '@/lib/site'
+import { toTraditional } from '@/lib/zh-tw'
 
 type Params = { locale: string; slug?: string[] }
 export const dynamicParams = false
@@ -16,9 +17,10 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const path = slug.join('/')
   if (!isLocale(locale) || !pagePaths.includes(path)) notFound()
   const info = pageInfo(locale, path)!
-  const title = path === '' ? `${brand.name} — ${brand.positioning[locale]}` : info.title
+  const positioning = brand.positioning[locale === 'en' ? 'en' : 'zh']
+  const title = path === '' ? `${brand.name} — ${locale === 'zh-TW' ? toTraditional(positioning) : positioning}` : info.title
   return { title: path === '' ? { absolute: title } : title, description: info.description, alternates: pageAlternates(locale, path ? `/${path}` : ''),
-    openGraph: { siteName: brand.name, type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: locale === 'zh' ? 'zh_CN' : 'en_US', alternateLocale: locale === 'zh' ? 'en_US' : 'zh_CN' },
+    openGraph: { siteName: brand.name, type: 'website', images: [{ url: '/opengraph-image', width: 1200, height: 630 }], title, description: info.description, url: `/${locale}${path ? `/${path}` : ''}`, locale: localeMeta[locale].ogLocale, alternateLocale: locale === 'en' ? 'zh_CN' : ['en_US', 'zh_CN'] },
   }
 }
 

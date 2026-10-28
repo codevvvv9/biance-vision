@@ -1,0 +1,94 @@
+{
+  "brand": {
+    "sub": "價格行為與策略研究工作臺"
+  },
+  "nav": {
+    "overview": "大盤總覽",
+    "priceAction": "價格行為",
+    "research": "研究終端"
+  },
+  "status": {
+    "connected": "即時連線",
+    "connecting": "連線中",
+    "offline": "已斷線 · 重連中"
+  },
+  "header": {
+    "notifyOn": "系統通知已開啟",
+    "notifyEnable": "開啟系統通知",
+    "notifyBlocked": "通知被瀏覽器攔截",
+    "soundOn": "提示音：開",
+    "soundOff": "提示音：關",
+    "roleSuper": "超級管理員",
+    "roleUser": "普通使用者",
+    "superTag": "超管",
+    "aiSettings": "AI 設定",
+    "aiConfigured": "已配置",
+    "aiNotConfigured": "未配置",
+    "aiAssistant": "AI 助手",
+    "aiChatting": "對話中",
+    "aiSummon": "喚起",
+    "upColor": "漲跌配色",
+    "upColorGreen": "綠漲紅跌",
+    "upColorRed": "紅漲綠跌",
+    "logout": "退出登入"
+  },
+  "lang": {
+    "label": "語言",
+    "zh": "簡體中文",
+    "en": "English",
+    "zhTw": "繁體中文"
+  },
+  "app": {
+    "verifying": "正在驗證登入狀態…",
+    "loadingAdmin": "正在載入管理後臺…",
+    "pageLoading": "頁面載入中"
+  },
+  "footer": {
+    "disclaimer": "本工具僅供學習研究，不構成投資建議"
+  },
+  "fullscreen": {
+    "enter": "全屏顯示",
+    "exit": "退出全屏（Esc）"
+  },
+  "toast": {
+    "close": "關閉"
+  },
+  "error": {
+    "pageFailed": "頁面載入失敗",
+    "reload": "重新整理重試"
+  },
+  "api": {
+    "requestFailed": "請求失敗 (HTTP {{code}})"
+  },
+  "membership": {
+    "retry": "重試",
+    "researchGateTitle": "研究終端為會員功能",
+    "researchGateBody": "當前帳號暫未開通研究許可權。開通會員或內部帳號後即可發起研究；已有研究會話仍可檢視。",
+    "researchGateContact": "聯絡開通",
+    "researchGateHistory": "檢視歷史研究",
+    "researchGateRefreshFailed": "會員狀態重新整理失敗，當前展示最近一次狀態；期間服務端仍會逐次校驗研究許可權。",
+    "researchGateReadonly": "只讀模式：研究許可權未生效，可檢視歷史與取消任務，不能發起新研究。",
+    "researchGateLoadFailedTitle": "無法獲取會員狀態",
+    "legacyAccount": "待遷移帳號",
+    "trial": "試用中",
+    "active": "會員有效",
+    "expired": "會員已到期",
+    "disabled": "已停用",
+    "account": "帳號",
+    "plan": "套餐",
+    "expires": "到期",
+    "lifetime": "長期有效",
+    "myMembership": "我的會員",
+    "expires2": "有效期至",
+    "membershipProgress": "有效期進度",
+    "usedToday": "今日已用",
+    "remaining": "剩餘",
+    "unlimited": "不限",
+    "resets": "重置",
+    "upcoming": "待生效",
+    "lastUpdated": "上次更新",
+    "contactAdminToRenew": "聯絡管理員續費",
+    "copyMembershipDetails": "複製套餐資訊",
+    "refresh": "重新整理"
+  }
+}

@@ -4,8 +4,8 @@
  * 1. 扫描 web/src 下所有 .ts/.tsx 中字符串字面量与 JSX 文本里的 CJK 字符，
  *    白名单豁免（注释、词典文件、双语术语表、服务端 fact 契约前缀匹配等），
  *    输出剩余未迁移文案清单；--strict 时非零退出（CI 用）。
- * 2. 词典一致性：zh-CN 与 en-US 同命名空间的 key 集合必须一致（缺 key 会
- *    fallback 中文不出空白，但会漏翻译——提前暴露）。
+ * 2. 词典一致性：zh-CN / zh-TW / en-US 同命名空间的 key 集合必须一致
+ *    （zh-TW 是 scripts/sync-zh-tw.ts 的派生词典——改了 zh-CN 忘跑同步在此直接红）。
  * 3. admin 字面量 key 存在性（2026-10-26 队列页 ui.colQueue 漏录教训）。
  * 4. 错误码 i18n 契约（2026-10-27）：server 错误响应行发出的每个 code（字面量
  *    或文件内 const 常量）必须在 zh-CN/en-US errors.json 双语存在——服务端只发
@@ -115,26 +115,29 @@ function flatKeys(obj: Record<string, unknown>, prefix = ''): string[] {
 }
 
 let keyMismatch = 0
+const DICT_LANGS = ['zh-CN', 'zh-TW', 'en-US'] as const
 for (const ns of readdirSync(path.join(LOCALES, 'zh-CN'))) {
-  const zh = JSON.parse(readFileSync(path.join(LOCALES, 'zh-CN', ns), 'utf8'))
-  const enPath = path.join(LOCALES, 'en-US', ns)
-  if (!existsSync(enPath)) {
-    console.log(`[dict] en-US 缺少命名空间文件: ${ns}`)
-    keyMismatch++
-    continue
+  const keysets = new Map<string, Set<string>>()
+  for (const lang of DICT_LANGS) {
+    const file = path.join(LOCALES, lang, ns)
+    if (!existsSync(file)) {
+      console.log(`[dict] ${lang} 缺少命名空间文件: ${ns}（zh-TW 由 pnpm --filter @biance/shared-ui sync:zh-tw 生成）`)
+      keyMismatch++
+      continue
+    }
+    keysets.set(lang, new Set(flatKeys(JSON.parse(readFileSync(file, 'utf8')))))
   }
-  const en = JSON.parse(readFileSync(enPath, 'utf8'))
-  const zhKeys = new Set(flatKeys(zh))
-  const enKeys = new Set(flatKeys(en))
-  const missingEn = [...zhKeys].filter((k) => !enKeys.has(k))
-  const missingZh = [...enKeys].filter((k) => !zhKeys.has(k))
-  if (missingEn.length > 0) {
-    console.log(`[dict] ${ns}: en-US 缺 key → ${missingEn.join(', ')}`)
-    keyMismatch += missingEn.length
-  }
-  if (missingZh.length > 0) {
-    console.log(`[dict] ${ns}: zh-CN 缺 key → ${missingZh.join(', ')}`)
-    keyMismatch += missingZh.length
+  for (const [a, b] of [['zh-CN', 'zh-TW'], ['zh-CN', 'en-US']] as const) {
+    const ka = keysets.get(a), kb = keysets.get(b)
+    if (!ka || !kb) continue
+    for (const miss of [...ka].filter((k) => !kb.has(k))) {
+      console.log(`[dict] ${ns}: ${b} 缺 key → ${miss}`)
+      keyMismatch++
+    }
+    for (const miss of [...kb].filter((k) => !ka.has(k))) {
+      console.log(`[dict] ${ns}: ${a} 缺 key → ${miss}`)
+      keyMismatch++
+    }
   }
 }
 
@@ -170,11 +173,11 @@ let missingKeys = 0
 let errorCodesMissing = 0
 let cjkWithoutCode = 0
 {
-  const zhErrors = JSON.parse(readFileSync(path.join(LOCALES, 'zh-CN', 'errors.json'), 'utf8')) as Record<string, unknown>
-  const enErrors = JSON.parse(readFileSync(path.join(LOCALES, 'en-US', 'errors.json'), 'utf8')) as Record<string, unknown>
-  const zhErrKeys = new Set(flatKeys(zhErrors))
-  const enErrKeys = new Set(flatKeys(enErrors))
-  const dictHas = (code: string): boolean => zhErrKeys.has(code) && enErrKeys.has(code)
+  const errKeysets = DICT_LANGS.map((lang) => {
+    const file = path.join(LOCALES, lang, 'errors.json')
+    return new Set(flatKeys(JSON.parse(readFileSync(file, 'utf8'))))
+  })
+  const dictHas = (code: string): boolean => errKeysets.every((keys) => keys.has(code))
 
   const SERVER_SRC = path.join(ROOT, 'server/src')
   // 错误响应位点：Object.assign(new Error(...)) 抛出 / reply.code(4xx/5xx/动态).send(...) 直发。

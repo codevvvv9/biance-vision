@@ -1,0 +1,142 @@
+{
+  "interval": {
+    "1m": "1分",
+    "5m": "5分",
+    "15m": "15分",
+    "1h": "1時",
+    "4h": "4時",
+    "1d": "日線"
+  },
+  "symbolPlaceholder": "交易對，如 BTCUSDT",
+  "analyze": "分析",
+  "swingScale": "擺動尺度",
+  "barCount": "K線數量",
+  "barsUnit": "{{count}}根",
+  "scales": {
+    "1": {
+      "t": "微觀",
+      "hint": "k=1：微觀擺動，噪音多，貼近逐根K線讀法"
+    },
+    "2": {
+      "t": "精細",
+      "hint": "k=2：偏微觀的結構"
+    },
+    "3": {
+      "t": "標準",
+      "hint": "k=3：社群共識的預設尺度（AxisJu/ByteBard 均用 3）"
+    },
+    "5": {
+      "t": "主要",
+      "hint": "k=5：只看主要擺動點，結構更乾淨但更滯後"
+    }
+  },
+  "toggles": {
+    "regime": "狀態條",
+    "ema": "EMA20",
+    "legs": "腿連線",
+    "swings": "擺動標籤",
+    "io": "內/外包",
+    "signals": "訊號"
+  },
+  "helpButton": "? 圖例與規則",
+  "title": "{{base}}/USDT · 價格行為結構 · {{interval}}",
+  "titleScale": "（尺度 k={{k}}）",
+  "note": "只識別結構 · 不預測漲跌 · 僅收盤K線計入訊號",
+  "ai": {
+    "button": "🤖 AI 解讀",
+    "hintOk": "把當前結構摘要發給 AI 助手，按 Brooks 框架解讀",
+    "hintNo": "AI 未配置（需超管在「AI 設定」中完成配置）"
+  },
+  "fullscreen": "全屏檢視價格行為結構（放大後自動顯示更多標註）",
+  "refresh": "重新整理",
+  "loading": "載入 {{symbol}} K 線…",
+  "loadFailed": "K 線載入失敗",
+  "retry": "重試",
+  "summary": {
+    "title": "當前結構",
+    "marketState": "市場狀態",
+    "structureVerdict": "結構判定",
+    "swingSequence": "擺動序列",
+    "lastLeg": "最近一腿",
+    "signalStat": "訊號統計",
+    "alwaysIn": {
+      "bull": "多頭",
+      "bear": "空頭",
+      "none": "方向不明"
+    },
+    "sinceBar": "（自第 {{n}} 根）",
+    "lastLegLine": "{{dir}} {{count}} 根 · 趨勢棒 {{trend}}",
+    "lastLegRetrace": " · 相對前腿 {{pct}}%",
+    "signalCount": "共 {{total}} 條 · 多頭 {{bull}} · 空頭 {{bear}}",
+    "empty": "載入中或K線不足（至少需要 30 根收盤K線）…"
+  },
+  "signals": {
+    "title": "研究訊號（新→舊）",
+    "filter": {
+      "all": "全部",
+      "bull": "多頭",
+      "bear": "空頭"
+    },
+    "empty": "暫無訊號（該週期結構未觸發規則）",
+    "locate": "點選定位到圖上對應K線",
+    "empirical": "經驗統計：{{note}}",
+    "empiricalTitle": "Brooks 在其美股股指期貨市場的經驗統計，非本品種驗證勝率",
+    "ref": {
+      "entry": "突破 {{v}}",
+      "stop": "止損 {{v}}",
+      "target": "目標 {{v}}"
+    }
+  },
+  "help": {
+    "title": "圖例與規則速查（Al Brooks 價格行為）",
+    "close": "關閉",
+    "structureTitle": "結構標註",
+    "structure": [
+      "HH / LH（K線上方）：更高高頂 / 更低高頂；HL / LL（K線下方）：更高低底 / 更低低底。HH+HL 交替 = 多頭結構，LH+LL 交替 = 空頭結構。",
+      "i / O / ii / oo / ioi：內包線 / 外包線 / 連續內包 / 連續外包 / 內包-外包-內包。內包 = 突破模式（觀望），ii 是日內最可靠的突破形態之一。",
+      "頂部狀態條：綠=多頭通道（亮綠=衝刺）、紅=空頭通道（亮紅=衝刺）、琥珀=交易區間、紫=緊湊區間/鐵絲網。",
+      "EMA20（青色虛線）：Brooks 判定趨勢的基準——20 根收盤 ≥70% 在一側 = 趨勢，否則震盪。"
+    ],
+    "signalTitle": "訊號",
+    "signalList": [
+      "H1~H4 / L1~L4：多頭/空頭回調中的進場計數。H2/L2 = 二次進場，是 Brooks 體系中勝率最高的結構（先驗 ≈60%）。",
+      "楔頂/楔底：三推反轉（跨度 ≤40 根），第三推動能衰減時可靠性更高。",
+      "雙頂/雙底：兩個擺動點近似等高/等低（容差 0.3×ATR，間隔 ≥3 根）。",
+      "破線↓/↑（TLB）：趨勢線被收盤穿越——只是警戒：約 50% 機率趨勢恢復、50% 走向反轉。",
+      "MTR：主要趨勢反轉 = 趨勢線突破 + 測試 + 反轉訊號三步齊備。",
+      "區間破↑/↓：交易區間突破。先驗：80% 的區間突破嘗試失敗，首次突破僅約 50% 存活——只作研究關注。",
+      "衝刺↑/↓：連續 ≥5 根同向趨勢棒（spike），spike and channel 的起點。"
+    ],
+    "aiTitle": "AI 聯動",
+    "aiList": [
+      "🤖 AI 解讀：把當前結構摘要一鍵發給 AI 助手，按 Brooks 框架解讀（需超管配置 AI）。",
+      "/brooks 幣週期：AI 聊天裡的斜槓命令（如 /brooks BTC 1h），直接輸出結構識別結果；自然語言問「BTC 現在什麼結構」時 AI 也會自動呼叫結構引擎工具。"
+    ],
+    "scaleTitle": "擺動尺度 k",
+    "scaleList": [
+      "擺動點需右側 k 根K線確認（訊號天然滯後 k 根，且不重繪）。k=1 微觀（噪音多）→ k=3 標準（推薦）→ k=5 主要擺動。Brooks 本人強調結構是分形的：換尺度看同一份K線，本身就是練習。"
+    ],
+    "disclaimer": "本工具把 Brooks 三部曲的K線結構規則量化為確定性程式碼，僅供學習復盤研究；訊號是結構標註而非交易指令，不構成任何投資建議。"
+  },
+  "aiPrompt": {
+    "dir": {
+      "bull": "多頭",
+      "bear": "空頭",
+      "neutral": "中性"
+    },
+    "legDir": {
+      "up": "上",
+      "down": "下"
+    },
+    "none": "無",
+    "header": "請用 Al Brooks《價格行為交易》三部曲的框架解讀以下結構資料（來自內建 Brooks 結構引擎：{{symbol}} {{interval}}，{{barCount}} 根收盤K線，擺動尺度 k={{swingK}}）：",
+    "regime": "市場狀態",
+    "alwaysIn": "Always In",
+    "alwaysInLine": "- Always In：{{dir}}（{{reason}}）",
+    "structureLine": "- 結構判定：{{verdict}}；擺動序列（舊→新）：{{sequence}}",
+    "lastLegLine": "- 最近一腿：{{dir}} {{count}} 根（趨勢棒 {{trend}}{{retracement}}）",
+    "retracement": "，幅度為前腿 {{pct}}%",
+    "recentSignals": "最近訊號（新→舊）：",
+    "requirements": "解讀要點：1) 當前結構的含義與多空力量對比；2) 訊號之間的印證與矛盾；3) 按 Brooks 機率先驗（區間突破 80% 失敗、H2 二次進場 ≈60%、趨勢線破位 50/50）區分高質量訊號與大機率只是回撥的訊號；4) 當前狀態下最需要警惕的陷阱。可呼叫工具補充即時行情。"
+  }
+}

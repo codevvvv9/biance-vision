@@ -35,7 +35,8 @@
   "lang": {
     "label": "Language",
     "zh": "简体中文",
-    "en": "English"
+    "en": "English",
+    "zhTw": "Traditional Chinese"
   },
   "app": {
     "verifying": "Verifying your session…",

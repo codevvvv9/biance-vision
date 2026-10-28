@@ -1,0 +1,24 @@
+{
+  "title": "24h 異動榜",
+  "toast": {
+    "listed": "{{symbol}} · 異動上榜",
+    "body": "24h {{pct}}，現價 {{price}}，進入 ±{{threshold}}% 異動榜"
+  },
+  "thresholdLabel": "漲跌幅閾值",
+  "pushOn": "🔔 新上榜推送：開",
+  "pushOff": "🔕 新上榜推送：關",
+  "tabs": {
+    "up": "漲幅榜",
+    "down": "跌幅榜"
+  },
+  "hint": "統計範圍：成交額前 {{count}} 的 USDT 交易對 · 即時重新整理",
+  "col": {
+    "symbol": "交易對",
+    "last": "最新價",
+    "changePct": "24h漲跌幅",
+    "quoteVolume": "24h成交額",
+    "high": "24h最高",
+    "low": "24h最低"
+  },
+  "empty": "當前沒有 24h 漲跌幅超過 ±{{threshold}}% 的交易對，試試調低閾值"
+}

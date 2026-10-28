@@ -107,7 +107,7 @@ test('reduced motion and no JavaScript expose a complete, readable static story'
   const staticPage = await context.newPage()
   await staticPage.goto('/en')
   await expect(staticPage.locator('[data-playback]')).toHaveAttribute('data-phase', '2')
-  await expect(staticPage.getByText('builds strategy on evidence.')).toBeVisible()
+  await expect(staticPage.getByRole('region', { name: 'DuckStrat risk-run mini game' }).getByText('builds strategy on evidence.')).toBeVisible()
   await expect(staticPage.getByRole('link', { name: 'View research demo', exact: true }).first()).toHaveAttribute('href', '/en/demo')
   await context.close()
 })
