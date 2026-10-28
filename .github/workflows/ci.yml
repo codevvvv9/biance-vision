@@ -43,6 +43,12 @@ jobs:
         # Both Vite builds enforce module-graph isolation (Ant Design stays admin-only).
       - run: pnpm --dir web exec playwright install --with-deps chromium
       - run: pnpm --dir web test:admin
+      # 官网浏览器测试入 CI（2026-10-28 起补网：此前 browser-check 不在 CI 里跑，
+      # 两条过时断言在 main 上无声挂了数天——网站改版必须带着测试走）
+      - run: pnpm --dir website exec playwright install --with-deps chromium
+      - run: pnpm website:browser-check
+        env:
+          WEBSITE_ORIGIN: https://duckstrat.com
 
       - uses: actions/upload-artifact@v4
         if: always()
