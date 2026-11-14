@@ -11,7 +11,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
-import { analyzeBrooks } from 'biance-vision-brooks'
+import { analyzeBrooks, INTERVAL_MS as INTERVAL_MS_SHARED } from 'biance-vision-brooks'
 import type { BrooksDisplay, EventQuote, FollowUpAction, Position, ResearchRun } from 'biance-vision-brooks'
 import { useMarket } from '../market/MarketContext'
 import BrooksChart from '../brooks/BrooksChart'
@@ -47,8 +47,9 @@ const SCENARIO_MARKET: Record<Scenario, MarketType> = { spot: 'spot', perp: 'usd
 
 const HORIZON_TF: Record<Horizon, string> = { '10m': '1m', '30m': '5m', '1h': '15m', '1d': '1h', '1w': '4h' }
 
-/** 图表周期毫秒数（新鲜度判定：最后一根收盘距今超过 周期+一个周期宽限 视为陈旧） */
-const INTERVAL_MS: Record<string, number> = { '1m': 60_000, '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000 }
+/** 图表周期毫秒数（新鲜度判定：最后一根收盘距今超过 周期+一个周期宽限 视为陈旧）；
+ * 清单单一数据源 = shared INTERVAL_MS（契约契约键），此处放宽为 string 查表 */
+const INTERVAL_MS: Record<string, number> = INTERVAL_MS_SHARED
 
 /** 顶栏交易对 datalist 的静态兜底（/api/market/symbols 不可用时） */
 const FALLBACK_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT']

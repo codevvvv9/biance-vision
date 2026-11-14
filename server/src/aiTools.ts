@@ -2,6 +2,8 @@ import { restGet, tickerCache, tickerOf, topUsdtTickers } from './binance.js'
 import type { RawKlineRow } from './types.js'
 import { analyzeBrooks } from 'biance-vision-brooks'
 import type { BrooksCandle } from 'biance-vision-brooks'
+import { INTERVALS, INTERVAL_MS, SYMBOL_RE } from 'biance-vision-brooks'
+import type { Interval } from 'biance-vision-brooks'
 import { buildSystemPrompt, getAiNews, streamChatOnce } from './ai.js'
 import type { AiProfile, ChatMessage } from './ai.js'
 import { addManualMemory, clearMemories, deleteMemoriesByKeyword, listMemories, MEMORY_KINDS } from './aiMemory.js'
@@ -38,30 +40,20 @@ export interface AiToolResult {
   chart?: ChartSpec
 }
 
-const INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d'] as const
-type Interval = (typeof INTERVALS)[number]
+/** 周期白名单：单一数据源（shared 契约 INTERVALS），本地不再拷贝清单 */
+const INTERVAL_LIST: readonly string[] = INTERVALS
 
-/** 每年 K 线根数（年化波动率换算用） */
-const PERIODS_PER_YEAR: Record<Interval, number> = {
-  '1m': 525600,
-  '3m': 175200,
-  '5m': 105120,
-  '15m': 35040,
-  '30m': 17520,
-  '1h': 8760,
-  '2h': 4380,
-  '4h': 2190,
-  '6h': 1460,
-  '8h': 1095,
-  '12h': 730,
-  '1d': 365,
-}
+const YEAR_MS = 365 * 24 * 3_600_000
 
-const SYMBOL_RE = /^[A-Z0-9]{4,20}$/
+/** 每年 K 线根数（年化波动率换算用）：从 INTERVAL_MS 派生的单一数据源 */
+const PERIODS_PER_YEAR: Record<Interval, number> = Object.fromEntries(
+  INTERVALS.map((iv) => [iv, Math.round(YEAR_MS / INTERVAL_MS[iv])]),
+) as Record<Interval, number>
+
 const normSymbol = (s: unknown): string => (typeof s === 'string' ? s.trim().toUpperCase() : '')
 
 function pickInterval(v: unknown, fallback: Interval): Interval {
-  return typeof v === 'string' && (INTERVALS as readonly string[]).includes(v) ? (v as Interval) : fallback
+  return typeof v === 'string' && INTERVAL_LIST.includes(v) ? (v as Interval) : fallback
 }
 
 function pickInt(v: unknown, min: number, max: number, fallback: number): number {

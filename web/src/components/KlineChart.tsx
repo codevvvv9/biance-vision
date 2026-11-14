@@ -11,6 +11,7 @@ import { klinechartsLocale, default as i18n } from '../i18n'
 import { registerLocale } from 'klinecharts'
 import { KLINECHARTS_ZH_TW } from '@biance/shared-ui'
 registerLocale('zh-TW', KLINECHARTS_ZH_TW)
+import { CHART_INTERVALS } from 'biance-vision-brooks'
 import type { UpColorMode } from '../utils'
 import type { KlineBar } from '../types'
 
@@ -19,14 +20,8 @@ interface IntervalOption {
   t: string
 }
 
-const INTERVALS: IntervalOption[] = [
-  { v: '1m', t: 'dashboard:kline.intervals.1m' },
-  { v: '5m', t: 'dashboard:kline.intervals.5m' },
-  { v: '15m', t: 'dashboard:kline.intervals.15m' },
-  { v: '1h', t: 'dashboard:kline.intervals.1h' },
-  { v: '4h', t: 'dashboard:kline.intervals.4h' },
-  { v: '1d', t: 'dashboard:kline.intervals.1d' },
-]
+/** 周期按钮组：清单单一数据源（shared CHART_INTERVALS），加周期不再改本组件 */
+const INTERVALS: IntervalOption[] = CHART_INTERVALS.map((v) => ({ v, t: `dashboard:kline.intervals.${v}` }))
 
 let stylesRegistered = false
 export function ensureStyles(): void {
