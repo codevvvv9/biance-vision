@@ -40,6 +40,9 @@ export const INTERVALS = [
 export const IntervalSchema = z.enum(INTERVALS)
 export type Interval = z.infer<typeof IntervalSchema>
 
+/** 图表 UI 展示周期子集（大盘/复盘页按钮组从这里派生，禁止组件内散写清单） */
+export const CHART_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const satisfies readonly Interval[]
+
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
 const DAY_MS = 24 * HOUR_MS

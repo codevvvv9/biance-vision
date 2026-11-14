@@ -68,6 +68,10 @@ import {
 } from './aiMemory.js'
 import { assertChatAllowed, initChatUsage, recordChatMessage } from './chatPolicy.js'
 import { runSlashCommand, runToolLoop } from './aiTools.js'
+import { INTERVALS, SYMBOL_RE } from 'biance-vision-brooks'
+
+/** 契约周期白名单（INTERVALS 为 readonly 元组，includes 需放宽到 string） */
+const INTERVAL_LIST: readonly string[] = INTERVALS
 import type { AlertEntry, ClientMessage, RawKlineRow, RuleInput, ServerMessage } from './types.js'
 import { findSession, initSessions, initUsers, readSessionToken } from './users.js'
 import type { SessionRecord } from './users.js'
@@ -99,7 +103,6 @@ const HOST = process.env.HOST || '127.0.0.1'
 // 前端构建产物目录：生产模式下由本服务直接托管（前后端同源）
 const WEB_DIST = process.env.BV_WEB_DIST || fileURLToPath(new URL('../../web/dist', import.meta.url))
 const MARKET_LIMIT = 150 // 推送给前端的交易对数量（按成交额）
-const INTERVALS = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d']
 
 // 存储初始化（PostgreSQL 优先，不可用降级 JSON），完成后再连行情流
 await initStorage()
@@ -115,7 +118,6 @@ interface BadRequestError extends Error {
   statusCode: number
 }
 const badRequest = (msg: string): BadRequestError => Object.assign(new Error(msg), { statusCode: 400 })
-const SYMBOL_RE = /^[A-Z0-9]{4,20}$/
 
 // ---------------------------------------------------------------------------
 // 币安行情流：全市场 24h miniTicker + 按需的 kline 订阅
@@ -395,7 +397,7 @@ app.get('/api/klines', async (req) => {
   const q = req.query as { symbol?: string; interval?: string; limit?: string }
   const symbol = String(q.symbol ?? '').toUpperCase()
   if (!SYMBOL_RE.test(symbol)) throw badRequest('invalid symbol')
-  if (!q.interval || !INTERVALS.includes(q.interval)) throw badRequest('invalid interval')
+  if (!q.interval || !INTERVAL_LIST.includes(q.interval)) throw badRequest('invalid interval')
   const n = Math.min(Math.max(parseInt(q.limit ?? '', 10) || 300, 10), 1000)
   const raw = await restGet<RawKlineRow[]>(`/api/v3/klines?symbol=${symbol}&interval=${q.interval}&limit=${n}`)
   return {
@@ -752,7 +754,7 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
     if (msg.type === 'subscribe' && msg.channel === 'kline') {
       const symbol = String(msg.symbol ?? '').toUpperCase()
       const interval = String(msg.interval ?? '')
-      if (!SYMBOL_RE.test(symbol) || !INTERVALS.includes(interval)) return
+      if (!SYMBOL_RE.test(symbol) || !INTERVAL_LIST.includes(interval)) return
       // P1-4 订阅上限：每连接最多 20 个 K 线订阅（超限静默忽略——防订阅风暴）
       if (state.klines.size >= 20 && !state.klines.has(`${symbol.toLowerCase()}@kline_${interval}`)) {
         log.warn('ws', '订阅数超上限，忽略', kv({ id: cid, 用户: state.user, 当前订阅: state.klines.size }))

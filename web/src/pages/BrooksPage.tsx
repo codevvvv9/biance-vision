@@ -18,27 +18,15 @@ import { BrooksTerm, termForSignalKind } from '../brooks/terms'
 import { contentLocale } from '../i18n'
 import type { SharedLocale } from 'biance-vision-brooks'
 import type { BrooksChartHandle } from '../brooks/BrooksChart'
-import { analyzeBrooks } from 'biance-vision-brooks'
+import { analyzeBrooks, CHART_INTERVALS, INTERVAL_MS } from 'biance-vision-brooks'
 import type { BrooksDisplay, BrooksSignal } from 'biance-vision-brooks'
 import type { KlineBar } from '../types'
 
-const INTERVALS: { v: string; t: string }[] = [
-  { v: '1m', t: 'brooks:interval.1m' },
-  { v: '5m', t: 'brooks:interval.5m' },
-  { v: '15m', t: 'brooks:interval.15m' },
-  { v: '1h', t: 'brooks:interval.1h' },
-  { v: '4h', t: 'brooks:interval.4h' },
-  { v: '1d', t: 'brooks:interval.1d' },
-]
+/** 周期按钮组：清单单一数据源（shared CHART_INTERVALS），加周期不再改本页 */
+const INTERVALS: { v: string; t: string }[] = CHART_INTERVALS.map((v) => ({ v, t: `brooks:interval.${v}` }))
 
-const INTERVAL_MS: Record<string, number> = {
-  '1m': 60_000,
-  '5m': 300_000,
-  '15m': 900_000,
-  '1h': 3_600_000,
-  '4h': 14_400_000,
-  '1d': 86_400_000,
-}
+/** URL 周期校验用（INTERVAL_MS 键为契约 Interval，这里按 string 查） */
+const INTERVAL_MS_MAP: Record<string, number> = INTERVAL_MS
 
 const SCALES: { v: number; t: string; hint: string }[] = [
   { v: 1, t: 'brooks:scales.1.t', hint: 'brooks:scales.1.hint' },
@@ -83,7 +71,7 @@ export default function BrooksPage(): JSX.Element {
   const [symbolInput, setSymbolInput] = useState(symbol)
   const [interval, setIntervalValue] = useState(() => {
     const v = searchParams.get('interval')
-    return v && INTERVAL_MS[v] ? v : '1h'
+    return v && INTERVAL_MS_MAP[v] ? v : '1h'
   })
   const [limit, setLimit] = useState(500)
   const [swingK, setSwingK] = useState(3)
@@ -120,7 +108,7 @@ export default function BrooksPage(): JSX.Element {
       .then((d) => {
         if (cancelled) return
         let list = d.klines
-        const ms = INTERVAL_MS[interval] ?? 60_000
+        const ms = INTERVAL_MS_MAP[interval] ?? 60_000
         if (list.length > 0 && Date.now() - list[list.length - 1].time < ms) {
           list = list.slice(0, -1)
         }
