@@ -2,11 +2,13 @@
 import type { MarketType } from 'biance-vision-brooks'
 import { BinanceSpotProvider } from './binance-spot.js'
 import { BinanceUsdmProvider } from './binance-usdm.js'
+import { YahooStockProvider } from './yahoo.js'
 import type { MarketDataProvider } from './types.js'
 
 const providers: Record<MarketType, MarketDataProvider> = {
   spot: new BinanceSpotProvider(),
   usdm_perp: new BinanceUsdmProvider(),
+  stock: new YahooStockProvider(),
 }
 
 export function getProvider(marketType: MarketType): MarketDataProvider {

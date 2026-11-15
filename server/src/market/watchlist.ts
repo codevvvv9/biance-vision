@@ -1,16 +1,20 @@
 /**
  * 默认采集清单（watchlist）：worker 周期任务与首启动 backfill 据此展开。
- * 现货仅 trade；永续 trade/mark/index 三种价格类型分别成序列；
+ * 加密货币：现货仅 trade；永续 trade/mark/index 三种价格类型分别成序列；
  * 资金费率与持仓量（OI 1h 粒度）仅永续。
+ * 证券：标的清单与可采周期来自 shared instruments 注册表（单一数据源），
+ * 每 5 分钟独立 sweep（闭市时段幂等无新数据，低频采集控制请求量）。
  */
+import { PRESET_CRYPTO_SYMBOLS, STOCK_INTERVALS, STOCK_SYMBOLS } from 'biance-vision-brooks'
 import type { Interval, MarketType, PriceType } from 'biance-vision-brooks'
 
-export const WATCHLIST_SYMBOLS = ['BTCUSDT', 'ETHUSDT'] as const
+/** 预置加密货币采集清单（派生自 instruments 注册表，新增标的 = 注册表加一条） */
+export const WATCHLIST_SYMBOLS: readonly string[] = PRESET_CRYPTO_SYMBOLS
 
-export const WATCHLIST_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
+export const WATCHLIST_INTERVALS = ['1m', '5m', '10m', '15m', '1h', '4h', '1d'] as const
 
 /** 分钟级短周期（每分钟调度）与低频周期（每小时调度）分开键，避免互相阻塞 */
-export const FAST_INTERVALS = ['1m', '5m', '15m', '1h'] as const
+export const FAST_INTERVALS = ['1m', '5m', '10m', '15m', '1h'] as const
 export const SLOW_INTERVALS = ['4h', '1d'] as const
 
 export const OI_INTERVAL: Interval = '1h'
@@ -35,6 +39,17 @@ export function watchlistSeries(): SeriesKey[] {
       for (const priceType of ['trade', 'mark', 'index'] as const) {
         out.push({ marketType: 'usdm_perp', priceType, symbol, interval })
       }
+    }
+  }
+  return out
+}
+
+/** 证券采集序列（venue=yahoo / marketType=stock，派生自 instruments 注册表） */
+export function watchlistStockSeries(): SeriesKey[] {
+  const out: SeriesKey[] = []
+  for (const symbol of STOCK_SYMBOLS) {
+    for (const interval of STOCK_INTERVALS) {
+      out.push({ marketType: 'stock', priceType: 'trade', symbol, interval })
     }
   }
   return out

@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { INTERVAL_MS } from 'biance-vision-brooks'
+import type { ResearchMarketType } from 'biance-vision-brooks'
 import { getDb } from '../db.js'
 import { marketSnapshots } from '../models.js'
 import { currentBlobStoreKind, getBlobStore } from '../knowledge/blobstore.js'
@@ -35,7 +36,7 @@ export interface FrozenSnapshot {
   snapshotId: string
   asOf: number
   symbol: string
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   perInterval: Record<string, { lastClosedOpenTime: number }>
   /** 质量问题（空 = 通过）。存在 stale/gap 类问题时调用方必须阻止动作与概率输出 */
   issues: SnapshotQualityIssue[]
@@ -60,7 +61,7 @@ const WINDOW_BARS = 400
 /** 冻结研究快照：按执行/背景周期取已收盘窗口 + 资金费率 + 指数参考价，做质量检查 */
 export async function createFrozenSnapshot(input: {
   symbol: string
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   horizon: string
   asOf: number
   /** 持久化输入包到 BlobStore（研究运行用 true；临时结构预览可 false） */
@@ -233,7 +234,7 @@ export async function loadSnapshotPack(snapshotId: string): Promise<SnapshotPack
  * readCandles 的窗口语义是「范围内最近 N 根」，直接移动游标只会拿到末段——
  * 因此把 [from,to] 切成每块 ≤1500 根的时间窗逐块升序取，块间按 openTime 去重。 */
 export async function readHistoricalRange(q: {
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   priceType: string
   symbol: string
   interval: string

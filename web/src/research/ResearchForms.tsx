@@ -202,17 +202,17 @@ export function QuoteForm({ symbol, onSaved }: { symbol: string; onSaved: (q: Ev
         {input(t('research:form.stake'), <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" />)}
         {input(t('research:form.totalPayout'), <input value={totalPayout} onChange={(e) => setTotalPayout(e.target.value)} inputMode="decimal" />, t('research:form.totalPayoutNote'))}
         {input(t('research:form.direction'), (
-          <select value={direction} onChange={(e) => setDirection(e.target.value as 'above' | 'below')}>
-            <option value="above">{t('research:form.above')}</option>
-            <option value="below">{t('research:form.below')}</option>
-          </select>
+          <Dropdown value={direction} onChange={(v) => setDirection(v)} options={[
+            { value: 'above', label: t('research:form.above') },
+            { value: 'below', label: t('research:form.below') },
+          ]} />
         ))}
         {input(t('research:form.refPrice'), <input value={refPrice} onChange={(e) => setRefPrice(e.target.value)} inputMode="decimal" placeholder={t('research:form.refPricePlaceholder')} />)}
         {input(t('research:form.orderState'), (
-          <select value={orderState} onChange={(e) => onOrderStateChange(e.target.value as 'preview' | 'submitted')}>
-            <option value="preview">{t('research:form.orderPreview')}</option>
-            <option value="submitted">{t('research:form.orderSubmitted')}</option>
-          </select>
+          <Dropdown value={orderState} onChange={(v) => onOrderStateChange(v)} options={[
+            { value: 'preview', label: t('research:form.orderPreview') },
+            { value: 'submitted', label: t('research:form.orderSubmitted') },
+          ]} />
         ))}
         {input(t('research:form.eventRiskBudget'), <input value={eventRiskBudget} onChange={(e) => setEventRiskBudget(e.target.value)} inputMode="decimal" placeholder={t('research:form.eventRiskPlaceholder')} />, t('research:form.eventRiskNote'))}
       </div>

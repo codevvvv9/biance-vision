@@ -6,6 +6,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import i18n from '../i18n'
 import { api } from '../api'
+import { isStockSymbol } from 'biance-vision-brooks'
+import { STOCK_INTERVALS } from 'biance-vision-brooks'
+import type { MarketType } from 'biance-vision-brooks'
 import type { KlineBar } from '../types'
 
 export interface ResearchCandle {
@@ -58,12 +61,16 @@ const packFallbackText = (reason?: string): string =>
 
 export function useResearchCandles(
   symbol: string,
-  marketType: 'spot' | 'usdm_perp',
+  marketType: MarketType,
   interval: string,
   asOf?: number,
   /** 打开的研究运行 id（评审 F3）：有冻结输入包时图表读快照，历史复盘可复现；无包自动回退实时库 */
   runId?: string | null,
 ): ResearchCandles {
+  // 证券适配内聚在本 hook（页面无感）：数据路由强制 stock 市场；股票无 4h 等周期时回落 1h
+  const stock = isStockSymbol(symbol)
+  const effMarketType: MarketType = stock ? 'stock' : marketType
+  const effInterval: string = stock && !(STOCK_INTERVALS as readonly string[]).includes(interval) ? '1h' : interval
   const [candles, setCandles] = useState<ResearchCandle[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -85,7 +92,7 @@ export function useResearchCandles(
         isClosed: c.isClosed,
       }))
     const fetchLive = async (): Promise<ResearchCandle[]> => {
-      const params = new URLSearchParams({ marketType, priceType: 'trade', symbol, interval, limit: '300' })
+      const params = new URLSearchParams({ marketType: effMarketType, priceType: 'trade', symbol, interval: effInterval, limit: '300' })
       if (asOf !== undefined) params.set('asOf', String(asOf))
       const r = await api<{ candles: CandleRowDto[] }>(`/market/candles?${params.toString()}`)
       return mapRows(r.candles)
@@ -116,7 +123,7 @@ export function useResearchCandles(
     return () => {
       alive = false
     }
-  }, [symbol, marketType, interval, asOf, runId])
+  }, [symbol, effMarketType, effInterval, asOf, runId])
 
   const bars = useMemo<KlineBar[]>(
     () =>

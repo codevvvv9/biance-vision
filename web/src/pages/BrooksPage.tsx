@@ -15,11 +15,12 @@ import FullscreenButton from '../components/FullscreenButton'
 import { fmtDateTime, lsGet, lsSet } from '../utils'
 import BrooksChart from '../brooks/BrooksChart'
 import { BrooksTerm, termForSignalKind } from '../brooks/terms'
-import { contentLocale } from '../i18n'
+import { contentLocale, currentLocale } from '../i18n'
 import type { SharedLocale } from 'biance-vision-brooks'
 import type { BrooksChartHandle } from '../brooks/BrooksChart'
-import { analyzeBrooks, CHART_INTERVALS, INTERVAL_MS } from 'biance-vision-brooks'
+import { analyzeBrooks, CHART_INTERVALS, INTERVAL_MS, SYMBOL_RE, STOCK_INTERVALS, STOCK_SYMBOLS, displayName, isStockSymbol } from 'biance-vision-brooks'
 import type { BrooksDisplay, BrooksSignal } from 'biance-vision-brooks'
+import { Combobox } from '../research/Combobox'
 import type { KlineBar } from '../types'
 
 /** 周期按钮组：清单单一数据源（shared CHART_INTERVALS），加周期不再改本页 */
@@ -27,6 +28,9 @@ const INTERVALS: { v: string; t: string }[] = CHART_INTERVALS.map((v) => ({ v, t
 
 /** URL 周期校验用（INTERVAL_MS 键为契约 Interval，这里按 string 查） */
 const INTERVAL_MS_MAP: Record<string, number> = INTERVAL_MS
+
+/** 证券可用周期（Yahoo 采集范围；股票不支持 4h） */
+const STOCK_INTERVAL_LIST: readonly string[] = STOCK_INTERVALS
 
 const SCALES: { v: number; t: string; hint: string }[] = [
   { v: 1, t: 'brooks:scales.1.t', hint: 'brooks:scales.1.hint' },
@@ -126,8 +130,9 @@ export default function BrooksPage(): JSX.Element {
     }
   }, [symbol, interval, limit, reload])
 
-  // WS：tick 直接进图表；收盘后才并入分析数据触发重算
+  // WS：tick 直接进图表；收盘后才并入分析数据触发重算（证券无币安实时流，仅 REST）
   useEffect(() => {
+    if (isStockSymbol(symbol)) return
     const off = subscribeKline(symbol, interval, (k) => {
       chartRef.current?.updateBar(k)
       if (!k.closed) return
@@ -146,9 +151,26 @@ export default function BrooksPage(): JSX.Element {
     return off
   }, [symbol, interval, subscribeKline, limit])
 
+  /** 图表标题标的名：证券用注册表多语言名；加密货币展示为 BTC/USDT 交易对形态 */
+  const titleBase = isStockSymbol(symbol)
+    ? displayName(symbol, currentLocale())
+    : symbol.replace(/USDT$/, '/USDT')
+
+  /** 候选清单：注册表证券置顶（便于发现）∪ 币安成交额前 60（单一数据源派生，无散写清单） */
+  const symbolSuggestions = useMemo(
+    () => [...new Set([...STOCK_SYMBOLS, ...order.slice(0, 60)])],
+    [order],
+  )
+
+  // 股票不支持 4h（Yahoo 无该周期）：切入证券标的时回落到 1h
+  useEffect(() => {
+    if (isStockSymbol(symbol) && !STOCK_INTERVAL_LIST.includes(interval)) applyInterval('1h')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol])
+
   const applySymbol = (): void => {
     const s = symbolInput.trim().toUpperCase()
-    if (!/^[A-Z0-9]{4,20}$/.test(s)) return
+    if (!SYMBOL_RE.test(s)) return
     setSymbol(s)
     setSearchParams({ symbol: s, interval })
   }
@@ -211,24 +233,19 @@ export default function BrooksPage(): JSX.Element {
               applySymbol()
             }}
           >
-            <input
+            <Combobox
               value={symbolInput}
-              onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
+              onChange={(v) => setSymbolInput(v.toUpperCase())}
+              ariaLabel={t('brooks:symbolPlaceholder')}
               placeholder={t('brooks:symbolPlaceholder')}
-              list="brooks-symbol-list"
-              spellCheck={false}
+              suggestions={symbolSuggestions}
             />
-            <datalist id="brooks-symbol-list">
-              {order.slice(0, 60).map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
             <button className="btn btn-primary btn-sm" type="submit">
               {t('brooks:analyze')}
             </button>
           </form>
           <div className="interval-group" role="tablist">
-            {INTERVALS.map((iv) => (
+            {(isStockSymbol(symbol) ? INTERVALS.filter((iv) => STOCK_INTERVAL_LIST.includes(iv.v)) : INTERVALS).map((iv) => (
               <button key={iv.v} className={iv.v === interval ? 'on' : ''} onClick={() => applyInterval(iv.v)}>
                 {t(iv.t)}
               </button>
@@ -276,7 +293,7 @@ export default function BrooksPage(): JSX.Element {
             <h2 className="panel-title">
               <span className="title-glyph teal">▮</span>
               {t('brooks:title', {
-                base: symbol.replace('USDT', ''),
+                base: titleBase,
                 interval: t(INTERVALS.find((i) => i.v === interval)?.t ?? 'brooks:interval.1h'),
               })}
               {analysis ? t('brooks:titleScale', { k: analysis.options.swingK }) : ''}

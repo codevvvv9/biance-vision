@@ -6,6 +6,10 @@ import type { CSSProperties, RefObject } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { EventQuote, Position, ResearchRun } from 'biance-vision-brooks'
+import { PRESET_CRYPTO_SYMBOLS, STOCK_SYMBOLS, isStockSymbol } from 'biance-vision-brooks'
+
+/** 交易对候选（单一数据源派生：预置注册表，含证券标的） */
+const SYMBOL_SUGGESTIONS = [...PRESET_CRYPTO_SYMBOLS, ...STOCK_SYMBOLS]
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import { Logo } from '../components/Header'
@@ -21,6 +25,7 @@ import { Dropdown } from './Dropdown'
 import { ContextCard } from './ContextCard'
 import type { FollowUpAction } from 'biance-vision-brooks'
 import { Combobox } from './Combobox'
+import { useAutoAnalysis } from './useAutoAnalysis'
 import { authUrl } from './uiMode'
 import { ENTRY_KEY, parseEntry, type ResearchEntryDraftV1 } from './websiteEntry'
 import { ResearchGate } from './ResearchGate'
@@ -173,6 +178,15 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
     onConversationCreated: id => updateUrl({ conversation: id }, true),
     onRunCreated: id => updateUrl({ run: id }), onPositionsChanged: () => void refreshTools(),
   })
+  // 进入终端自动首轮分析（登录+首屏+非证券；历史浏览/entry 恢复态不触发；双节流+失败静默）
+  useAutoAnalysis({
+    ready: conv.ready && !conv.loadingConversation && !!user && !entry,
+    disabled: readOnly || isStockSymbol(symbol) || !!selectedConversation || !!selectedRun,
+    symbol,
+    messageCount: conv.messages.length,
+    send: conv.send,
+    owner: user?.username ?? null,
+  })
   useEffect(() => { if (user && entry && !selectedConversation && !selectedRun && !Object.values(drafts).some(d => d.trim())) applyEntry() }, [user, entry, selectedConversation, selectedRun])
   const run = tracker.activeRun
   const running = !!run && !TERMINAL.includes(run.status)
@@ -274,6 +288,8 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   const send = async (): Promise<void> => {
     if (readOnly || !drafts[scene].trim() || locked || quota?.remaining === 0) return
     if (!user) { login(); return }
+    // 证券标的仅图表/复盘（AI 研究仅加密货币，与服务端契约同口径）
+    if (isStockSymbol(symbol)) { setPageError(t('research:main.stockNoResearch')); return }
     if (!/^[A-Z0-9]{3,30}USDT$/.test(symbol)) { setPageError(t('research:run.invalidSymbol')); return }
     const raw = drafts[scene]; setDrafts(prev => ({ ...prev, [scene]: '' })); setPageError('')
     // 发送前先写待发送备份：清空输入后才收到失败/403 时原文可恢复（挂载恢复+下方回填）
@@ -416,8 +432,8 @@ function WorkbenchContent({ readOnly }: { readOnly: boolean }): JSX.Element {
             changeScene(next); document.getElementById(`scene-${next}`)?.focus()
           }}>{(Object.keys(SCENES) as Scene[]).map(s => <button key={s} id={`scene-${s}`} role="tab" tabIndex={scene === s ? 0 : -1} aria-selected={scene === s} aria-controls="wb-composer-panel" disabled={locked} onClick={() => changeScene(s)}>{t(`research:scene.${s}.label`)}</button>)}</div>
             <div role="tabpanel" id="wb-composer-panel" aria-labelledby={`scene-${scene}`}><textarea ref={inputRef} aria-label={t('research:wb.questionAria')} value={drafts[scene]} placeholder={inputCfg.placeholder[scene] ?? t(`research:scene.${scene}.hint`)} maxLength={2000} rows={3} onChange={e => setDrafts(d => ({ ...d, [scene]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
-              <div className="wb-compose-tools"><div className="wb-context"><label><span className="sr-only">{t('research:wb.symbolAria')}</span><Combobox ariaLabel={t('research:wb.symbolAria')} value={symbol} disabled={locked} onChange={v => { setSymbol(v.toUpperCase()); setPositionId(''); setQuoteId('') }} suggestions={['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']} /></label><label><span className="sr-only">{t('research:wb.horizonAria')}</span><Dropdown ariaLabel={t('research:wb.horizonAria')} value={horizon} disabled={locked} onChange={v => setHorizon(v)} options={(['10m', '30m', '1h', '1d', '1w'] as Horizon[]).map(h => ({ value: h, label: `${h}${h === '1w' ? t('research:wb.h1wSuffix') : ''}` }))} /></label></div>
-                <div className="wb-send-tools">{scene !== 'spot' && <button className="wb-tool" disabled={locked} onClick={() => user ? setToolsOpen(true) : login()}>{scene === 'perp' ? (positionId ? t('research:wb.positionLinked') : t('research:wb.positionTools')) : (quoteId ? t('research:wb.quoteLinked') : t('research:wb.quoteTools'))}</button>}<button className="wb-send" aria-label={user ? t('research:wb.sendAria') : t('research:wb.sendLoginAria')} disabled={locked || quota?.remaining === 0 || !drafts[scene].trim()} onClick={() => void send()}>{conv.busy ? '…' : '↑'}</button></div>
+              <div className="wb-compose-tools"><div className="wb-context"><label><span className="sr-only">{t('research:wb.symbolAria')}</span><Combobox ariaLabel={t('research:wb.symbolAria')} value={symbol} disabled={locked} onChange={v => { setSymbol(v.toUpperCase()); setPositionId(''); setQuoteId('') }} suggestions={SYMBOL_SUGGESTIONS} /></label><label><span className="sr-only">{t('research:wb.horizonAria')}</span><Dropdown ariaLabel={t('research:wb.horizonAria')} value={horizon} disabled={locked} onChange={v => setHorizon(v)} options={(['10m', '30m', '1h', '1d', '1w'] as Horizon[]).map(h => ({ value: h, label: `${h}${h === '1w' ? t('research:wb.h1wSuffix') : ''}` }))} /></label></div>
+                <div className="wb-send-tools">{scene !== 'spot' && <button className="wb-tool" disabled={locked} onClick={() => user ? setToolsOpen(true) : login()}>{scene === 'perp' ? (positionId ? t('research:wb.positionLinked') : t('research:wb.positionTools')) : (quoteId ? t('research:wb.quoteLinked') : t('research:wb.quoteTools'))}</button>}<button className="wb-send" aria-label={user ? t('research:wb.sendAria') : t('research:wb.sendLoginAria')} disabled={locked || isStockSymbol(symbol) || quota?.remaining === 0 || !drafts[scene].trim()} onClick={() => void send()}>{conv.busy ? '…' : '↑'}</button></div>
               </div>
             </div>
           </div>

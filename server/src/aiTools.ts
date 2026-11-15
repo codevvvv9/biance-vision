@@ -1,5 +1,5 @@
 import { restGet, tickerCache, tickerOf, topUsdtTickers } from './binance.js'
-import type { RawKlineRow } from './types.js'
+import { getProvider } from './market/providers/registry.js'
 import { analyzeBrooks } from 'biance-vision-brooks'
 import type { BrooksCandle } from 'biance-vision-brooks'
 import { INTERVALS, INTERVAL_MS, SYMBOL_RE } from 'biance-vision-brooks'
@@ -229,14 +229,13 @@ interface KlineSeries {
 }
 
 async function fetchKlines(symbol: string, interval: Interval, limit: number): Promise<KlineSeries> {
-  const rows = await restGet<RawKlineRow[]>(
-    `/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`,
-  )
+  // 统一走 spot provider：10m 等聚合周期在 provider 层由 5m 聚合（币安原生无此粒度）
+  const rows = await getProvider('spot').fetchKlines({ priceType: 'trade', symbol, interval, limit })
   return {
-    times: rows.map((r) => Math.floor(r[0] / 1000)),
-    closes: rows.map((r) => +r[4]),
-    ohlc: rows.map((r) => [+r[1], +r[2], +r[3], +r[4]]),
-    volumes: rows.map((r) => +r[5]),
+    times: rows.map((r) => Math.floor(r.openTime / 1000)),
+    closes: rows.map((r) => +r.close),
+    ohlc: rows.map((r) => [+r.open, +r.high, +r.low, +r.close]),
+    volumes: rows.map((r) => (r.volume === null ? 0 : +r.volume)),
   }
 }
 

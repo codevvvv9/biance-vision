@@ -68,7 +68,9 @@ import {
 } from './aiMemory.js'
 import { assertChatAllowed, initChatUsage, recordChatMessage } from './chatPolicy.js'
 import { runSlashCommand, runToolLoop } from './aiTools.js'
-import { INTERVALS, SYMBOL_RE } from 'biance-vision-brooks'
+import { INTERVALS, SYMBOL_RE, isStockSymbol } from 'biance-vision-brooks'
+import { getProvider } from './market/providers/registry.js'
+import { readCandles } from './market/read.js'
 
 /** 契约周期白名单（INTERVALS 为 readonly 元组，includes 需放宽到 string） */
 const INTERVAL_LIST: readonly string[] = INTERVALS
@@ -399,6 +401,37 @@ app.get('/api/klines', async (req) => {
   if (!SYMBOL_RE.test(symbol)) throw badRequest('invalid symbol')
   if (!q.interval || !INTERVAL_LIST.includes(q.interval)) throw badRequest('invalid interval')
   const n = Math.min(Math.max(parseInt(q.limit ?? '', 10) || 300, 10), 1000)
+  const toKlines = (rows: ReadonlyArray<{ openTime: number; open: string; high: string; low: string; close: string; volume: string | null }>) => ({
+    symbol,
+    interval: q.interval,
+    klines: rows.map((r) => ({
+      time: r.openTime,
+      open: +r.open,
+      high: +r.high,
+      low: +r.low,
+      close: +r.close,
+      volume: r.volume === null ? 0 : +r.volume,
+      quoteVolume: 0,
+      closed: true,
+    })),
+  })
+  // 数据路由单点：注册表证券标的走 Yahoo provider；聚合周期（10m，币安原生无此粒度）
+  // 也走 provider（内部 5m 聚合）；其余加密货币保持币安直通。
+  // provider/直通失败时回退库内已采集数据（worker 持续落库；闭市时段库即最新）
+  if (isStockSymbol(symbol) || q.interval === '10m') {
+    const marketType = isStockSymbol(symbol) ? 'stock' : 'spot'
+    try {
+      const rows = await getProvider(marketType).fetchKlines({
+        priceType: 'trade', symbol, interval: q.interval as never, limit: n,
+      })
+      return toKlines(rows)
+    } catch (err) {
+      log.warn('market', 'klines 直通失败，回退库内数据', kv({ 标的: symbol, 周期: q.interval, 错误: (err as Error).message }))
+      const rows = await readCandles({ marketType, priceType: 'trade', symbol, interval: q.interval as never, limit: n })
+      if (rows.length === 0) throw err
+      return toKlines(rows)
+    }
+  }
   const raw = await restGet<RawKlineRow[]>(`/api/v3/klines?symbol=${symbol}&interval=${q.interval}&limit=${n}`)
   return {
     symbol,
@@ -754,7 +787,8 @@ app.get('/ws', { websocket: true }, (connection: SocketStream, req: FastifyReque
     if (msg.type === 'subscribe' && msg.channel === 'kline') {
       const symbol = String(msg.symbol ?? '').toUpperCase()
       const interval = String(msg.interval ?? '')
-      if (!SYMBOL_RE.test(symbol) || !INTERVAL_LIST.includes(interval)) return
+      // 证券标的无币安 WS 实时流（数据走 REST 采集）；10m 为聚合周期（币安无原生流）——静默忽略订阅
+      if (!SYMBOL_RE.test(symbol) || !INTERVAL_LIST.includes(interval) || interval === '10m' || isStockSymbol(symbol)) return
       // P1-4 订阅上限：每连接最多 20 个 K 线订阅（超限静默忽略——防订阅风暴）
       if (state.klines.size >= 20 && !state.klines.has(`${symbol.toLowerCase()}@kline_${interval}`)) {
         log.warn('ws', '订阅数超上限，忽略', kv({ id: cid, 用户: state.user, 当前订阅: state.klines.size }))

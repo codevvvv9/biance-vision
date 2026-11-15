@@ -2,7 +2,7 @@
  * 增量采集：按 ingest_state 游标拉取已收盘 K 线，合法性校验后幂等 upsert，
  * 推进游标并登记缺口（只登记不补平盘，补洞走 backfill.ts）。
  */
-import { INTERVAL_MS } from 'biance-vision-brooks'
+import { INTERVAL_MS, venueForMarketType } from 'biance-vision-brooks'
 import type { CandleRow, Interval } from 'biance-vision-brooks'
 import { and, eq, sql } from 'drizzle-orm'
 import { kv, log } from '../logger.js'
@@ -12,8 +12,6 @@ import { getProvider } from './providers/registry.js'
 import type { MarketDataProvider } from './providers/types.js'
 import { seriesKeyText } from './watchlist.js'
 import type { SeriesKey } from './watchlist.js'
-
-const VENUE = 'binance'
 
 export interface IngestResult {
   series: SeriesKey
@@ -136,7 +134,7 @@ export async function persistBars(rows: CandleRow[]): Promise<number> {
 /** 序列主键的 where 条件 */
 export function seriesWhere(series: SeriesKey) {
   return and(
-    eq(ingestState.venue, VENUE),
+    eq(ingestState.venue, venueForMarketType(series.marketType)),
     eq(ingestState.marketType, series.marketType),
     eq(ingestState.priceType, series.priceType),
     eq(ingestState.symbol, series.symbol),
@@ -157,7 +155,7 @@ async function advanceState(series: SeriesKey, lastClosedOpenTime: number | null
   await db
     .insert(ingestState)
     .values({
-      venue: VENUE,
+      venue: venueForMarketType(series.marketType),
       marketType: series.marketType,
       priceType: series.priceType,
       symbol: series.symbol,
@@ -186,7 +184,7 @@ export async function markIngestError(series: SeriesKey, err: Error): Promise<vo
   await db
     .insert(ingestState)
     .values({
-      venue: VENUE,
+      venue: venueForMarketType(series.marketType),
       marketType: series.marketType,
       priceType: series.priceType,
       symbol: series.symbol,

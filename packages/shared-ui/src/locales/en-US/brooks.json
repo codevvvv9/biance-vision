@@ -2,6 +2,7 @@
   "interval": {
     "1m": "1m",
     "5m": "5m",
+    "10m": "10m",
     "15m": "15m",
     "1h": "1h",
     "4h": "4h",
@@ -27,7 +28,7 @@
     "signals": "Signals"
   },
   "helpButton": "? Legend & rules",
-  "title": "{{base}}/USDT · Price Action Structure · {{interval}}",
+  "title": "{{base}} · Price Action Structure · {{interval}}",
   "titleScale": "(scale k={{k}})",
   "note": "Structure only · No direction forecast · Closed bars only",
   "ai": {

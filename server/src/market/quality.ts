@@ -2,13 +2,12 @@
  * 数据质量：每个采集序列的缺口登记、延迟（now - 最后收盘 closeTime）、最后收盘点。
  * 供 /api/market/quality 与监控；数据以 ingest_state 登记为准。
  */
-import { INTERVAL_MS } from 'biance-vision-brooks'
+import { INTERVAL_MS, venueForMarketType } from 'biance-vision-brooks'
 import type { DataQuality, Interval, MarketType, PriceType } from 'biance-vision-brooks'
 import { and, eq } from 'drizzle-orm'
 import { ingestState } from '../models.js'
 import { requireDb } from './common.js'
 
-const VENUE = 'binance'
 
 export async function getQuality(opts: {
   symbol: string
@@ -21,7 +20,7 @@ export async function getQuality(opts: {
     .from(ingestState)
     .where(
       and(
-        eq(ingestState.venue, VENUE),
+        eq(ingestState.venue, venueForMarketType(opts.marketType)),
         eq(ingestState.marketType, opts.marketType),
         eq(ingestState.symbol, opts.symbol),
         opts.interval !== undefined ? eq(ingestState.interval, opts.interval) : undefined,

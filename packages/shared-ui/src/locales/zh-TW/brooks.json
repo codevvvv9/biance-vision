@@ -2,6 +2,7 @@
   "interval": {
     "1m": "1分",
     "5m": "5分",
+    "10m": "10分",
     "15m": "15分",
     "1h": "1時",
     "4h": "4時",
@@ -39,7 +40,7 @@
     "signals": "訊號"
   },
   "helpButton": "? 圖例與規則",
-  "title": "{{base}}/USDT · 價格行為結構 · {{interval}}",
+  "title": "{{base}} · 價格行為結構 · {{interval}}",
   "titleScale": "（尺度 k={{k}}）",
   "note": "只識別結構 · 不預測漲跌 · 僅收盤K線計入訊號",
   "ai": {

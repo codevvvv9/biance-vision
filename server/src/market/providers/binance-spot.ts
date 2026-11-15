@@ -5,6 +5,7 @@
 import { isWatchableUsdt, restGet, tickerCache } from '../../binance.js'
 import { kv, log } from '../../logger.js'
 import { parseKlineRows } from './parse.js'
+import { aggregateCandleRows, requestIntervalFor } from './intervalAgg.js'
 import type { FetchKlinesParams, MarketDataProvider } from './types.js'
 import type { CandleRow } from 'biance-vision-brooks'
 
@@ -23,20 +24,24 @@ export class BinanceSpotProvider implements MarketDataProvider {
     if (params.priceType !== 'trade') {
       throw new Error(`现货不支持价格类型 ${params.priceType}（仅 trade）`)
     }
-    const qs = new URLSearchParams({ symbol: params.symbol, interval: params.interval })
+    // 币安原生无 10m 等粒度：换原生周期请求 + 放大量，响应侧聚合（intervalAgg 单点语义）
+    const { requestInterval, requestLimit, aggregateTo } = requestIntervalFor(params.interval, params.limit)
+    const qs = new URLSearchParams({ symbol: params.symbol, interval: requestInterval })
     if (params.startTime !== undefined) qs.set('startTime', String(params.startTime))
     if (params.endTime !== undefined) qs.set('endTime', String(params.endTime))
-    qs.set('limit', String(params.limit ?? 500))
+    qs.set('limit', String(requestLimit))
     const raw = await restGet<unknown[]>(`/api/v3/klines?${qs.toString()}`)
-    return parseKlineRows(raw, {
+    let rows = parseKlineRows(raw, {
       venue: 'binance',
       marketType: this.marketType,
       priceType: 'trade',
       symbol: params.symbol,
-      interval: params.interval,
+      interval: requestInterval,
       receivedAt: Date.now(),
       source: 'rest',
     }, Date.now())
+    if (aggregateTo !== null) rows = aggregateCandleRows(rows, requestInterval, aggregateTo, params.limit)
+    return rows
   }
 
   async listSymbols(): Promise<string[]> {

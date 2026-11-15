@@ -19,8 +19,11 @@ export function Combobox(props: {
   ariaLabel: string
   inputClassName?: string
   disabled?: boolean
+  /** 表单原生必填校验透传 */
+  required?: boolean
+  placeholder?: string
 }): JSX.Element {
-  const { value, onChange, suggestions, ariaLabel, inputClassName, disabled = false } = props
+  const { value, onChange, suggestions, ariaLabel, inputClassName, disabled = false, required = false, placeholder } = props
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -94,6 +97,8 @@ export function Combobox(props: {
         className={inputClassName}
         value={value}
         disabled={disabled}
+        required={required}
+        placeholder={placeholder}
         aria-label={ariaLabel}
         role="combobox"
         aria-expanded={open}

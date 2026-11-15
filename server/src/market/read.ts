@@ -7,11 +7,11 @@
  * 库内数据超过窗口后，分析/预测必须取「最新窗口」而不是最早一批。
  */
 import type { CandleRow, GetCandlesQuery, MarketType } from 'biance-vision-brooks'
+import { venueForMarketType } from 'biance-vision-brooks'
 import { and, desc, eq, gte, lte } from 'drizzle-orm'
 import { marketCandles } from '../models.js'
 import { requireDb, rowToCandle } from './common.js'
 
-const VENUE = 'binance'
 
 export async function readCandles(q: GetCandlesQuery): Promise<CandleRow[]> {
   const db = requireDb()
@@ -20,7 +20,7 @@ export async function readCandles(q: GetCandlesQuery): Promise<CandleRow[]> {
     .from(marketCandles)
     .where(
       and(
-        eq(marketCandles.venue, VENUE),
+        eq(marketCandles.venue, venueForMarketType(q.marketType)),
         eq(marketCandles.marketType, q.marketType),
         eq(marketCandles.priceType, q.priceType),
         eq(marketCandles.symbol, q.symbol),
@@ -59,6 +59,6 @@ export async function listCollectedSymbols(marketType: MarketType): Promise<stri
   const rows = await db
     .selectDistinct({ symbol: marketCandles.symbol })
     .from(marketCandles)
-    .where(and(eq(marketCandles.venue, VENUE), eq(marketCandles.marketType, marketType)))
+    .where(and(eq(marketCandles.venue, venueForMarketType(marketType)), eq(marketCandles.marketType, marketType)))
   return rows.map((r) => r.symbol).sort()
 }

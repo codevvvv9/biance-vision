@@ -144,6 +144,8 @@
     "analyzing": "分析中…",
     "viewEvidence": "檢視證據",
     "inputPlaceholder": "直接問：BTC 永續多頭還能拿嗎？/ 10 分鐘高於 60000 值得參與嗎？",
+    "stockNoResearch": "證券標的支持圖表與結構復盤，AI 研究暫僅支持加密貨幣",
+    "autoQuestion": "請結合 {{symbol}} 當前的 K 線結構與多週期情況，給出一輪投資分析：現在該不該操作？方向、關鍵位與風險點分別是什麼？",
     "inputAria": "研究對話輸入",
     "send": "傳送",
     "toolsModalAria": "發起研究與資料錄入",

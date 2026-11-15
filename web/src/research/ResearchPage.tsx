@@ -11,7 +11,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
-import { analyzeBrooks, INTERVAL_MS as INTERVAL_MS_SHARED } from 'biance-vision-brooks'
+import { analyzeBrooks, INTERVAL_MS as INTERVAL_MS_SHARED, PRESET_CRYPTO_SYMBOLS, STOCK_SYMBOLS, isStockSymbol } from 'biance-vision-brooks'
 import type { BrooksDisplay, EventQuote, FollowUpAction, Position, ResearchRun } from 'biance-vision-brooks'
 import { useMarket } from '../market/MarketContext'
 import BrooksChart from '../brooks/BrooksChart'
@@ -21,6 +21,7 @@ import { EvidenceDrawer } from './ResearchResult'
 import { ResearchGate } from './ResearchGate'
 import { useResearchRun, sseConnLabel } from './useResearchRun'
 import { useResearchConversation } from './useResearchConversation'
+import { useAutoAnalysis } from './useAutoAnalysis'
 import { useResearchCandles } from './useResearchCandles'
 import { currentLocale } from '../i18n'
 import { PositionConfirmCard } from './PositionConfirmCard'
@@ -51,8 +52,8 @@ const HORIZON_TF: Record<Horizon, string> = { '10m': '1m', '30m': '5m', '1h': '1
  * 清单单一数据源 = shared INTERVAL_MS（契约契约键），此处放宽为 string 查表 */
 const INTERVAL_MS: Record<string, number> = INTERVAL_MS_SHARED
 
-/** 顶栏交易对 datalist 的静态兜底（/api/market/symbols 不可用时） */
-const FALLBACK_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'LINKUSDT']
+/** 顶栏交易对静态兜底（/api/market/symbols 不可用时）：预置注册表派生（与采集清单一致，保证有数据） */
+const FALLBACK_SYMBOLS = [...PRESET_CRYPTO_SYMBOLS, ...STOCK_SYMBOLS]
 
 /** 研究台中栏固定全量标注（无 Brooks 复盘页的显示开关） */
 const RESEARCH_DISPLAY: BrooksDisplay = { swings: true, legs: true, io: true, signals: true, ema: true, regime: true }
@@ -120,6 +121,8 @@ function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   const [drawerOpen, setDrawerOpen] = useState(false)
   /** 顶栏交易对候选（/api/market/symbols；失败回退静态常用列表） */
   const [symbolList, setSymbolList] = useState<string[]>(FALLBACK_SYMBOLS)
+  /** 证券标的（图表/复盘可用，AI 研究仅加密货币——与服务端契约同口径） */
+  const stockSelected = isStockSymbol(symbol)
   /** 报价行「确认结算」展开态与提交态 */
   const [confirmingQuote, setConfirmingQuote] = useState<string | null>(null)
   const [quoteConfirmBusy, setQuoteConfirmBusy] = useState(false)
@@ -183,6 +186,16 @@ function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
     context: { symbol, marketType, horizon, product, positionId: selectedPosition, quoteId: selectedQuote },
     onRunCreated: (runId) => void openRunById(runId),
     onPositionsChanged: () => void refreshLeft(),
+  })
+
+  // 进入终端自动首轮分析（会话就绪+首屏问候+非证券标的；双节流防刷新烧额度，失败静默）
+  useAutoAnalysis({
+    ready: conv.ready && !conv.loadingConversation,
+    disabled: readOnly || stockSelected,
+    symbol,
+    messageCount: conv.messages.length,
+    send: conv.send,
+    owner: user?.username ?? null,
   })
 
   const { candles, bars, loading: chartLoading, error: chartError, source: chartSource, fallbackReason: chartFallback } = useResearchCandles(
@@ -257,12 +270,12 @@ function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
     return () => clearInterval(t)
   }, [])
 
-  // 顶栏交易对候选：库内已采集 ∪ provider 可交易；失败回退静态常用列表
+  // 顶栏交易对候选：库内已采集 ∪ provider 可交易 ∪ 注册表证券；失败回退静态兜底
   useEffect(() => {
     let alive = true
     api<{ symbols: string[] }>(`/market/symbols?marketType=${marketType}`)
       .then((r) => {
-        if (alive && r.symbols.length > 0) setSymbolList(r.symbols)
+        if (alive && r.symbols.length > 0) setSymbolList([...new Set([...r.symbols, ...STOCK_SYMBOLS])])
       })
       .catch(() => {
         if (alive) setSymbolList(FALLBACK_SYMBOLS)
@@ -276,7 +289,7 @@ function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
   useEffect(() => setHighlightTime(null), [symbol, marketType, chartInterval])
 
   const createRun = async (): Promise<void> => {
-    if (readOnly) return
+    if (readOnly || stockSelected) return
     try {
       const r = await api<{ run: ResearchRun }>('/research/runs', {
         method: 'POST',
@@ -357,9 +370,10 @@ function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
     }
   }
 
-  /** 聊天发送（readOnly 同口径禁用）：发送前写待发送备份，失败/403 后输入被清空仍可恢复 */
+  /** 聊天发送（readOnly 同口径禁用）：发送前写待发送备份，失败/403 后输入被清空仍可恢复；
+   * 证券标的仅支持图表与结构复盘（AI 研究仅加密货币，服务端契约同口径硬挡） */
   const sendChat = (): void => {
-    if (readOnly || conv.busy || conv.input.trim() === '') return
+    if (readOnly || conv.busy || conv.input.trim() === '' || stockSelected) return
     const text = conv.input
     try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ owner: user?.username ?? null, text })) } catch { /* Storage can be disabled. */ }
     void conv.send().then((ok) => {
@@ -683,10 +697,11 @@ function ResearchPageContent({ readOnly }: { readOnly: boolean }): JSX.Element {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing) sendChat()
                 }}
-                placeholder={t('research:main.inputPlaceholder')}
+                placeholder={stockSelected ? t('research:main.stockNoResearch') : t('research:main.inputPlaceholder')}
                 aria-label={t('research:main.inputAria')}
+                disabled={stockSelected}
               />
-              <button className="btn btn-primary" disabled={readOnly || conv.busy || conv.input.trim() === ''} onClick={sendChat}>
+              <button className="btn btn-primary" disabled={readOnly || stockSelected || conv.busy || conv.input.trim() === ''} onClick={sendChat}>
                 {t('research:main.send')}
               </button>
             </div>

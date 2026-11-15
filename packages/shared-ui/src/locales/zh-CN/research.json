@@ -144,6 +144,8 @@
     "analyzing": "分析中…",
     "viewEvidence": "查看证据",
     "inputPlaceholder": "直接问：BTC 永续多头还能拿吗？/ 10 分钟高于 60000 值得参与吗？",
+    "stockNoResearch": "证券标的支持图表与结构复盘，AI 研究暂仅支持加密货币",
+    "autoQuestion": "请结合 {{symbol}} 当前的 K 线结构与多周期情况，给出一轮投资分析：现在该不该操作？方向、关键位与风险点分别是什么？",
     "inputAria": "研究对话输入",
     "send": "发送",
     "toolsModalAria": "发起研究与数据录入",

@@ -6,7 +6,7 @@
  * chat 能力配置后可在此叠加 LLM 改写与澄清（当前确定性解析，不伪造理解）。
  */
 import { and, desc, eq } from 'drizzle-orm'
-import type { MarketType, ResearchHorizon } from 'biance-vision-brooks'
+import type { ResearchMarketType, ResearchHorizon } from 'biance-vision-brooks'
 import { getDb } from '../../db.js'
 import { eventQuotes, portfolioPositions } from '../../models.js'
 import { kv, log } from '../../logger.js'
@@ -25,7 +25,7 @@ export interface ChatOutcome {
   resolved: {
     product: 'perp' | 'event' | 'teaching'
     symbol: string
-    marketType: MarketType
+    marketType: ResearchMarketType
     horizon: ResearchHorizon
     positionId: string | null
     quoteId: string | null
@@ -76,7 +76,7 @@ export async function handleResearchChat(userId: string, input: ChatInput): Prom
   const symbol = symbolMatch?.[1] ?? last?.symbol ?? 'BTCUSDT'
   const product = parseProduct(text) ?? lastInput?.product ?? (last?.product as ChatOutcome['resolved']['product']) ?? 'perp'
   const horizon = parseHorizon(text) ?? (last?.horizon as ResearchHorizon) ?? '1h'
-  const marketType: MarketType = /现货/.test(text) ? 'spot' : last?.marketType === 'spot' && !/永续/.test(text) ? 'spot' : 'usdm_perp'
+  const marketType: ResearchMarketType = /现货/.test(text) ? 'spot' : last?.marketType === 'spot' && !/永续/.test(text) ? 'spot' : 'usdm_perp'
 
   // 持仓/报价引用：显式提到或沿用上一轮；否则取用户最新一条
   const db = getDb()!

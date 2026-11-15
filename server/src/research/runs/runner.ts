@@ -3,7 +3,7 @@
  * 启动时把 run 行重建为 RunContext（版本钉住字段在 snapshot 阶段填充），
  * 交给固定流水线；取消/失败语义由 pipeline + PgRunStore 落库。
  */
-import type { MarketType, ResearchHorizon } from 'biance-vision-brooks'
+import type { ResearchMarketType, ResearchHorizon } from 'biance-vision-brooks'
 import { randomUUID } from 'node:crypto'
 import { runPipeline } from '../orchestrator/pipeline.js'
 import type { RunContext } from '../orchestrator/types.js'
@@ -70,7 +70,7 @@ export async function executeRun(runId: string): Promise<void> {
   }
   const input = row.input as {
     product: 'perp' | 'event' | 'teaching'
-    marketType: MarketType
+    marketType: ResearchMarketType
     horizon: ResearchHorizon
     question?: string
     positionId?: string

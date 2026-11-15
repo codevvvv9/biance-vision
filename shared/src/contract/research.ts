@@ -66,11 +66,15 @@ export const TraderProfileSchema = z.object({
 export type TraderProfile = z.infer<typeof TraderProfileSchema>
 export const TraderProfilePatchSchema = TraderProfileSchema.partial()
 
+/** 研究 run 的市场类型：加密货币 only（证券标的仅支持图表与结构复盘，422 硬挡） */
+export const ResearchMarketTypeSchema = z.enum(['spot', 'usdm_perp'])
+export type ResearchMarketType = z.infer<typeof ResearchMarketTypeSchema>
+
 /** POST /api/research/runs 创建输入；asOf 缺省时由服务端取当前时间 */
 export const ResearchRunCreateSchema = z.object({
   product: ResearchProductSchema,
   symbol: SymbolSchema,
-  marketType: MarketTypeSchema,
+  marketType: ResearchMarketTypeSchema,
   horizon: ResearchHorizonSchema,
   question: z.string().max(2000).optional(),
   positionId: IdSchema.optional(),
@@ -98,7 +102,8 @@ export const ResearchRunSchema = z.object({
   status: ResearchRunStatusSchema,
   product: ResearchProductSchema,
   symbol: SymbolSchema,
-  marketType: MarketTypeSchema,
+  /** 研究 run 只承载加密货币市场（证券标的仅图表/复盘，创建入口已 422 硬挡） */
+  marketType: ResearchMarketTypeSchema,
   horizon: ResearchHorizonSchema,
   /** 运行决策时刻（图表按此冻结，历史复盘与结果同刻） */
   asOf: z.number().int(),
