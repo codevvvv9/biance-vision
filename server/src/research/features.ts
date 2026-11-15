@@ -8,6 +8,7 @@
  * - 特征在时间点 i 只用 <=i 的收盘（因果）；entryPrice 供执行价相对阈值计算。
  */
 import { readCandles } from '../market/read.js'
+import type { ResearchMarketType } from 'biance-vision-brooks'
 
 export type ResearchHorizonName = '10m' | '30m' | '1h' | '1d' | '1w'
 
@@ -85,7 +86,7 @@ export interface BuiltFeatures {
 /** 按 asOf（已收盘约束）构建指定期限的推理特征 */
 export async function buildFeaturesForHorizon(input: {
   symbol: string
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   horizon: string
   asOf: number
 }): Promise<BuiltFeatures> {

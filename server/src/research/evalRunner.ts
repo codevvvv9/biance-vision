@@ -8,6 +8,7 @@
  */
 import { eq, sql } from 'drizzle-orm'
 import { analyzeBrooks } from 'biance-vision-brooks'
+import type { ResearchMarketType } from 'biance-vision-brooks'
 import { getDb } from '../db.js'
 import { evalDatasets, evalRuns, structureEvents } from '../models.js'
 import type { EvalDatasetRow } from '../models.js'
@@ -21,14 +22,14 @@ import { kv, log } from '../logger.js'
 interface DialogItem {
   product?: 'perp' | 'event' | 'teaching'
   symbol: string
-  marketType?: 'spot' | 'usdm_perp'
+  marketType?: ResearchMarketType
   horizon?: '10m' | '30m' | '1h' | '1d' | '1w'
   question?: string
 }
 
 interface ReplayItem {
   symbol: string
-  marketType?: 'spot' | 'usdm_perp'
+  marketType?: ResearchMarketType
   horizon?: '10m' | '30m' | '1h' | '1d' | '1w'
   asOf: number
 }
@@ -41,7 +42,7 @@ interface RagItem {
 
 interface StructureItem {
   symbol: string
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   interval: string
   from?: number
   to?: number

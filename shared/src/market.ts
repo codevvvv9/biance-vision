@@ -17,23 +17,33 @@ export const PositiveDecimalStringSchema = DecimalStringSchema.refine(
   '必须是大于 0 的十进制数',
 )
 
-/** 交易对代码：大写字母/数字、无分隔符，如 BTCUSDT */
-export const SYMBOL_RE = /^[A-Z0-9]{2,30}$/
-export const SymbolSchema = z.string().regex(SYMBOL_RE, '交易对须为大写无分隔符形式，如 BTCUSDT')
+/** 交易对/标的代码：大写字母/数字、无分隔符（BTCUSDT），或带交易所后缀的证券代码（005930.KS） */
+export const SYMBOL_RE = /^[A-Z0-9]{2,30}(\.[A-Z]{1,4})?$/
+export const SymbolSchema = z.string().regex(SYMBOL_RE, '标的代码须为大写形式，如 BTCUSDT 或 005930.KS')
 export type Symbol = z.infer<typeof SymbolSchema>
 
-/** 交易所（预留扩展） */
-export const VenueSchema = z.enum(['binance'])
+/** 数据源归属（binance 加密货币 / yahoo 证券） */
+export const VenueSchema = z.enum(['binance', 'yahoo'])
 export type Venue = z.infer<typeof VenueSchema>
 
-export const MarketTypeSchema = z.enum(['spot', 'usdm_perp'])
+export const MarketTypeSchema = z.enum(['spot', 'usdm_perp', 'stock'])
 export type MarketType = z.infer<typeof MarketTypeSchema>
+
+/** 市场类型 → 数据源归属（采集/查询层 venue 的单一推导点，禁止消费方各自硬编码） */
+export const VENUE_BY_MARKET_TYPE: Record<MarketType, Venue> = {
+  spot: 'binance',
+  usdm_perp: 'binance',
+  stock: 'yahoo',
+}
+export function venueForMarketType(marketType: MarketType): Venue {
+  return VENUE_BY_MARKET_TYPE[marketType]
+}
 
 export const PriceTypeSchema = z.enum(['trade', 'mark', 'index'])
 export type PriceType = z.infer<typeof PriceTypeSchema>
 
 export const INTERVALS = [
-  '1m', '3m', '5m', '15m', '30m',
+  '1m', '3m', '5m', '10m', '15m', '30m',
   '1h', '2h', '4h', '6h', '8h', '12h',
   '1d', '3d', '1w',
 ] as const
@@ -41,7 +51,7 @@ export const IntervalSchema = z.enum(INTERVALS)
 export type Interval = z.infer<typeof IntervalSchema>
 
 /** 图表 UI 展示周期子集（大盘/复盘页按钮组从这里派生，禁止组件内散写清单） */
-export const CHART_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'] as const satisfies readonly Interval[]
+export const CHART_INTERVALS = ['1m', '5m', '10m', '15m', '1h', '4h', '1d'] as const satisfies readonly Interval[]
 
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -52,6 +62,7 @@ export const INTERVAL_MS: Record<Interval, number> = {
   '1m': MINUTE_MS,
   '3m': 3 * MINUTE_MS,
   '5m': 5 * MINUTE_MS,
+  '10m': 10 * MINUTE_MS,
   '15m': 15 * MINUTE_MS,
   '30m': 30 * MINUTE_MS,
   '1h': HOUR_MS,

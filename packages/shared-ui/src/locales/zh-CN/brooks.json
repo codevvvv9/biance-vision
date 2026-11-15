@@ -2,6 +2,7 @@
   "interval": {
     "1m": "1分",
     "5m": "5分",
+    "10m": "10分",
     "15m": "15分",
     "1h": "1时",
     "4h": "4时",
@@ -27,7 +28,7 @@
     "signals": "信号"
   },
   "helpButton": "? 图例与规则",
-  "title": "{{base}}/USDT · 价格行为结构 · {{interval}}",
+  "title": "{{base}} · 价格行为结构 · {{interval}}",
   "titleScale": "（尺度 k={{k}}）",
   "note": "只识别结构 · 不预测涨跌 · 仅收盘K线计入信号",
   "ai": {

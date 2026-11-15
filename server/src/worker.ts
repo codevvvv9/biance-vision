@@ -7,12 +7,12 @@ import './env.js'
 import { kv, log } from './logger.js'
 import { initDb } from './db.js'
 import { initUsers } from './users.js'
-import { Q_BACKFILL, Q_FUNDING, Q_INGEST, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, countCreatedBacklog, getBoss, startQueue, stopQueue } from './queue.js'
+import { Q_BACKFILL, Q_FUNDING, Q_INGEST, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, Q_SWEEP_STOCK, countCreatedBacklog, getBoss, startQueue, stopQueue } from './queue.js'
 import { backfillRange, backfillRecent, detectGaps, isFreshSeries, refreshGapCount } from './market/backfill.js'
 import { ingestFunding } from './market/funding.js'
 import { ingestSeries, markIngestError } from './market/ingest.js'
 import { ingestOpenInterest } from './market/oi.js'
-import { OI_INTERVAL, seriesKeyText, watchlistPerpSymbols, watchlistSeries, watchlistSeriesBySpeed } from './market/watchlist.js'
+import { OI_INTERVAL, seriesKeyText, watchlistPerpSymbols, watchlistSeries, watchlistSeriesBySpeed, watchlistStockSeries } from './market/watchlist.js'
 import type { SeriesKey } from './market/watchlist.js'
 import { registerKnowledgeWorkers } from './knowledge/jobs.js'
 import { currentBlobStoreKind } from './knowledge/blobstore.js'
@@ -28,6 +28,8 @@ type OiJob = { symbol: string; interval: typeof OI_INTERVAL }
 
 /** 首启动历史回补根数（够结构引擎与特征用即可） */
 const INITIAL_BACKFILL_BARS = 2000
+/** 证券首采根数（Yahoo 1m 仅回溯 7 天、5m 60 天，超量请求会被静默截断，取够图表用的量即可） */
+const STOCK_BACKFILL_BARS = 500
 /** 单次缺口回补任务展开的最大段数（防爆队列） */
 const MAX_BACKFILL_SEGMENTS = 10
 
@@ -137,6 +139,16 @@ await boss.work(Q_SWEEP_SLOW, async () => {
 await boss.schedule(Q_SWEEP_FAST, '* * * * *')
 await boss.schedule(Q_SWEEP_SLOW, '11 * * * *')
 
+// 证券（Yahoo）扇出：低频每 5 分钟一档——闭市时段幂等无新数据，控制对非官方接口的请求量
+await boss.work(Q_SWEEP_STOCK, async () => {
+  const b = getBoss()
+  if (!b) return
+  for (const s of watchlistStockSeries()) {
+    await b.send(Q_INGEST, s, { singletonKey: `ingest:${seriesKeyText(s)}`, singletonSeconds: 240 })
+  }
+})
+await boss.schedule(Q_SWEEP_STOCK, '*/5 * * * *')
+
 // P2b：指标聚合（受控函数幂等）+ worker 心跳（管理 overview 新鲜度）
 await boss.work('observability:aggregate', async () => {
   const { getDb } = await import('./db.js')
@@ -219,27 +231,35 @@ await boss.work('observability:cleanup', async () => {
 })
 await boss.schedule('observability:cleanup', '* * * * *')
 
-/** 首启动：无游标的序列回补最近 INITIAL_BACKFILL_BARS 根；已有游标的入队追平 */
+/** 首启动：无游标的序列回补最近 N 根；已有游标的入队追平 */
 async function initialBackfill(): Promise<void> {
-  const series = watchlistSeries()
+  // 加密货币 2000 根 / 证券 500 根（Yahoo 历史窗口限制），共用同一追平流程
+  const plan: Array<{ series: ReturnType<typeof watchlistSeries> | ReturnType<typeof watchlistStockSeries>; bars: number; label: string }> = [
+    { series: watchlistSeries(), bars: INITIAL_BACKFILL_BARS, label: '加密货币' },
+    { series: watchlistStockSeries(), bars: STOCK_BACKFILL_BARS, label: '证券' },
+  ]
   let fresh = 0
-  for (const s of series) {
-    try {
-      if (await isFreshSeries(s)) {
-        fresh++
-        log.info('worker', '首启动历史回补', kv({ 序列: seriesKeyText(s), 根数: INITIAL_BACKFILL_BARS }))
-        await backfillRecent(s, INITIAL_BACKFILL_BARS)
-        await ingestSeries(s)
-        await refreshGapCount(s)
-      } else {
-        const b = getBoss()
-        if (b) {
-          await b.send(Q_INGEST, s, { singletonKey: `ingest:${seriesKeyText(s)}`, singletonSeconds: 60 })
+  let total = 0
+  for (const group of plan) {
+    total += group.series.length
+    for (const s of group.series) {
+      try {
+        if (await isFreshSeries(s)) {
+          fresh++
+          log.info('worker', '首启动历史回补', kv({ 类别: group.label, 序列: seriesKeyText(s), 根数: group.bars }))
+          await backfillRecent(s, group.bars)
+          await ingestSeries(s)
+          await refreshGapCount(s)
+        } else {
+          const b = getBoss()
+          if (b) {
+            await b.send(Q_INGEST, s, { singletonKey: `ingest:${seriesKeyText(s)}`, singletonSeconds: 60 })
+          }
         }
+      } catch (err) {
+        log.warn('worker', '首采失败（等待周期任务重试）', kv({ 序列: seriesKeyText(s), 错误: (err as Error).message }))
+        await markIngestError(s, err as Error).catch(() => {})
       }
-    } catch (err) {
-      log.warn('worker', '首采失败（等待周期任务重试）', kv({ 序列: seriesKeyText(s), 错误: (err as Error).message }))
-      await markIngestError(s, err as Error).catch(() => {})
     }
   }
   for (const symbol of watchlistPerpSymbols()) {
@@ -250,11 +270,11 @@ async function initialBackfill(): Promise<void> {
       log.warn('worker', '资金费率/持仓量首采失败', kv({ 交易对: symbol, 错误: (err as Error).message }))
     }
   }
-  log.ok('worker', '首启动回补完成', kv({ 序列数: series.length, 首采: fresh }))
+  log.ok('worker', '首启动回补完成', kv({ 序列数: total, 首采: fresh }))
 }
 
 await initialBackfill()
-log.ok('worker', '行情 worker 已就绪', kv({ pid: process.pid, 调度: 'fast=* * * * * / slow=11 * * * *', 对象存储: currentBlobStoreKind() }))
+log.ok('worker', '行情 worker 已就绪', kv({ pid: process.pid, 调度: 'fast=* * * * * / slow=11 * * * * / stock=*/5 * * * *', 对象存储: currentBlobStoreKind() }))
 
 const shutdown = (signal: string): void => {
   log.info('worker', `收到 ${signal}，正在停止`)

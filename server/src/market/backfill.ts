@@ -3,7 +3,7 @@
  * 段间 sleep 退避尊重权重），全部走 ingest 同一 upsert 路径（幂等，不产生重复行）。
  * 补完后重算缺口登记；断网/限流中断后按游标恢复。
  */
-import { INTERVAL_MS } from 'biance-vision-brooks'
+import { INTERVAL_MS, venueForMarketType } from 'biance-vision-brooks'
 import type { Interval } from 'biance-vision-brooks'
 import { and, asc, eq } from 'drizzle-orm'
 import { kv, log } from '../logger.js'
@@ -14,7 +14,6 @@ import { getProvider } from './providers/registry.js'
 import { seriesKeyText } from './watchlist.js'
 import type { SeriesKey } from './watchlist.js'
 
-const VENUE = 'binance'
 /** 每段最多 1000 根（klines 上限）；段间退避间隔 */
 const SEGMENT_BARS = 1000
 const SEGMENT_SLEEP_MS = 250
@@ -36,7 +35,7 @@ export async function detectGaps(series: SeriesKey): Promise<GapRange[]> {
     .from(marketCandles)
     .where(
       and(
-        eq(marketCandles.venue, VENUE),
+        eq(marketCandles.venue, venueForMarketType(series.marketType)),
         eq(marketCandles.marketType, series.marketType),
         eq(marketCandles.priceType, series.priceType),
         eq(marketCandles.symbol, series.symbol),

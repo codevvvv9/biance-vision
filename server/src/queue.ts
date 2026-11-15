@@ -16,13 +16,15 @@ export const Q_FUNDING = 'market:funding'
 export const Q_OI = 'market:oi'
 export const Q_SWEEP_FAST = 'market:sweep-fast'
 export const Q_SWEEP_SLOW = 'market:sweep-slow'
+/** 证券（Yahoo）采集扇出：低频（闭市幂等，5 分钟一档） */
+export const Q_SWEEP_STOCK = 'market:sweep-stock'
 export const Q_KNOWLEDGE_PARSE = 'knowledge:parse'
 export const Q_RESEARCH_RUN = 'research:run'
 export const Q_EVENT_SETTLE = 'event:settle'
 export const Q_EVAL_RUN = 'eval:run'
 export const Q_MODEL_TRAIN = 'model:train'
 
-const ALL_QUEUES = [Q_INGEST, Q_BACKFILL, Q_FUNDING, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, Q_KNOWLEDGE_PARSE, Q_RESEARCH_RUN, Q_EVENT_SETTLE, Q_EVAL_RUN, Q_MODEL_TRAIN,
+const ALL_QUEUES = [Q_INGEST, Q_BACKFILL, Q_FUNDING, Q_OI, Q_SWEEP_FAST, Q_SWEEP_SLOW, Q_SWEEP_STOCK, Q_KNOWLEDGE_PARSE, Q_RESEARCH_RUN, Q_EVENT_SETTLE, Q_EVAL_RUN, Q_MODEL_TRAIN,
   // P2a/P2b 内部观测调度队列（boss.schedule 外键要求队列先建；createQueue 幂等）
   'observability:cleanup', 'observability:aggregate', 'observability:alert']
 
@@ -42,6 +44,7 @@ export const QUEUE_OPTIONS: Record<string, { retentionMinutes: number }> = {
   [Q_OI]: { retentionMinutes: 90 },
   [Q_SWEEP_FAST]: { retentionMinutes: 15 },
   [Q_SWEEP_SLOW]: { retentionMinutes: 15 },
+  [Q_SWEEP_STOCK]: { retentionMinutes: 15 },
 }
 
 /** 允许手动清理积压的队列白名单 = 冗余指令型集合（服务端强制；珍贵队列清理入口一律拒绝） */

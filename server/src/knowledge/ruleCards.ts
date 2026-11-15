@@ -8,6 +8,7 @@
  */
 import { and, desc, eq, lte } from 'drizzle-orm'
 import { analyzeBrooks } from 'biance-vision-brooks'
+import type { ResearchMarketType } from 'biance-vision-brooks'
 import { sql } from 'drizzle-orm'
 import { getDb } from '../db.js'
 import { caseWindows, knowledgePublications, ruleCards } from '../models.js'
@@ -243,7 +244,7 @@ export function ruleCardToRetrievable(card: RuleCardRow): {
 
 export interface CaseBuildInput {
   symbol: string
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   interval: string
   /** 决策时刻（窗口右端）；缺省 = 最新已收盘 */
   atTime?: number

@@ -4,7 +4,7 @@
  * 快照基于 trade 价格类型（结构分析的主序列）；mark/index 由调用方按需查询。
  */
 import { randomUUID } from 'node:crypto'
-import { SnapshotRefSchema } from 'biance-vision-brooks'
+import { SnapshotRefSchema, venueForMarketType } from 'biance-vision-brooks'
 import type { Interval, MarketType, SnapshotRef } from 'biance-vision-brooks'
 import { and, eq, lte, sql } from 'drizzle-orm'
 import { kv, log } from '../logger.js'
@@ -12,7 +12,6 @@ import { marketCandles, marketSnapshots } from '../models.js'
 import { requireDb } from './common.js'
 import { getProvider } from './providers/registry.js'
 
-const VENUE = 'binance'
 
 export async function createSnapshot(opts: {
   symbol: string
@@ -29,7 +28,7 @@ export async function createSnapshot(opts: {
     .from(marketCandles)
     .where(
       and(
-        eq(marketCandles.venue, VENUE),
+        eq(marketCandles.venue, venueForMarketType(marketType)),
         eq(marketCandles.marketType, marketType),
         eq(marketCandles.priceType, 'trade'),
         eq(marketCandles.symbol, symbol),

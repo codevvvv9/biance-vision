@@ -12,7 +12,7 @@ import type {
   ResearchHorizon,
   ResearchResult,
   RunProgressEvent,
-  MarketType,
+  ResearchMarketType,
 } from 'biance-vision-brooks'
 
 export const STAGE_NAMES = [
@@ -38,7 +38,7 @@ export interface RunContext {
   userId: string
   product: 'perp' | 'event' | 'teaching'
   symbol: string
-  marketType: MarketType
+  marketType: ResearchMarketType
   horizon: ResearchHorizon
   question: string | null
   /** P1-1 任务场景（创建时由 resolveScene 推导或显式传入） */

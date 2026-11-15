@@ -7,17 +7,17 @@
 import { z } from 'zod'
 import {
   DecimalStringSchema,
-  MarketTypeSchema,
   ResearchHorizonSchema,
   SymbolSchema,
 } from '../market.js'
+import { ResearchMarketTypeSchema } from './research.js'
 import { IdSchema } from './common.js'
 
 /** 创建预测：对冻结报价或指定期限桶发起；期限不匹配/模型未就绪返回 unavailable */
 export const PredictionCreateSchema = z.object({
   quoteId: IdSchema.optional(),
   symbol: SymbolSchema,
-  marketType: MarketTypeSchema,
+  marketType: ResearchMarketTypeSchema,
   horizon: ResearchHorizonSchema,
   strikePrice: DecimalStringSchema.optional(),
   expiryAt: z.number().int().optional(),
@@ -33,7 +33,7 @@ export const PredictionSchema = z.object({
   id: IdSchema,
   quoteId: IdSchema.nullable(),
   symbol: SymbolSchema,
-  marketType: MarketTypeSchema,
+  marketType: ResearchMarketTypeSchema,
   horizon: ResearchHorizonSchema,
   modelVersion: z.string().min(1),
   featureVersion: z.string().min(1),

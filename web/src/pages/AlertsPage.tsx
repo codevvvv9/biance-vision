@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { useMarket } from '../market/MarketContext'
+import { Combobox } from '../research/Combobox'
+import { Dropdown } from '../research/Dropdown'
 import { fmtDateTime, fmtPct, fmtPrice } from '../utils'
 import type { AlertRule, RuleType, Settings } from '../types'
 
@@ -129,32 +131,23 @@ export default function AlertsPage(): JSX.Element {
             <div className="form-row">
               <label>
                 <span>{t('alerts:form.symbol')}</span>
-                <input
-                  list="symbol-list"
+                <Combobox
                   value={form.symbol}
-                  onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))}
+                  onChange={(v) => setForm((f) => ({ ...f, symbol: v.toUpperCase() }))}
+                  suggestions={order.slice(0, 60)}
+                  ariaLabel={t('alerts:form.symbol')}
                   placeholder="BTCUSDT"
-                  spellCheck={false}
                   required
                 />
-                <datalist id="symbol-list">
-                  {order.slice(0, 60).map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
               </label>
               <label>
                 <span>{t('alerts:form.cond')}</span>
-                <select
+                <Dropdown
                   value={form.type}
-                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as RuleType }))}
-                >
-                  {(Object.keys(TYPE_KEYS) as RuleType[]).map((v) => (
-                    <option key={v} value={v}>
-                      {t(TYPE_KEYS[v])}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setForm((f) => ({ ...f, type: v }))}
+                  ariaLabel={t('alerts:form.cond')}
+                  options={(Object.keys(TYPE_KEYS) as RuleType[]).map((v) => ({ value: v, label: t(TYPE_KEYS[v]) }))}
+                />
               </label>
               <label>
                 <span>{form.type.startsWith('price_') ? t('alerts:form.targetPrice') : t('alerts:form.threshold')}</span>

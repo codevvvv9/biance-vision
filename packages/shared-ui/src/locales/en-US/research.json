@@ -144,6 +144,8 @@
     "analyzing": "Analyzing…",
     "viewEvidence": "View evidence",
     "inputPlaceholder": "Ask directly: can I keep holding my BTC perp long? / is a 10-min above-60000 worth joining?",
+    "stockNoResearch": "Securities support chart & structure review; AI research covers crypto only for now",
+    "autoQuestion": "Based on the current K-line structure and multi-timeframe picture of {{symbol}}, give an investment analysis: should I act now? What are the direction, key levels and risks?",
     "inputAria": "Research chat input",
     "send": "Send",
     "toolsModalAria": "Start research and enter data",

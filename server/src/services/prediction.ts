@@ -18,7 +18,7 @@ import { predict as pyPredict } from '../researchpy.js'
 import type { PyPredictResponse } from '../researchpy.js'
 import { baseIntervalFor, featureVersionFor, featuresAt } from '../research/features.js'
 import { kv, log } from '../logger.js'
-import type { PredictionStats, PredictionStatsTrack } from 'biance-vision-brooks'
+import type { PredictionStats, PredictionStatsTrack, ResearchMarketType } from 'biance-vision-brooks'
 
 export type TargetType = 'strike_relative' | 'return_positive'
 
@@ -34,7 +34,7 @@ export type PredictionUnavailableCode =
 
 export interface PredictRequest {
   symbol: string
-  marketType: 'spot' | 'usdm_perp'
+  marketType: ResearchMarketType
   horizon: string
   asOf: number
   targetType: TargetType

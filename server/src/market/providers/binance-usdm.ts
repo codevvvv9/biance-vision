@@ -9,6 +9,7 @@ import { FundingRateSchema, OpenInterestSchema } from 'biance-vision-brooks'
 import type { FundingRate, OpenInterest, PriceType } from 'biance-vision-brooks'
 import { kv, log } from '../../logger.js'
 import { parseKlineRows } from './parse.js'
+import { aggregateCandleRows, requestIntervalFor } from './intervalAgg.js'
 import type { FetchFundingParams, FetchKlinesParams, FetchOpenInterestParams, MarketDataProvider } from './types.js'
 
 const FAPI_HOSTS = [
@@ -80,22 +81,26 @@ export class BinanceUsdmProvider implements MarketDataProvider {
   readonly marketType = 'usdm_perp' as const
 
   async fetchKlines(params: FetchKlinesParams) {
-    // indexPriceKlines 用 pair 参数（指数对），klines/markPriceKlines 用 symbol
+    // indexPriceKlines 用 pair 参数（指数对），klines/markPriceKlines 用 symbol；
+    // 币安原生无 10m 等粒度：换原生周期请求 + 放大量，响应侧聚合（intervalAgg 单点语义）
+    const { requestInterval, requestLimit, aggregateTo } = requestIntervalFor(params.interval, params.limit)
     const symbolParam = params.priceType === 'index' ? 'pair' : 'symbol'
-    const qs = new URLSearchParams({ [symbolParam]: params.symbol, interval: params.interval })
+    const qs = new URLSearchParams({ [symbolParam]: params.symbol, interval: requestInterval })
     if (params.startTime !== undefined) qs.set('startTime', String(params.startTime))
     if (params.endTime !== undefined) qs.set('endTime', String(params.endTime))
-    qs.set('limit', String(params.limit ?? 500))
+    qs.set('limit', String(requestLimit))
     const raw = await fapiGet<unknown[]>(`${KLINE_PATHS[params.priceType]}?${qs.toString()}`)
-    return parseKlineRows(raw, {
+    let rows = parseKlineRows(raw, {
       venue: 'binance',
       marketType: this.marketType,
       priceType: params.priceType,
       symbol: params.symbol,
-      interval: params.interval,
+      interval: requestInterval,
       receivedAt: Date.now(),
       source: 'rest',
     }, Date.now())
+    if (aggregateTo !== null) rows = aggregateCandleRows(rows, requestInterval, aggregateTo, params.limit)
+    return rows
   }
 
   async fetchFundingRates(params: FetchFundingParams): Promise<FundingRate[]> {
